@@ -1,0 +1,11 @@
+name = "DiffinDiffs"
+uuid = "1c15b2bf-cfaa-4a64-9ed6-b84bdd745e5c"
+authors = ["Junyuan Chen <norman.chen.git@gmail.com>"]
+version = "0.1.0"
+
+[deps]
+InteractionWeightedDIDs = "4fda0319-85a0-4a01-849e-821b918731ee"
+Reexport = "189a3867-3050-52da-a836-e630ba90ab69"
+
+[compat]
+julia = "1.3"
