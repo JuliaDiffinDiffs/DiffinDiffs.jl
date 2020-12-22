@@ -43,4 +43,5 @@ function drawbanner(w, h, fname)
 end
 
 drawlogo(120, "../assets/logo.svg")
+drawlogo(420, "../assets/logo.png")
 drawbanner(350, 100, "../assets/banner.svg")
