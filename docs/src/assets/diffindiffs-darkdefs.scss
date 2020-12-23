@@ -23,7 +23,7 @@ $text-strong: $boldcolor;
 // Code text color:
 $code: #fff;
 //$code-background: rgba(0.5,0,0, 0.05);
-$codebg: darken-color($maincolor, 3);
+$codebg: darken-color($maincolor, 2);
 $code-background: $codebg; // for inline code
 $pre-background: $codebg;  // for code blocks
 $documenter-docstring-header-background: lighten-color($body-background-color, 0.5);
