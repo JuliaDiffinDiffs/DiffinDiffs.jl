@@ -12,8 +12,8 @@ $boldcolor: lighten-color($maincolor, 4.5);
 $body-background-color: $darkbg; // main page background
 
 // this is the color the links get, and also when they are hovered
-$link: lighten-color($secondcolor, 2);
-$link-hover: lighten-color($link, 3);
+$link: #00C6D7;
+$link-hover: lighten-color($link, 1);
 
 // Main text color:
 $text: darken-color($mainwhite, 0.2);
@@ -105,5 +105,18 @@ html.theme--#{$themename} {
   // Also, a11y-dark does not highlight string interpolation properly.
   .hljs-subst {
     color: #f8f8f2;
+  }
+  .modal-card-body {
+    background-color: $grey-darker;
+  }
+  .modal-card-foot{
+    background-color: $grey-darker;
+  }
+  .modal-card-head {
+    background-color: $grey-darker;
+    border-color: $grey-dark;
+  }
+  .docstring > header code {
+    color: $link;
   }
 }

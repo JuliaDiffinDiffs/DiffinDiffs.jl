@@ -69,3 +69,7 @@ $input-focus-border-color: $mainwhite;
     }
   }
 }
+
+.docstring > header code {
+  color: $link;
+}
