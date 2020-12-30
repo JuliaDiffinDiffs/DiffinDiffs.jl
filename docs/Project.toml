@@ -1,5 +1,9 @@
 [deps]
+DiffinDiffs = "1c15b2bf-cfaa-4a64-9ed6-b84bdd745e5c"
+DiffinDiffsBase = "7fc23ce2-6e83-4e3c-822f-a79085ccb3e8"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+DocumenterTools = "35a29f4d-8980-5a13-9543-d66fff28ecb8"
+InteractionWeightedDIDs = "4fda0319-85a0-4a01-849e-821b918731ee"
 
 [compat]
 Documenter = "0.26"
