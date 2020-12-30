@@ -13,15 +13,27 @@ Themes.compile(joinpath(@__DIR__, "src/assets/diffindiffs-light.scss"), joinpath
 Themes.compile(joinpath(@__DIR__, "src/assets/diffindiffs-dark.scss"), joinpath(@__DIR__, "src/assets/themes/documenter-dark.css"))
 
 makedocs(
-    modules = [InteractionWeightedDIDs],
+    modules = [DiffinDiffsBase, InteractionWeightedDIDs],
     format = Documenter.HTML(
         assets = ["assets/favicon.ico", asset("https://fonts.googleapis.com/css?family=Montserrat|Source+Code+Pro&display=swap", class=:css)],
-        prettyurls = get(ENV, "CI", nothing) == "true"
+        prettyurls = get(ENV, "CI", nothing) == "true",
+        collapselevel = 1
     ),
     sitename = "DiffinDiffs.jl",
     authors = "Junyuan Chen",
     pages = [
-        "Home" => "index.md"
+        "Home" => "index.md",
+        "Manual" => [
+            "Getting Started" => "man/getting-started.md"
+        ],
+        "Library" => [
+            "Treatment Types" => "lib/treatments.md",
+            "Parallel Types" => "lib/parallels.md",
+            "Treatment Terms" => "lib/terms.md",
+            "Miscellanea" => "lib/miscellanea.md"
+        ],
+        "About" => [
+        ]
     ]
 )
 
