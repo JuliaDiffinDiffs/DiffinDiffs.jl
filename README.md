@@ -1,3 +1,3 @@
 # DiffinDiffsBase.jl
 
-Basic support for other component packages of DiffinDiffs.jl
+Base package for [DiffinDiffs.jl](https://github.com/JuliaDiffinDiffs/DiffinDiffs.jl).
