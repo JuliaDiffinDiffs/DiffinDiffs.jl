@@ -9,6 +9,22 @@ const t3 = treat(:g, TestTreatment(:t, 0), TestParallel(1))
     @test t3 != t0
 end
 
+@testset "hastreat" begin
+    @test hastreat(t0)
+
+    f0 = @formula(y ~ x)
+    f1 = @formula(y ~ treat(g, testtreat(t, 0), testpara(0)))
+    f2 = @formula(y ~ treat(g, testtreat(t, 0), testpara(0)) & x)
+
+    @test hastreat(f0.rhs) == false
+    @test hastreat(f1.rhs)
+    @test hastreat(f2.rhs)
+
+    @test hastreat(f0) == false
+    @test hastreat(f1)
+    @test hastreat(f2)
+end
+
 @testset "parse_treat" begin
     @testset "with @formula" begin
         f = @formula(y ~ x)
