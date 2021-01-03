@@ -101,8 +101,9 @@ struct NeverTreatedParallel{T<:Integer,C,S} <: TrendParallel{C,S}
     e::Vector{T}
     c::C
     s::S
-    NeverTreatedParallel(e, c, s) =
-        new{eltype(e),typeof(c),typeof(s)}(unique!(sort!(e)), c, s)
+    NeverTreatedParallel(e::Vector{T}, c::C, s::S) where
+        {T<:Integer,C<:ParallelCondition,S<:ParallelStrength} =
+            new{T,C,S}(unique!(sort!(e)), c, s)
 end
 
 function show(io::IO, pr::NeverTreatedParallel)
@@ -179,9 +180,10 @@ struct NotYetTreatedParallel{T<:Integer,C,S} <: TrendParallel{C,S}
     emin::Union{Vector{T},Nothing}
     c::C
     s::S
-    NotYetTreatedParallel(e, emin, c, s) =
-        new{eltype(e),typeof(c),typeof(s)}(unique!(sort!(e)),
-            emin isa Nothing ? emin : unique!(sort!(emin)), c, s)
+    NotYetTreatedParallel(e::Vector{T}, emin::Union{Vector{T},Nothing}, c::C, s::S) where
+        {T<:Integer,C<:ParallelCondition,S<:ParallelStrength} =
+            new{T,C,S}(unique!(sort!(e)),
+                emin isa Nothing ? emin : unique!(sort!(emin)), c, s)
 end
 
 function show(io::IO, pr::NotYetTreatedParallel)
