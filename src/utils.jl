@@ -105,10 +105,10 @@ exampledata() =
 """
     exampledata(name::Union{Symbol,String})
 
-Return a `DataFrame` with data loaded from the specified name of example dataset. 
+Return a `CSV.File` by loading the example dataset with the specified name.
 """
 function exampledata(name::Union{Symbol,String})
     "$(name)" in exampledata() ||
         throw(ArgumentError("example dataset $(name) is not found"))
-    return df = DataFrame(CSV.File((@__DIR__)*"/../data/$(name).csv"))
+    return CSV.File((@__DIR__)*"/../data/$(name).csv")
 end

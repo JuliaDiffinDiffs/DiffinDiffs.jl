@@ -1,7 +1,6 @@
 module DiffinDiffsBase
 
 using CSV
-using DataFrames
 using Reexport
 using StatsBase
 @reexport using StatsModels
