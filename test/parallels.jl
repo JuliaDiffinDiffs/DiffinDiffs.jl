@@ -1,9 +1,16 @@
-@testset "show singleton" begin
-    @test sprint(show, Unconditional()) == "Unconditional"
-    @test sprint(show, Unconditional(); context=:compact => true) == "U"
+@testset "singletons" begin
+    @testset "alias" begin
+        @test unconditional() == Unconditional()
+        @test exact() == Exact()
+    end
 
-    @test sprint(show, Exact()) == "Parallel"
-    @test sprint(show, Exact(); context=:compact => true) == "P"
+    @testset "show" begin
+        @test sprint(show, Unconditional()) == "Unconditional"
+        @test sprint(show, Unconditional(); context=:compact => true) == "U"
+
+        @test sprint(show, Exact()) == "Parallel"
+        @test sprint(show, Exact(); context=:compact => true) == "P"
+    end
 end
 
 @testset "nevertreated" begin

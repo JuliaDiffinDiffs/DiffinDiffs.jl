@@ -37,7 +37,7 @@ abstract type CovariateConditional <: ParallelCondition end
 """
     ParallelStrength
 
-Supertype for all types specifying the the strength of parallel.
+Supertype for all types specifying the strength of parallel.
 """
 abstract type ParallelStrength end
 
