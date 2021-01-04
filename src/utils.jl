@@ -41,7 +41,7 @@ unpack(t::ConstantTerm) = t.n
     unpack(t::Term)
 
 Call the method of function named `t.sym` with no argument if it exists in `Main`;
-return `t` otherwise.
+return `t.sym` otherwise.
 
 This method allows specifying functions with no argument in `@formula`.
 """
@@ -50,7 +50,7 @@ function unpack(t::Term)
         f = getfield(Main,  t.sym)
         hasmethod(f, Tuple{}) ? f() : t
     else
-        return t
+        return t.sym
     end
 end
 

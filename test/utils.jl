@@ -11,7 +11,7 @@ end
 
 @testset "unpack" begin
     @test unpack(term(1)) == 1
-    @test unpack(term(:x)) == term(:x)
+    @test unpack(term(:x)) == :x
     @test unpack(term(:Unconditional)) == Unconditional()
     f = @formula(y ~ c(1,2))
     @test unpack(f.rhs) == [1,2]
