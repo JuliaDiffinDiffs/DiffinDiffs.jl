@@ -6,6 +6,7 @@ include("testutils.jl")
 const tests = [
     "utils",
     "terms",
+    "treatments",
     "parallels"
 ]
 
