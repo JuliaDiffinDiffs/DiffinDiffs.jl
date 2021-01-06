@@ -7,7 +7,8 @@ const tests = [
     "utils",
     "terms",
     "treatments",
-    "parallels"
+    "parallels",
+    "did"
 ]
 
 printstyled("Running tests:\n", color=:blue)

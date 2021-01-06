@@ -42,7 +42,12 @@ export @fieldequal,
        hastreat,
        parse_treat,
 
+       AbstractDiffinDiffs,
        did,
+       DIDSpec,
+       spec,
+       @did,
+       DIDSpecSet,
        DIDResult,
        agg,
        AggregatedDIDResult
@@ -51,6 +56,6 @@ include("utils.jl")
 include("treatments.jl")
 include("parallels.jl")
 include("terms.jl")
-include("models.jl")
+include("did.jl")
 
 end

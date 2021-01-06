@@ -36,31 +36,31 @@ end
         f = @formula(y ~ nevertreated(c(0,1)))
         @test nevertreated(f.rhs.args_parsed[1]) == nt1
 
-        f = @formula(y ~ treat(g, testtreat(t, 0), nevertreated(0)))
+        f = @formula(y ~ treat(g, ttreat(t, 0), nevertreated(0)))
         t = parse_treat(f)[1]
         @test t.pr == nt0
 
-        f = @formula(y ~ treat(g, testtreat(t, 0), nevertreated(c(0,1))))
+        f = @formula(y ~ treat(g, ttreat(t, 0), nevertreated(c(0,1))))
         t = parse_treat(f)[1]
         @test t.pr == nt1
 
-        f = @formula(y ~ treat(g, testtreat(t, 0), nevertreated(0, Unconditional, Exact)))
+        f = @formula(y ~ treat(g, ttreat(t, 0), nevertreated(0, Unconditional, Exact)))
         t = parse_treat(f)[1]
         @test t.pr == nt0
 
-        f = @formula(y ~ treat(g, testtreat(t, 0), nevertreated(0, unconditional, exact)))
+        f = @formula(y ~ treat(g, ttreat(t, 0), nevertreated(0, unconditional, exact)))
         t = parse_treat(f)[1]
         @test t.pr == nt0
 
-        f = @formula(y ~ treat(g, testtreat(t, 0), nevertreated(0, unconditional)))
+        f = @formula(y ~ treat(g, ttreat(t, 0), nevertreated(0, unconditional)))
         t = parse_treat(f)[1]
         @test t.pr == nt0
 
-        f = @formula(y ~ treat(g, testtreat(t, 0), nevertreated(0, exact)))
+        f = @formula(y ~ treat(g, ttreat(t, 0), nevertreated(0, exact)))
         t = parse_treat(f)[1]
         @test t.pr == nt0
 
-        f = @formula(y ~ treat(g, testtreat(t, 0), nevertreated(exact, unconditional, 0)))
+        f = @formula(y ~ treat(g, ttreat(t, 0), nevertreated(exact, unconditional, 0)))
         t = parse_treat(f)[1]
         @test t.pr == nt0
     end
@@ -107,43 +107,43 @@ end
         f = @formula(y ~ notyettreated(c(0,1)))
         @test notyettreated(f.rhs.args_parsed[1]) == ny1
 
-        f = @formula(y ~ treat(g, testtreat(t, 0), notyettreated(0)))
+        f = @formula(y ~ treat(g, ttreat(t, 0), notyettreated(0)))
         t = parse_treat(f)[1]
         @test t.pr == ny0
 
-        f = @formula(y ~ treat(g, testtreat(t, 0), notyettreated(c(0,1), 0)))
+        f = @formula(y ~ treat(g, ttreat(t, 0), notyettreated(c(0,1), 0)))
         t = parse_treat(f)[1]
         @test t.pr == ny2
 
-        f = @formula(y ~ treat(g, testtreat(t, 0), notyettreated(c(0,1), c(0,1))))
+        f = @formula(y ~ treat(g, ttreat(t, 0), notyettreated(c(0,1), c(0,1))))
         t = parse_treat(f)[1]
         @test t.pr == ny3
 
-        f = @formula(y ~ treat(g, testtreat(t, 0), notyettreated(0, Unconditional, Exact)))
+        f = @formula(y ~ treat(g, ttreat(t, 0), notyettreated(0, Unconditional, Exact)))
         t = parse_treat(f)[1]
         @test t.pr == ny0
 
-        f = @formula(y ~ treat(g, testtreat(t, 0), notyettreated(0, unconditional, exact)))
+        f = @formula(y ~ treat(g, ttreat(t, 0), notyettreated(0, unconditional, exact)))
         t = parse_treat(f)[1]
         @test t.pr == ny0
 
-        f = @formula(y ~ treat(g, testtreat(t, 0), notyettreated(0, unconditional)))
+        f = @formula(y ~ treat(g, ttreat(t, 0), notyettreated(0, unconditional)))
         t = parse_treat(f)[1]
         @test t.pr == ny0
 
-        f = @formula(y ~ treat(g, testtreat(t, 0), notyettreated(0, exact)))
+        f = @formula(y ~ treat(g, ttreat(t, 0), notyettreated(0, exact)))
         t = parse_treat(f)[1]
         @test t.pr == ny0
 
-        f = @formula(y ~ treat(g, testtreat(t, 0), notyettreated(exact, unconditional, 0)))
+        f = @formula(y ~ treat(g, ttreat(t, 0), notyettreated(exact, unconditional, 0)))
         t = parse_treat(f)[1]
         @test t.pr == ny0
 
-        f = @formula(y ~ treat(g, testtreat(t, 0), notyettreated(c(0,1), 0, Unconditional, Exact)))
+        f = @formula(y ~ treat(g, ttreat(t, 0), notyettreated(c(0,1), 0, Unconditional, Exact)))
         t = parse_treat(f)[1]
         @test t.pr == ny2
 
-        f = @formula(y ~ treat(g, testtreat(t, 0), notyettreated(exact, unconditional, c(0,1), c(0,1))))
+        f = @formula(y ~ treat(g, ttreat(t, 0), notyettreated(exact, unconditional, c(0,1), c(0,1))))
         t = parse_treat(f)[1]
         @test t.pr == ny3
     end

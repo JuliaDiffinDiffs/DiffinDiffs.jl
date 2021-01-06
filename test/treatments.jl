@@ -21,11 +21,11 @@ end
         @test dynamic(term(:month)) == dt
         @test dynamic(term(:month), term(:sharp)) == dt
 
-        f = @formula(y ~ treat(g, dynamic(month), testpara(0)))
+        f = @formula(y ~ treat(g, dynamic(month), tpara(0)))
         t = parse_treat(f)[1]
         @test t.tr == dt
 
-        f = @formula(y ~ treat(g, dynamic(month, sharp), testpara(0)))
+        f = @formula(y ~ treat(g, dynamic(month, sharp), tpara(0)))
         t = parse_treat(f)[1]
         @test t.tr == dt
     end
