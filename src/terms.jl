@@ -1,3 +1,8 @@
+==(a::NTuple{N, AbstractTerm}, b::NTuple{N, AbstractTerm}) where {N} =
+    all([t in b for t in a])
+==(a::InteractionTerm, b::InteractionTerm) = a.terms==b.terms
+==(a::FormulaTerm, b::FormulaTerm) = a.lhs==b.lhs && a.rhs==b.rhs
+
 """
     TreatmentTerm{T<:AbstractTreatment} <: AbstractTerm
 
@@ -47,10 +52,14 @@ hastreat(t::FormulaTerm) = any(hastreat(x) for x in eachterm(t.rhs))
 """
     parse_treat(formula::FormulaTerm)
 
-Extract the `TreatmentTerm` and any other term
-in its interaction (if interacted) from the formula.
-Return a `Pair` with the key being the `TreatmentTerm`
-and the value being a tuple for any other term in the interaction.
+Return a `Tuple` of three objects extracted from the right-hand-side of `formula`.
+
+# Returns
+- `TreatmentTerm`: the unique `TreatmentTerm` contained in the `formula`.
+- `Tuple`: any term that is interacted with the `TreatmentTerm`.
+- `Tuple`: any remaining term in `formula.rhs`.
+
+Error will be raised if either existence or uniqueness of the `TreatmentTerm` is violated.
 """
 function parse_treat(@nospecialize(formula::FormulaTerm))
     # Use Array instead of Dict for detecting duplicate terms
@@ -88,5 +97,6 @@ function parse_treat(@nospecialize(formula::FormulaTerm))
         throw(ArgumentError("cannot accept more than one `TreatmentTerm`."))
     isempty(treats) &&
         throw(ArgumentError("no `TreatmentTerm` is found."))
-    return treats[1]
+    xterms = Tuple(term for term in eachterm(formula.rhs) if !hastreat(term))
+    return treats[1][1], treats[1][2], xterms
 end

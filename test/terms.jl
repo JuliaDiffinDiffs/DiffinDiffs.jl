@@ -3,7 +3,23 @@ const t1 = treat(:g, TestTreatment(:t, 0), TestParallel(0))
 const t2 = treat(:g, TestTreatment(:t, 1), TestParallel(0))
 const t3 = treat(:g, TestTreatment(:t, 0), TestParallel(1))
 
-@testset "treat" begin    
+@testset "==" begin
+    @test term(:x) + term(:y) == term(:y) + term(:x)
+    @test term(:x) + term(:y) + term(:y) == term(:y) + term(:x) + term(:x)
+
+    @test term(:x) & term(:y) == term(:y) & term(:x)
+    @test term(:x) & term(:y) + term(:y) & term(:x) == term(:y) & term(:x)
+    @test term(:x) & term(:y) + term(:z) == term(:z) + term(:y) & term(:x)
+    @test lag(term(:x),1) & term(:z) == term(:z) & lag(term(:x),1)
+    # StatsModels does not enforce uniqueness of terms in interactions
+    @test term(:x) & term(:y) & term(:x) != term(:x) & term(:y)
+
+    @test @formula(y ~ x + z) == @formula(y ~ z + x)
+    @test @formula(y ~ t & z + x) == @formula(y ~ x + z & t)
+    @test @formula(y ~ lag(x, 1)&z + t) == @formula(y ~ t + z&lag(x, 1))
+end
+
+@testset "treat" begin
     @test t1 == t0
     @test t2 != t0
     @test t3 != t0
@@ -32,11 +48,11 @@ end
 
         f = @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) + x & z + lag(x,1))
         t = parse_treat(f)
-        @test t == (t1=>())
+        @test t == (t1, (), (@formula(y ~ x & z + lag(x,1))).rhs)
 
         f = @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) & x & z)
         t = parse_treat(f)
-        @test t == (t1=>(term(:x), term(:z)))
+        @test t == (t1, (term(:x), term(:z)), ())
 
         f = @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) & treat(g, ttreat(t, 0), tpara(0)))
         @test_throws ArgumentError parse_treat(f)
@@ -44,8 +60,9 @@ end
         f = @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) & treat(g, ttreat(t, 1), tpara(0)))
         @test_throws ArgumentError parse_treat(f)
 
+        # + checks uniqueness of terms
         f = @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) + treat(g, ttreat(t, 0), tpara(0)))
-        @test_throws ArgumentError parse_treat(f)
+        @test f == @formula(y ~ treat(g, ttreat(t, 0), tpara(0)))
 
         f = @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) + treat(g, ttreat(t, 1), tpara(0)))
         @test_throws ArgumentError parse_treat(f)
@@ -60,11 +77,11 @@ end
 
         f = term(:y) ~ treat(:g, TR, PR) + term(:x) & term(:z) + lag(term(:x),1)
         t = parse_treat(f)
-        @test t == (t1=>())
+        @test t == (t1, (), term(:x) & term(:z) + lag(term(:x),1))
 
         f = term(:y) ~ treat(:g, TR, PR) & term(:x) & term(:z)
         t = parse_treat(f)
-        @test t == (t1=>(term(:x), term(:z)))
+        @test t == (t1, (term(:x), term(:z)), ())
 
         f = term(:y) ~ treat(:g, TR, PR) & treat(:g, TR, PR)
         @test_throws ArgumentError parse_treat(f)

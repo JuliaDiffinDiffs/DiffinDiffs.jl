@@ -15,7 +15,7 @@ did(d::AbstractDiffinDiffs, tr::AbstractTreatment, pr::AbstractParallel; kwargs.
 A wrapper method that accepts a [`TreatmentTerm`](@ref).
 """
 did(d::AbstractDiffinDiffs, @nospecialize(t::TreatmentTerm), args...; kwargs...) =
-    did(d, t.tr, t.pr, args...; treatstatus=t.sym, kwargs...)
+    did(d, t.tr, t.pr, args...; treatname=t.sym, kwargs...)
 
 """
     did(formula::FormulaTerm, args...; kwargs...)
@@ -24,10 +24,11 @@ A wrapper method that accepts a formula.
 """
 function did(d::AbstractDiffinDiffs, @nospecialize(formula::FormulaTerm),
     args...; kwargs...)
-    treat, intacts = parse_treat(formula)
-    ints = intacts==() ? NamedTuple() : (treatintacts=intacts,)
+    treat, intacts, xs = parse_treat(formula)
+    ints = intacts==() ? NamedTuple() : (treatintterms=intacts,)
+    xterms = xs==() ? NamedTuple() : (xterms=xs,)
     return did(d, treat.tr, treat.pr, args...;
-        treatstatus=treat.sym, ints..., formula=formula, kwargs...)
+        yterm=formula.lhs, treatname=treat.sym, ints..., xterms..., kwargs...)
 end
 
 """
@@ -50,40 +51,50 @@ end
 argpair(arg::AbstractDiffinDiffs) = :d => arg
 argpair(arg::AbstractTreatment) = :tr => arg
 argpair(arg::AbstractParallel) = :pr => arg
-argpair(::Any) = error("unacceptable argument type")
+argpair(::Any) = throw(ArgumentError("unacceptable positional arguments"))
 
 """
     parse_didargs(args...; kwargs...)
 
-Return a `Dict` that collects the required positional arguments for [`did`](@ref)
-and an array of `Pair`s that collects the keyword arguments.
+Classify positional arguments for [`did`](@ref) by type
+and parse any [`TreatmentTerm`](@ref) or [`FormulaTerm`](@ref) in `args`.
 
-The returned `Dict` contains up to three key-value pairs
-with keys being `:d`, `:tr` and `:pr` and
-values being a concrete instance of [`AbstractDiffinDiffs`](@ref), [`AbstractTreatment`](@ref)
-and [`AbstractParallel`](@ref) respectively.
-A [`TreatmentTerm`](@ref) or [`FormulaTerm`](@ref) contained in `args` is decomposed
-with additional `Pair`s joining the other keyword arguments.
+# Returns
+- `Dict`: up to three key-value pairs for processed positional arguments.
+- `Dict`: keyword arguments with possibly additional pairs after parsing `args`.
+
+# Notes
+The possible keys for the first `Dict` are `:d`, `:tr` and `:pr`.
+They are used to index an instance of [`AbstractDiffinDiffs`](@ref),
+[`AbstractTreatment`](@ref) and [`AbstractParallel`](@ref) respectively.
+
+If `args` contains any [`TreatmentTerm`](@ref) or [`FormulaTerm`](@ref),
+they are decomposed with additional key-value pairs
+joining the other keyword arguments in the second `Dict`.
+
 This function is useful for constructing [`DIDSpec`](@ref).
 """
 function parse_didargs(args...; kwargs...)
-    kwargs = Pair{Symbol,Any}[kwargs...]
-    pargs = []
+    pkwargs = Pair{Symbol,Any}[kwargs...]
+    pargs = Pair{Symbol,Any}[]
     for arg in args
         if arg isa FormulaTerm
-            treat, intacts = parse_treat(formula)
+            treat, intacts, xs = parse_treat(arg)
             push!(pargs, argpair(treat.tr), argpair(treat.pr))
-            push!(kwargs, :treatstatus => treat.sym, :formula => arg)
-            intacts==() || push!(kwargs, :treatintacts => intacts)
+            push!(pkwargs, :yterm => arg.lhs, :treatname => treat.sym)
+            intacts==() || push!(pkwargs, :treatintterms => intacts)
+            xs==() || push!(pkwargs, :xterms => xs)
         elseif arg isa TreatmentTerm
             push!(pargs, argpair(arg.tr), argpair(arg.pr))
-            push!(kwargs, :treatstatus => arg.sym)
+            push!(pkwargs, :treatname => arg.sym)
         else
             push!(pargs, argpair(arg))
         end
     end
     args = Dict{Symbol,Any}(pargs...)
-    length(args) == length(pargs) || error("ambiguous arguments")
+    kwargs = Dict{Symbol,Any}(pkwargs...)
+    length(args) == length(pargs) && length(kwargs) == length(pkwargs) ||
+        throw(ArgumentError("redundant arguments encountered"))
     return args, kwargs
 end
 
@@ -96,7 +107,7 @@ for a specification of estimation.
 struct DIDSpec
     name::Symbol
     args::Dict{Symbol,Any}
-    kwargs::Vector{Pair{Symbol,Any}}
+    kwargs::Dict{Symbol,Any}
 end
 
 ==(a::DIDSpec, b::DIDSpec) = a.args == b.args && a.kwargs == b.kwargs
@@ -122,7 +133,7 @@ function did(sp::DIDSpec)
     if all(haskey.(Ref(sp.args), [:d, :tr, :pr]))
         did(sp.args[:d], sp.args[:tr], sp.args[:pr]; sp.kwargs...)
     else
-        error("not all required arguments are specified")
+        throw(ArgumentError("not all required arguments are specified"))
     end
 end
 
