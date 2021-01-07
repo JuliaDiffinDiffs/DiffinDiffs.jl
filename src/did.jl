@@ -121,8 +121,28 @@ processed by [`parse_didargs`](@ref).
 If `name` is not specified, the default value `Symbol("")` will be taken.
 """
 spec(args...; kwargs...) = DIDSpec(Symbol(""), parse_didargs(args...; kwargs...)...)
-spec(name::Union{Symbol,String}, args...; kwargs...) =
+spec(name::Union{String,Symbol}, args...; kwargs...) =
     DIDSpec(Symbol(name), parse_didargs(args...; kwargs...)...)
+
+"""
+    @spec ["name"] [args... kwargs...]
+
+Return a [`DIDSpec`](@ref) with fields set by the arguments.
+
+# Arguments
+- `name`: an optional name for the specification (must be the first argument if specified).
+- `args... kwargs...`: a list of arguments for which the order is not important.
+"""
+macro spec(exprs...)
+    if length(exprs)>0 && exprs[1] isa Union{String,QuoteNode}
+        name = exprs[1]
+        length(exprs) > 1 ? (exprs = exprs[2:end]) : return esc(:(spec($name)))
+    else
+        name = ""
+    end
+    args, kwargs = args_kwargs(exprs)
+    return esc(:(spec($name, $(args...); $(kwargs...))))
+end
 
 """
     did(sp::DIDSpec)
@@ -138,7 +158,7 @@ function did(sp::DIDSpec)
 end
 
 """
-    @did args... kwargs...
+    @did args... [kwargs...]
 
 Call [`did`](@ref) with the specified arguments.
 Order of the arguments is not important.

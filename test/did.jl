@@ -77,20 +77,28 @@ end
     @test_throws ArgumentError parse_didargs("a", :a, 1)
 end
 
-@testset "spec" begin
+@testset "spec @spec" begin
+    @test spec() == DIDSpec(Symbol(""), Dict{Symbol,Any}(), Dict{Symbol,Any}())
+    @test spec(:name) == DIDSpec(:name, Dict{Symbol,Any}(), Dict{Symbol,Any}())
+    @test spec("") == spec()
+    @test spec() == @spec
+
     sp0 = DIDSpec(Symbol(""), Dict(:d=>TestDID(), :tr=>TR, :pr=>PR), Dict(:a=>1, :b=>2))
     sp1 = spec(TestDID(), TR, PR, a=1, b=2)
     @test sp1 == sp0
+    @test sp0 == @spec TR a=1 b=2 PR TestDID()
 
     sp2 = DIDSpec(:name, Dict(:d=>TestDID(), :tr=>TR, :pr=>PR), Dict(:a=>1, :b=>2))
     sp3 = spec("name", TR, PR, TestDID(), b=2, a=1)
     @test sp3 == sp2
     @test sp3 == sp1
+    @test sp2 == @spec "name" TR PR TestDID() b=2 a=1
 
     sp4 = DIDSpec(:name, Dict(:d=>TestDID(), :tr=>TR, :pr=>PR),
         Dict(:treatname=>:g))
     sp5 = spec(TestDID(), testterm)
     @test sp5 == sp4
+    @test sp4 == @spec :name TestDID() testterm
 
     sp6 = DIDSpec(:name, Dict(:d=>TestDID(), :tr=>TR, :pr=>PR),
         Dict(:yterm=>term(:y), :treatname=>:g,
@@ -99,6 +107,8 @@ end
     sp8 = spec(TestDID(), @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) & z + x))
     @test sp7 == sp6
     @test sp8 == sp7
+    @test sp6 == @spec TestDID() term(:y) ~ testterm & term(:z) + term(:x)
+    @test sp6 == @spec TestDID() @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) & z + x)
 end
 
 @testset "@did" begin
