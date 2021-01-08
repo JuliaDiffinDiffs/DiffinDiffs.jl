@@ -15,6 +15,7 @@ export @fieldequal,
        @unpack,
        exampledata,
 
+       EleOrVec,
        TreatmentSharpness,
        SharpDesign,
        sharp,
