@@ -5,24 +5,34 @@ Supertype for all types specifying the estimation procedure for difference-in-di
 """
 abstract type AbstractDiffinDiffs end
 
+"""
+    DefaultDID <: AbstractDiffinDiffs
+
+Try to use a default procedure based on other information.
+"""
+struct DefaultDID <: AbstractDiffinDiffs end
+
+did(tr::AbstractTreatment, pr::AbstractParallel; kwargs...) =
+    did(DefaultDID, tr, pr; kwargs...)
+
 # The only case in which a message replaces MethodError
-did(d::AbstractDiffinDiffs, tr::AbstractTreatment, pr::AbstractParallel; kwargs...) =
+did(d::Type{<:AbstractDiffinDiffs}, tr::AbstractTreatment, pr::AbstractParallel; kwargs...) =
     error("$(typeof(d)) is not implemented for $(typeof(tr)) and $(typeof(pr))")
 
 """
-    did(d::AbstractDiffinDiffs, t::TreatmentTerm, args...; kwargs...)
+    did(d::Type{<:AbstractDiffinDiffs}, t::TreatmentTerm, args...; kwargs...)
 
 A wrapper method that accepts a [`TreatmentTerm`](@ref).
 """
-did(d::AbstractDiffinDiffs, @nospecialize(t::TreatmentTerm), args...; kwargs...) =
+did(d::Type{<:AbstractDiffinDiffs}, @nospecialize(t::TreatmentTerm), args...; kwargs...) =
     did(d, t.tr, t.pr, args...; treatname=t.sym, kwargs...)
 
 """
-    did(formula::FormulaTerm, args...; kwargs...)
+    did(d::Type{<:AbstractDiffinDiffs}, formula::FormulaTerm, args...; kwargs...)
 
 A wrapper method that accepts a formula.
 """
-function did(d::AbstractDiffinDiffs, @nospecialize(formula::FormulaTerm),
+function did(d::Type{<:AbstractDiffinDiffs}, @nospecialize(formula::FormulaTerm),
     args...; kwargs...)
     treat, intacts, xs = parse_treat(formula)
     ints = intacts==() ? NamedTuple() : (treatintterms=intacts,)
@@ -48,7 +58,8 @@ function args_kwargs(exprs)
     return args, kwargs
 end
 
-argpair(arg::AbstractDiffinDiffs) = :d => arg
+argpair(arg::AbstractString) = :name => String(arg)
+argpair(arg::Type{<:AbstractDiffinDiffs}) = :d => arg
 argpair(arg::AbstractTreatment) = :tr => arg
 argpair(arg::AbstractParallel) = :pr => arg
 argpair(::Any) = throw(ArgumentError("unacceptable positional arguments"))
@@ -58,15 +69,17 @@ argpair(::Any) = throw(ArgumentError("unacceptable positional arguments"))
 
 Classify positional arguments for [`did`](@ref) by type
 and parse any [`TreatmentTerm`](@ref) or [`FormulaTerm`](@ref) in `args`.
+The order of positional arguments in `args` does not make a difference.
 
 # Returns
+- `String`: optional name for [`DIDSpec`](@ref) (return `""` if no instance of a subtype of `AbstractString` is found).
 - `Dict`: up to three key-value pairs for processed positional arguments.
 - `Dict`: keyword arguments with possibly additional pairs after parsing `args`.
 
 # Notes
 The possible keys for the first `Dict` are `:d`, `:tr` and `:pr`.
-They are used to index an instance of [`AbstractDiffinDiffs`](@ref),
-[`AbstractTreatment`](@ref) and [`AbstractParallel`](@ref) respectively.
+They are used to index a subtype of [`AbstractDiffinDiffs`](@ref),
+instances of [`AbstractTreatment`](@ref) and [`AbstractParallel`](@ref) respectively.
 
 If `args` contains any [`TreatmentTerm`](@ref) or [`FormulaTerm`](@ref),
 they are decomposed with additional key-value pairs
@@ -75,8 +88,8 @@ joining the other keyword arguments in the second `Dict`.
 This function is useful for constructing [`DIDSpec`](@ref).
 """
 function parse_didargs(args...; kwargs...)
-    pkwargs = Pair{Symbol,Any}[kwargs...]
     pargs = Pair{Symbol,Any}[]
+    pkwargs = Pair{Symbol,Any}[kwargs...]
     for arg in args
         if arg isa FormulaTerm
             treat, intacts, xs = parse_treat(arg)
@@ -95,53 +108,57 @@ function parse_didargs(args...; kwargs...)
     kwargs = Dict{Symbol,Any}(pkwargs...)
     length(args) == length(pargs) && length(kwargs) == length(pkwargs) ||
         throw(ArgumentError("redundant arguments encountered"))
-    return args, kwargs
+    name = pop!(args, :name, "")
+    return name, args, kwargs
 end
 
 """
-    DIDSpec
+    DIDSpec{T<:AbstractDiffinDiffs}
 
-Record the name, positional arguments and keyword arguments
-for a specification of estimation.
+Record the positional arguments and keyword arguments for [`did`](@ref)
+and optionally a name for the specification.
+
+# Fields
+- `name::String`: name for the specification.
+- `args::Dict{Symbol}`: positional arguments indexed based on their types.
+- `kwargs::Dict{Symbol}`: keyword arguments.
 """
-struct DIDSpec
-    name::Symbol
-    args::Dict{Symbol,Any}
-    kwargs::Dict{Symbol,Any}
+struct DIDSpec{T<:AbstractDiffinDiffs}
+    name::String
+    args::Dict{Symbol}
+    kwargs::Dict{Symbol}
+    DIDSpec(name::String, args::Dict{Symbol}, kwargs::Dict{Symbol}) =
+        new{pop!(args, :d, DefaultDID)}(name, args, kwargs)
 end
 
-==(a::DIDSpec, b::DIDSpec) = a.args == b.args && a.kwargs == b.kwargs
+==(a::DIDSpec{T}, b::DIDSpec{T}) where {T<:AbstractDiffinDiffs} =
+    a.args == b.args && a.kwargs == b.kwargs
 
 """
     spec(args...; kwargs...)
-    spec(name::Union{Symbol,String}, args...; kwargs...)
 
 Construct a [`DIDSpec`](@ref) with `args` and `kwargs`
 processed by [`parse_didargs`](@ref).
-If `name` is not specified, the default value `Symbol("")` will be taken.
+An optional `name` for [`DIDSpec`](@ref) can be included in `args` as a string.
+
+This method simply passes objects returned by [`parse_didargs`](@ref)
+to the constructor of [`DIDSpec`](@ref).
 """
-spec(args...; kwargs...) = DIDSpec(Symbol(""), parse_didargs(args...; kwargs...)...)
-spec(name::Union{String,Symbol}, args...; kwargs...) =
-    DIDSpec(Symbol(name), parse_didargs(args...; kwargs...)...)
+spec(args...; kwargs...) = DIDSpec(parse_didargs(args...; kwargs...)...)
 
 """
-    @spec ["name"] [args... kwargs...]
+    @spec ["name" args... kwargs...]
 
 Return a [`DIDSpec`](@ref) with fields set by the arguments.
+The order of the arguments does not make a difference.
 
 # Arguments
-- `name`: an optional name for the specification (must be the first argument if specified).
-- `args... kwargs...`: a list of arguments for which the order is not important.
+- `name::AbstractString`: an optional name for the specification.
+- `args... kwargs...`: a list of arguments for [`did`](@ref).
 """
 macro spec(exprs...)
-    if length(exprs)>0 && exprs[1] isa Union{String,QuoteNode}
-        name = exprs[1]
-        length(exprs) > 1 ? (exprs = exprs[2:end]) : return esc(:(spec($name)))
-    else
-        name = ""
-    end
     args, kwargs = args_kwargs(exprs)
-    return esc(:(spec($name, $(args...); $(kwargs...))))
+    return esc(:(spec($(args...); $(kwargs...))))
 end
 
 """
@@ -149,9 +166,9 @@ end
 
 A wrapper method that accepts a [`DIDSpec`](@ref).
 """
-function did(sp::DIDSpec)
-    if all(haskey.(Ref(sp.args), [:d, :tr, :pr]))
-        did(sp.args[:d], sp.args[:tr], sp.args[:pr]; sp.kwargs...)
+function did(sp::DIDSpec{T}) where {T}
+    if haskey(sp.args, :tr) && haskey(sp.args, :pr)
+        did(T, sp.args[:tr], sp.args[:pr]; sp.kwargs...)
     else
         throw(ArgumentError("not all required arguments are specified"))
     end
@@ -161,7 +178,7 @@ end
     @did args... [kwargs...]
 
 Call [`did`](@ref) with the specified arguments.
-Order of the arguments is not important.
+The order of the arguments does not make a difference.
 """
 macro did(exprs...)
     args, kwargs = args_kwargs(exprs)
