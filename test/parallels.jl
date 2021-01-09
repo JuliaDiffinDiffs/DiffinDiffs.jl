@@ -6,10 +6,10 @@
 
     @testset "show" begin
         @test sprint(show, Unconditional()) == "Unconditional"
-        @test sprint(show, Unconditional(); context=:compact => true) == "U"
+        @test sprintcompact(Unconditional()) == "U"
 
         @test sprint(show, Exact()) == "Parallel"
-        @test sprint(show, Exact(); context=:compact => true) == "P"
+        @test sprintcompact(Exact()) == "P"
     end
 end
 
@@ -68,17 +68,13 @@ end
     @testset "show" begin
         @test sprint(show, nt0) == """
             Parallel trends with any never-treated group:
-              Never-treated groups: [0]
-            """
-        @test sprint(show, nt0; context=:compact => true) ==
-            "NeverTreated{U,P}([0])"
+              Never-treated groups: [0]"""
+        @test sprintcompact(nt0) == "NeverTreated{U,P}([0])"
 
         @test sprint(show, nt1) == """
             Parallel trends with any never-treated group:
-              Never-treated groups: [0, 1]
-            """
-        @test sprint(show, nt1; context=:compact => true) ==
-            "NeverTreated{U,P}([0, 1])"
+              Never-treated groups: [0, 1]"""
+        @test sprintcompact(nt1) == "NeverTreated{U,P}([0, 1])"
     end
 end
 
@@ -152,33 +148,25 @@ end
         @test sprint(show, ny0) == """
             Parallel trends with any not-yet-treated group:
               Not-yet-treated groups: [0]
-              Treated since: not specified
-            """
-        @test sprint(show, ny0; context=:compact => true) ==
-            "NotYetTreated{U,P}([0], NA)"
+              Treated since: not specified"""
+        @test sprintcompact(ny0) == "NotYetTreated{U,P}([0], NA)"
 
         @test sprint(show, ny1) == """
             Parallel trends with any not-yet-treated group:
               Not-yet-treated groups: [0, 1]
-              Treated since: not specified
-            """
-        @test sprint(show, ny1; context=:compact => true) ==
-            "NotYetTreated{U,P}([0, 1], NA)"
+              Treated since: not specified"""
+        @test sprintcompact(ny1) == "NotYetTreated{U,P}([0, 1], NA)"
 
         @test sprint(show, ny2) == """
             Parallel trends with any not-yet-treated group:
               Not-yet-treated groups: [0, 1]
-              Treated since: [0]
-            """
-        @test sprint(show, ny2; context=:compact => true) ==
-            "NotYetTreated{U,P}([0, 1], [0])"
+              Treated since: [0]"""
+        @test sprintcompact(ny2) == "NotYetTreated{U,P}([0, 1], [0])"
 
         @test sprint(show, ny3) == """
             Parallel trends with any not-yet-treated group:
               Not-yet-treated groups: [0, 1]
-              Treated since: [0, 1]
-            """
-        @test sprint(show, ny3; context=:compact => true) ==
-            "NotYetTreated{U,P}([0, 1], [0, 1])"
+              Treated since: [0, 1]"""
+        @test sprintcompact(ny3) == "NotYetTreated{U,P}([0, 1], [0, 1])"
     end
 end

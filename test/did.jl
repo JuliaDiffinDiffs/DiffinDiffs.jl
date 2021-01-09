@@ -1,11 +1,11 @@
 using DiffinDiffsBase: parse_didargs
 import DiffinDiffsBase: did
 
+const testterm = treat(:g, TR, PR)
+
 did(::Type{TestDID}, ::AbstractTreatment, ::AbstractParallel;
     yterm=:unknown, treatname=:unknown, treatintterms=nothing, xterms=nothing) =
         (yterm, treatname, treatintterms, xterms)
-
-const testterm = treat(:g, TR, PR)
 
 @testset "did wrapper" begin
     @testset "DefaultDID" begin
@@ -84,6 +84,45 @@ end
     @test kwargs1 == kwargs0
 
     @test_throws ArgumentError parse_didargs('a', :a, 1)
+end
+
+@testset "DIDSpec" begin
+    @testset "show" begin
+        sp = DIDSpec("", Dict{Symbol,Any}(), Dict{Symbol,Any}())
+        @test sprint(show, sp) == "DIDSpec{DefaultDID}"
+        @test sprintcompact(sp) == "DIDSpec{DefaultDID}"
+
+        sp = DIDSpec("name", Dict{Symbol,Any}(), Dict{Symbol,Any}())
+        @test sprint(show, sp) == "DIDSpec{DefaultDID}: name"
+        @test sprintcompact(sp) == "DIDSpec{DefaultDID}: name"
+        
+        sp = DIDSpec("name", Dict(:d=>TestDID, :tr=>TR, :pr=>PR), Dict(:a=>1, :b=>2))
+        @test sprint(show, sp) == """
+            DIDSpec{TestDID}: name
+              TestTreatment(:t, 0)
+              TestParallel{ParallelCondition,ParallelStrength}(0)"""
+        @test sprintcompact(sp) == "DIDSpec{TestDID}: name"
+        
+        sp = DIDSpec("", Dict(:d=>TestDID, :tr=>dynamic(:time,-1), :pr=>nevertreated(-1)),
+            Dict{Symbol,Any}())
+        @test sprint(show, sp) == """
+            DIDSpec{TestDID}:
+              Dynamic{S}(-1)
+              NeverTreated{U,P}([-1])"""
+        @test sprintcompact(sp) == "DIDSpec{TestDID}"
+        
+        sp = DIDSpec("", Dict(:d=>TestDID, :tr=>dynamic(:time,-1)), Dict{Symbol,Any}())
+        @test sprint(show, sp) == """
+            DIDSpec{TestDID}:
+              Dynamic{S}(-1)"""
+        @test sprintcompact(sp) == "DIDSpec{TestDID}"
+        
+        sp = DIDSpec("", Dict(:d=>TestDID, :pr=>nevertreated(-1)), Dict{Symbol,Any}())
+        @test sprint(show, sp) == """
+            DIDSpec{TestDID}:
+              NeverTreated{U,P}([-1])"""
+        @test sprintcompact(sp) == "DIDSpec{TestDID}"
+    end
 end
 
 @testset "spec @spec" begin

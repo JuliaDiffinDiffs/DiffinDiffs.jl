@@ -1,6 +1,6 @@
 module DiffinDiffsBase
 
-using CSV
+using CSV: File
 using Reexport
 using StatsBase
 @reexport using StatsModels
@@ -14,6 +14,7 @@ export @fieldequal,
        kwarg,
        @unpack,
        exampledata,
+       sprintcompact,
 
        EleOrVec,
        TreatmentSharpness,
@@ -44,8 +45,10 @@ export @fieldequal,
        parse_treat,
 
        AbstractDiffinDiffs,
+       DefaultDID,
        did,
        DIDSpec,
+       isnamed,
        spec,
        @spec,
        @did,

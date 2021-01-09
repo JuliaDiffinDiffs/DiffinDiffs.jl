@@ -111,8 +111,8 @@ function show(io::IO, pr::NeverTreatedParallel)
         print(io, "NeverTreated{", pr.c, ",", pr.s, "}(", pr.e,")")
     else
         println(io, pr.s, " trends with any never-treated group:")
-        println(io, "  Never-treated groups: ", pr.e)
-        pr.c isa Unconditional ? nothing : println(io, "  ", pr.c)
+        print(io, "  Never-treated groups: ", pr.e)
+        pr.c isa Unconditional || print(io, "\n  ", pr.c)
     end
 end
 
@@ -193,8 +193,8 @@ function show(io::IO, pr::NotYetTreatedParallel)
     else
         println(io, pr.s, " trends with any not-yet-treated group:")
         println(io, "  Not-yet-treated groups: ", pr.e)
-        println(io, "  Treated since: ", pr.emin isa Nothing ? "not specified" : pr.emin)
-        pr.c isa Unconditional ? nothing : println(io, "  ", pr.c)
+        print(io, "  Treated since: ", pr.emin isa Nothing ? "not specified" : pr.emin)
+        pr.c isa Unconditional || print(io, "\n  ", pr.c)
     end
 end
 

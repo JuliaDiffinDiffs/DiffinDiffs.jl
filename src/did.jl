@@ -134,6 +134,20 @@ end
 ==(a::DIDSpec{T}, b::DIDSpec{T}) where {T<:AbstractDiffinDiffs} =
     a.args == b.args && a.kwargs == b.kwargs
 
+isnamed(sp::DIDSpec) = sp.name != ""
+
+function show(io::IO, sp::DIDSpec{T}) where {T}
+    print(io, "DIDSpec{", sprintcompact(T), "}")
+    isnamed(sp) && print(io, ": ", sp.name)
+    if get(io, :compact, false) || !haskey(sp.args, :tr) && !haskey(sp.args, :pr)
+        return
+    elseif !isnamed(sp)
+        print(io, ":")    
+    end
+    haskey(sp.args, :tr) && print(io, "\n  ", sprintcompact(sp.args[:tr]))
+    haskey(sp.args, :pr) && print(io, "\n  ", sprintcompact(sp.args[:pr]))
+end
+
 """
     spec(args...; kwargs...)
 

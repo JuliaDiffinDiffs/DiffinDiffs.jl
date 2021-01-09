@@ -110,5 +110,7 @@ Return a `CSV.File` by loading the example dataset with the specified name.
 function exampledata(name::Union{Symbol,String})
     "$(name)" in exampledata() ||
         throw(ArgumentError("example dataset $(name) is not found"))
-    return CSV.File((@__DIR__)*"/../data/$(name).csv")
+    return File((@__DIR__)*"/../data/$(name).csv")
 end
+
+sprintcompact(x) = sprint(show, x; context=:compact=>true)

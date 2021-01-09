@@ -72,7 +72,7 @@ function show(io::IO, tr::DynamicTreatment)
     else
         println(io, tr.s, " dynamic treatment:")
         println(io, "  column name of time variable: ", tr.time)
-        println(io, "  excluded relative time: ", tr.exc)
+        print(io, "  excluded relative time: ", tr.exc)
     end
 end
 
