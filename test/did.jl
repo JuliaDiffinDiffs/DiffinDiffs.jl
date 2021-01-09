@@ -96,13 +96,6 @@ end
         @test sprint(show, sp) == "DIDSpec{DefaultDID}: name"
         @test sprintcompact(sp) == "DIDSpec{DefaultDID}: name"
         
-        sp = DIDSpec("name", Dict(:d=>TestDID, :tr=>TR, :pr=>PR), Dict(:a=>1, :b=>2))
-        @test sprint(show, sp) == """
-            DIDSpec{TestDID}: name
-              TestTreatment(:t, 0)
-              TestParallel{ParallelCondition,ParallelStrength}(0)"""
-        @test sprintcompact(sp) == "DIDSpec{TestDID}: name"
-        
         sp = DIDSpec("", Dict(:d=>TestDID, :tr=>dynamic(:time,-1), :pr=>nevertreated(-1)),
             Dict{Symbol,Any}())
         @test sprint(show, sp) == """
@@ -117,11 +110,11 @@ end
               Dynamic{S}(-1)"""
         @test sprintcompact(sp) == "DIDSpec{TestDID}"
         
-        sp = DIDSpec("", Dict(:d=>TestDID, :pr=>nevertreated(-1)), Dict{Symbol,Any}())
+        sp = DIDSpec("name", Dict(:d=>TestDID, :pr=>nevertreated(-1)), Dict{Symbol,Any}())
         @test sprint(show, sp) == """
-            DIDSpec{TestDID}:
+            DIDSpec{TestDID}: name
               NeverTreated{U,P}([-1])"""
-        @test sprintcompact(sp) == "DIDSpec{TestDID}"
+        @test sprintcompact(sp) == "DIDSpec{TestDID}: name"
     end
 end
 
