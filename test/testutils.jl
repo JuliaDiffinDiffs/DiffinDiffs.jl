@@ -14,8 +14,8 @@ end
 TestParallel(e::Int) = TestParallel{ParallelCondition,ParallelStrength}(e)
 tpara(c::ConstantTerm) = TestParallel{ParallelCondition,ParallelStrength}(c.n)
 
-struct NotImplemented <: AbstractDiffinDiffs end
-struct TestDID <: AbstractDiffinDiffs end
+struct NotImplemented <: DiffinDiffsEstimator end
+struct TestDID <: DiffinDiffsEstimator end
 
 const TR = TestTreatment(:t, 0)
 const PR = TestParallel(0)

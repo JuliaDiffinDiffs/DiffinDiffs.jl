@@ -50,122 +50,128 @@ did(::Type{TestDID}, ::AbstractTreatment, ::AbstractParallel;
 end
 
 @testset "parse_didargs" begin
-    @test parse_didargs() == ("", Dict{Symbol,Any}(), Dict{Symbol,Any}())
-    @test parse_didargs("test") == ("test", Dict{Symbol,Any}(), Dict{Symbol,Any}())
+    @test parse_didargs() == (DefaultDID, "", Dict{Symbol,Any}(), Dict{Symbol,Any}())
+    @test parse_didargs("test") == (DefaultDID, "test", Dict{Symbol,Any}(), Dict{Symbol,Any}())
 
-    name, args, kwargs = parse_didargs(TestDID, TR, PR, a=1, b=2)
+    sptype, name, args, kwargs = parse_didargs(TestDID, TR, PR, a=1, b=2)
+    @test sptype == TestDID
     @test name == ""
-    @test args == Dict(:d=>TestDID, :tr=>TR, :pr=>PR)
+    @test args == Dict(:tr=>TR, :pr=>PR)
     @test kwargs == Dict(:a=>1, :b=>2)
 
-    name, args, kwargs = parse_didargs("test", testterm, TestDID)
+    sptype, name, args, kwargs = parse_didargs("test", testterm, TestDID)
+    @test sptype == TestDID
     @test name == "test"
-    @test args == Dict(:d=>TestDID, :tr=>TR, :pr=>PR)
+    @test args == Dict(:tr=>TR, :pr=>PR)
     @test kwargs == Dict(:treatname=>:g)
 
-    name, args0, kwargs0 = parse_didargs(TestDID, term(:y) ~ testterm, "test")
+    sptype, name, args0, kwargs0 = parse_didargs(TestDID, term(:y) ~ testterm, "test")
+    @test sptype == TestDID
     @test name == "test"
-    @test args0 == Dict(:d=>TestDID, :tr=>TR, :pr=>PR)
+    @test args0 == Dict(:tr=>TR, :pr=>PR)
     @test kwargs0 == Dict(:yterm=>term(:y), :treatname=>:g)
 
-    name, args1, kwargs1 = parse_didargs(TestDID, @formula(y ~ treat(g, ttreat(t, 0), tpara(0))))
+    sptype, name, args1, kwargs1 = parse_didargs(TestDID, @formula(y ~ treat(g, ttreat(t, 0), tpara(0))))
+    @test sptype == TestDID
     @test name == ""
     @test args1 == args0
     @test kwargs1 == kwargs0
 
-    name, args0, kwargs0 = parse_didargs(TestDID, term(:y) ~ testterm & term(:z) + term(:x))
-    @test args0 == Dict(:d=>TestDID, :tr=>TR, :pr=>PR)
+    sptype, name, args0, kwargs0 = parse_didargs(TestDID, term(:y) ~ testterm & term(:z) + term(:x))
+    @test args0 == Dict(:tr=>TR, :pr=>PR)
     @test kwargs0 == Dict(:yterm=>term(:y), :treatname=>:g,
         :treatintterms=>(term(:z),), :xterms=>(term(:x),))
     
-    name, args1, kwargs1 = parse_didargs(TestDID,
+    sptype, name, args1, kwargs1 = parse_didargs(TestDID,
         @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) & z + x))
     @test args1 == args0
     @test kwargs1 == kwargs0
 
     @test_throws ArgumentError parse_didargs('a', :a, 1)
+    @test_throws ArgumentError parse_didargs(TestDID, DefaultDID)
+    @test_throws ArgumentError parse_didargs(TR, PR, TR)
 end
 
-@testset "DIDSpec" begin
+@testset "StatsSpec" begin
     @testset "show" begin
-        sp = DIDSpec("", Dict{Symbol,Any}(), Dict{Symbol,Any}())
-        @test sprint(show, sp) == "DIDSpec{DefaultDID}"
-        @test sprintcompact(sp) == "DIDSpec{DefaultDID}"
+        sp = StatsSpec(DefaultDID, "", Dict{Symbol,Any}(), Dict{Symbol,Any}())
+        @test sprint(show, sp) == "StatsSpec{DefaultDID}"
+        @test sprintcompact(sp) == "StatsSpec{DefaultDID}"
 
-        sp = DIDSpec("name", Dict{Symbol,Any}(), Dict{Symbol,Any}())
-        @test sprint(show, sp) == "DIDSpec{DefaultDID}: name"
-        @test sprintcompact(sp) == "DIDSpec{DefaultDID}: name"
+        sp = StatsSpec(DefaultDID, "name", Dict{Symbol,Any}(), Dict{Symbol,Any}())
+        @test sprint(show, sp) == "StatsSpec{DefaultDID}: name"
+        @test sprintcompact(sp) == "StatsSpec{DefaultDID}: name"
         
-        sp = DIDSpec("", Dict(:d=>TestDID, :tr=>dynamic(:time,-1), :pr=>nevertreated(-1)),
+        sp = StatsSpec(TestDID, "", Dict(:tr=>dynamic(:time,-1), :pr=>nevertreated(-1)),
             Dict{Symbol,Any}())
         @test sprint(show, sp) == """
-            DIDSpec{TestDID}:
+            StatsSpec{TestDID}:
               Dynamic{S}(-1)
               NeverTreated{U,P}([-1])"""
-        @test sprintcompact(sp) == "DIDSpec{TestDID}"
+        @test sprintcompact(sp) == "StatsSpec{TestDID}"
         
-        sp = DIDSpec("", Dict(:d=>TestDID, :tr=>dynamic(:time,-1)), Dict{Symbol,Any}())
+        sp = StatsSpec(TestDID, "", Dict(:tr=>dynamic(:time,-1)), Dict{Symbol,Any}())
         @test sprint(show, sp) == """
-            DIDSpec{TestDID}:
+            StatsSpec{TestDID}:
               Dynamic{S}(-1)"""
-        @test sprintcompact(sp) == "DIDSpec{TestDID}"
+        @test sprintcompact(sp) == "StatsSpec{TestDID}"
         
-        sp = DIDSpec("name", Dict(:d=>TestDID, :pr=>nevertreated(-1)), Dict{Symbol,Any}())
+        sp = StatsSpec(TestDID, "name", Dict(:pr=>nevertreated(-1)), Dict{Symbol,Any}())
         @test sprint(show, sp) == """
-            DIDSpec{TestDID}: name
+            StatsSpec{TestDID}: name
               NeverTreated{U,P}([-1])"""
-        @test sprintcompact(sp) == "DIDSpec{TestDID}: name"
+        @test sprintcompact(sp) == "StatsSpec{TestDID}: name"
     end
 end
 
-@testset "spec @spec" begin
+@testset "didspec" begin
     testname = "name"
 
-    sp = DIDSpec("", Dict{Symbol,Any}(), Dict{Symbol,Any}())
-    @test spec() == sp
+    sp = StatsSpec(DefaultDID, "", Dict{Symbol,Any}(), Dict{Symbol,Any}())
+    @test didspec() == sp
     @test sp.name == ""
 
-    sp = DIDSpec("name", Dict{Symbol,Any}(), Dict{Symbol,Any}())
-    @test spec("") == sp
+    sp = StatsSpec(DefaultDID, "name", Dict{Symbol,Any}(), Dict{Symbol,Any}())
+    @test didspec("") == sp
     @test sp.name == "name"
 
-    sp = @spec
-    @test sp == spec()
+    sp = @didspec
+    @test sp == didspec()
     @test sp.name == ""
 
-    sp = @spec "name"
-    @test sp == spec()
+    sp = @didspec "name"
+    @test sp == didspec()
     @test sp.name == "name"
 
-    sp = @spec testname
-    @test sp == spec()
+    sp = @didspec testname
+    @test sp == didspec()
     @test sp.name == "name"
 
-    sp0 = DIDSpec("", Dict(:d=>TestDID, :tr=>TR, :pr=>PR), Dict(:a=>1, :b=>2))
-    sp1 = spec(TestDID, TR, PR, a=1, b=2)
+    sp0 = StatsSpec(TestDID, "", Dict(:tr=>TR, :pr=>PR), Dict(:a=>1, :b=>2))
+    sp1 = didspec(TestDID, TR, PR, a=1, b=2)
     @test sp1 == sp0
-    @test sp0 == @spec TR a=1 b=2 PR TestDID
+    @test sp0 == @didspec TR a=1 b=2 PR TestDID
 
-    sp2 = DIDSpec("name", Dict(:d=>TestDID, :tr=>TR, :pr=>PR), Dict(:a=>1, :b=>2))
-    sp3 = spec("name", TR, PR, TestDID, b=2, a=1)
+    sp2 = StatsSpec(TestDID, "name", Dict(:tr=>TR, :pr=>PR), Dict(:a=>1, :b=>2))
+    sp3 = didspec("name", TR, PR, TestDID, b=2, a=1)
     @test sp3 == sp2
     @test sp3 == sp1
-    @test sp2 == @spec TR PR TestDID "name" b=2 a=1
+    @test sp2 == @didspec TR PR TestDID "name" b=2 a=1
 
-    sp4 = DIDSpec(testname, Dict(:d=>TestDID, :tr=>TR, :pr=>PR), Dict(:treatname=>:g))
-    sp5 = spec(TestDID, testterm)
+    sp4 = StatsSpec(TestDID, testname, Dict(:tr=>TR, :pr=>PR), Dict(:treatname=>:g))
+    sp5 = didspec(TestDID, testterm)
     @test sp5 == sp4
-    @test sp4 == @spec TestDID testterm testname
+    @test sp4 == @didspec TestDID testterm testname
 
-    sp6 = DIDSpec("name", Dict(:d=>TestDID, :tr=>TR, :pr=>PR),
+    sp6 = StatsSpec(TestDID, "name", Dict(:tr=>TR, :pr=>PR),
         Dict(:yterm=>term(:y), :treatname=>:g,
         :treatintterms=>(term(:z),), :xterms=>(term(:x),)))
-    sp7 = spec(TestDID, term(:y) ~ testterm & term(:z) + term(:x))
-    sp8 = spec(TestDID, @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) & z + x))
+    sp7 = didspec(TestDID, term(:y) ~ testterm & term(:z) + term(:x))
+    sp8 = didspec(TestDID, @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) & z + x))
     @test sp7 == sp6
     @test sp8 == sp7
-    @test sp6 == @spec TestDID term(:y) ~ testterm & term(:z) + term(:x)
-    @test sp6 == @spec TestDID @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) & z + x)
+    @test sp6 == @didspec TestDID term(:y) ~ testterm & term(:z) + term(:x)
+    @test sp6 == @didspec TestDID @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) & z + x)
 end
 
 @testset "@did" begin
@@ -183,7 +189,7 @@ end
     d5 = @did TestDID @formula(y ~ treat(g, ttreat(t, 0), tpara(0))) "test"
     @test d5 == d3
     d6 = @did "test" TestDID @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) & z + x)
-    @test d6 ==d4
+    @test d6 == d4
 
     @test_throws ArgumentError @did TestDID
     @test_throws ArgumentError @did TestDID TR

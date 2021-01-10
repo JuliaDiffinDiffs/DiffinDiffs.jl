@@ -94,6 +94,23 @@ macro unpack(functionname)
 end
 
 """
+    args_kwargs(exprs)
+
+Partition a collection of expressions into two arrays
+such that all expressions in the second array has `head` being `:(=)`.
+This function is useful for separating out expressions
+for positional arguments and those for keyword arguments.
+"""
+function args_kwargs(exprs)
+    args = []
+    kwargs = []
+    for expr in exprs
+        (expr isa Expr && expr.head==:(=)) ? push!(kwargs, expr) : push!(args, expr)
+    end
+    return args, kwargs
+end
+
+"""
     exampledata()
 
 Return the names of available example datasets.
