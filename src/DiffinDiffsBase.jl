@@ -6,6 +6,7 @@ using StatsBase
 @reexport using StatsModels
 
 import Base: ==, show
+import Base: eltype, getindex, iterate, length
 
 export @fieldequal,
        eachterm,

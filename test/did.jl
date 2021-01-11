@@ -7,6 +7,24 @@ did(::Type{TestDID}, ::AbstractTreatment, ::AbstractParallel;
     yterm=:unknown, treatname=:unknown, treatintterms=nothing, xterms=nothing) =
         (yterm, treatname, treatintterms, xterms)
 
+@testset "DiffinDiffsEstimator" begin
+    d = DefaultDID()
+    @test length(d) == 0
+    @test eltype(d) == Function
+    @test_throws BoundsError d[1]
+    @test collect(d) == Function[]
+
+    d = TestDID()
+    @test length(d) == 2
+    @test eltype(d) == Function
+    @test d[1] == print
+    @test d[1:2] == [print, println]
+    @test d[[2,1]] == [println, print]
+    @test_throws BoundsError d[3]
+    @test_throws MethodError d[:a]
+    @test collect(d) == Function[print, println]
+end
+
 @testset "did wrapper" begin
     @testset "DefaultDID" begin
         @test_throws ErrorException did(TR, PR)

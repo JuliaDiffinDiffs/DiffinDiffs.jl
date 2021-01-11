@@ -1,16 +1,18 @@
 """
-    DiffinDiffsEstimator <: AbstractStatsProcedure
+    DiffinDiffsEstimator{T} <: AbstractStatsProcedure{T}
 
-Supertype for all types specifying the estimation procedure for difference-in-differences.
+Specify the estimation procedure for difference-in-differences.
 """
-abstract type DiffinDiffsEstimator <: AbstractStatsProcedure end
+struct DiffinDiffsEstimator{T} <: AbstractStatsProcedure{T} end
 
 """
     DefaultDID <: DiffinDiffsEstimator
 
 Default difference-in-differences estimator selected based on the context.
 """
-struct DefaultDID <: DiffinDiffsEstimator end
+const DefaultDID = DiffinDiffsEstimator{Tuple{}}
+
+show(io::IO, d::Type{DefaultDID}) = print(io, "DefaultDID")
 
 did(tr::AbstractTreatment, pr::AbstractParallel; kwargs...) =
     did(DefaultDID, tr, pr; kwargs...)
