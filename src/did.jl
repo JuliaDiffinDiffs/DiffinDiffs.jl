@@ -43,8 +43,6 @@ function did(d::Type{<:DiffinDiffsEstimator}, @nospecialize(formula::FormulaTerm
         yterm=formula.lhs, treatname=treat.sym, ints..., xterms..., kwargs...)
 end
 
-argpair(arg::Type{<:DiffinDiffsEstimator}) = :d => arg
-argpair(arg::AbstractString) = :name => String(arg)
 argpair(arg::AbstractTreatment) = :tr => arg
 argpair(arg::AbstractParallel) = :pr => arg
 argpair(::Any) = throw(ArgumentError("unacceptable positional arguments"))
@@ -61,14 +59,20 @@ that can be accepted by [`did`](@ref).
 # Returns
 - `Type{<:DiffinDiffsEstimator}`: either the type found in positional arguments or `DefaultDID`.
 - `String`: either a string found in positional arguments or `""` if no instance of any subtype of `AbstractString` is found.
-- `Dict`: up to two key-value pairs for instances of [`AbstractTreatment`](@ref) and [`AbstractParallel`](@ref) with keys being `:tr` and `:pr`.
-- `Dict`: keyword arguments with possibly additional pairs after parsing positional arguments.
+- `NamedTuple`: contain at most one instance of [`AbstractTreatment`](@ref) and [`AbstractParallel`](@ref) with associated keys being `:tr` and `:pr` respectively.
+- `NamedTuple`: keyword arguments with possibly additional elements after parsing positional arguments.
 """
 function parse_didargs(args...; kwargs...)
+    sptypes = Type{<:DiffinDiffsEstimator}[]
+    names = String[]
     pargs = Pair{Symbol,Any}[]
     pkwargs = Pair{Symbol,Any}[kwargs...]
     for arg in args
-        if arg isa FormulaTerm
+        if arg isa Type{<:DiffinDiffsEstimator}
+            push!(sptypes, arg)
+        elseif arg isa AbstractString
+            push!(names, String(arg))
+        elseif arg isa FormulaTerm
             treat, intacts, xs = parse_treat(arg)
             push!(pargs, argpair(treat.tr), argpair(treat.pr))
             push!(pkwargs, :yterm => arg.lhs, :treatname => treat.sym)
@@ -81,12 +85,22 @@ function parse_didargs(args...; kwargs...)
             push!(pargs, argpair(arg))
         end
     end
-    args = Dict{Symbol,Any}(pargs...)
-    kwargs = Dict{Symbol,Any}(pkwargs...)
-    length(args) == length(pargs) && length(kwargs) == length(pkwargs) ||
+    if length(sptypes) > 1 || length(names) > 1
         throw(ArgumentError("redundant arguments encountered"))
-    sptype = pop!(args, :d, DefaultDID)
-    name = pop!(args, :name, "")
+    else
+        keyargs = first.(pargs)
+        if length(keyargs) != length(unique(keyargs))
+            throw(ArgumentError("redundant arguments encountered"))
+        else
+            keykwargs = first.(pkwargs)
+            length(keykwargs) != length(unique(keykwargs)) &&
+                throw(ArgumentError("redundant arguments encountered"))
+        end
+    end
+    sptype = isempty(sptypes) ? DefaultDID : sptypes[1]
+    name = isempty(names) ? "" : names[1]
+    args = (; pargs...)
+    kwargs = (; pkwargs...)
     return sptype, name, args, kwargs
 end
 

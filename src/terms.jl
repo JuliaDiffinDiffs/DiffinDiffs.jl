@@ -62,7 +62,7 @@ Return a `Tuple` of three objects extracted from the right-hand-side of `formula
 Error will be raised if either existence or uniqueness of the `TreatmentTerm` is violated.
 """
 function parse_treat(@nospecialize(formula::FormulaTerm))
-    # Use Array instead of Dict for detecting duplicate terms
+    # Use Array for detecting duplicate terms
     treats = Pair{TreatmentTerm,Tuple}[]
     for term in eachterm(formula.rhs)
         if hastreat(term)

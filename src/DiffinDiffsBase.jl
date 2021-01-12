@@ -14,6 +14,7 @@ export @fieldequal,
        unpack,
        kwarg,
        @unpack,
+       ≊,
        exampledata,
        sprintcompact,
 

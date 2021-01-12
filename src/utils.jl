@@ -6,9 +6,9 @@ such that `==` returns true if two instances have the same field values.
 """
 macro fieldequal(Supertype)
     return esc(quote
-        function ==(a::T, b::T) where T <: $Supertype
+        function ==(x::T, y::T) where T <: $Supertype
             f = fieldnames(T)
-            getfield.(Ref(a),f) == getfield.(Ref(b),f)
+            getfield.(Ref(x),f) == getfield.(Ref(y),f)
         end
     end)
 end
@@ -109,6 +109,18 @@ function args_kwargs(exprs)
     end
     return args, kwargs
 end
+
+"""
+    ≊(x::NamedTuple, y::NamedTuple)
+
+Test whether two instances of `NamedTuple` contain
+the same set of key-value pairs while ignoring the order.
+
+See https://discourse.julialang.org/t/check-equality-of-two-namedtuples-with-order-of-the-fields-ignored
+"""
+≊(x::NamedTuple{N1,T1}, y::NamedTuple{N2,T2}) where {N1,T1,N2,T2} =
+    length(N1) === length(union(N1,N2)) &&
+        all(k->getfield(x,k)==getfield(y,k), keys(x))
 
 """
     exampledata()
