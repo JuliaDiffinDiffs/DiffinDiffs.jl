@@ -8,6 +8,8 @@ const tests = [
     "terms",
     "treatments",
     "parallels",
+    "StatsProcedures",
+    "procedures",
     "did"
 ]
 

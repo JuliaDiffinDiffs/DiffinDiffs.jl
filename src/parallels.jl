@@ -243,3 +243,7 @@ notyettreated(itr, emin=nothing;
 A wrapper method of `notyettreated` for working with `@formula`.
 """
 @unpack notyettreated
+
+termvars(c::ParallelCondition) = Symbol[]
+termvars(s::ParallelStrength) = Symbol[]
+termvars(pr::AbstractParallel) = union(termvars(pr.c), termvars(pr.s))

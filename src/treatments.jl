@@ -114,3 +114,7 @@ dynamic(time::Symbol, exc, s::TreatmentSharpness=sharp()) =
 A wrapper method of `dynamic` for working with `@formula`.
 """
 @unpack dynamic
+
+termvars(s::TreatmentSharpness) = Symbol[]
+termvars(tr::AbstractTreatment) = termvars(tr.s)
+termvars(tr::DynamicTreatment) = pushfirst!(termvars(s::TreatmentSharpness), tr.time)

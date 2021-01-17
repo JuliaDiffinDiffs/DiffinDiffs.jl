@@ -1,12 +1,22 @@
 module DiffinDiffsBase
 
+using Combinatorics: combinations
 using CSV: File
+using MacroTools: @capture, isexpr, postwalk
 using Reexport
 using StatsBase
 @reexport using StatsModels
+using StatsModels: TupleTerm
+using SplitApplyCombine: groupfind
+using Tables: columntable, istable, rows, columns, getcolumn
+using TypedTables: Table, getproperty, getproperties
 
-import Base: ==, show
-import Base: eltype, getindex, iterate, length
+import Base: ==, show, union
+import Base: eltype, firstindex, lastindex, getindex, iterate, length
+
+import StatsModels: termvars
+
+export TupleTerm
 
 export @fieldequal,
        eachterm,
@@ -46,10 +56,17 @@ export @fieldequal,
        hastreat,
        parse_treat,
 
+       StatsStep,
+       @show_StatsStep,
        AbstractStatsProcedure,
+       SharedStatsStep,
+       PooledStatsProcedure,
+       pool,
        StatsSpec,
-       isnamed,
-       StatsSpecSet,
+       @specset,
+
+       check_data,
+       CheckData,
 
        DiffinDiffsEstimator,
        DefaultDID,
@@ -65,6 +82,7 @@ include("utils.jl")
 include("treatments.jl")
 include("parallels.jl")
 include("terms.jl")
+include("StatsProcedures.jl")
 include("procedures.jl")
 include("did.jl")
 

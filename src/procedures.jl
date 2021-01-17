@@ -1,76 +1,56 @@
-"""
-    AbstractStatsProcedure{T<:NTuple{N,Function} where N}
 
-Supertype for all types specifying the procedure for statistical estimation or inference.
 
-The procedure is determined by the `parameters` of `T`,
-which are types of a sequence of functions.
-"""
-abstract type AbstractStatsProcedure{T<:NTuple{N,Function} where N} end
 
-length(p::AbstractStatsProcedure{T}) where T = length(T.parameters)
-eltype(::Type{<:AbstractStatsProcedure}) = Function
 
-function getindex(p::AbstractStatsProcedure{T}, i) where T
-    fs = T.parameters[i]
-    return fs isa Type && fs <: Function ? fs.instance : [f.instance for f in fs]
+function check_data(data, tr::AbstractTreatment, pr::AbstractParallel,
+    yterm::AbstractTerm, treatname::Symbol, xterms::TupleTerm,
+    weights::Union{Symbol, Nothing}, subset::Union{AbstractVector, Nothing})
+
+    istable(data) ||
+        throw(ArgumentError("expected data in a Table, got $(typeof(data))"))
+    
+    vars = union(treatname, (termvars(t) for t in (tr, pr, yterm, xterms)))
+    esample = BitArray(all(v->!ismissing(getproperty(row, v)), vars) for row in rows(data))
+
+    if subset != nothing
+        length(subset) != size(data, 1) &&
+            throw("df has $(size(df, 1)) rows but the subset vector has $(length(subset)) elements")
+        esample .&= .!ismissing.(x) .& x
+    end
+
+    if weights != nothing
+        colweights = getcolumn(columns(data), weights)
+        esample .&= .!ismissing.(colweights) .& (colweights .> 0)
+    end
+    
+    sum(esample) == 0 && throw(ArgumentError("no nonmissing data"))
+    
+    return (vars=vars, esample=esample,)
 end
 
-iterate(p::AbstractStatsProcedure{T}, state=1) where T =
-    state > length(p) ? nothing : (p[state], state+1)
+const CheckData = StatsStep{typeof(check_data), (:data, :tr, :pr, :yterm, :treatname, :xterms, :weights, :subset), ()}
 
-"""
-    StatsSpec{T<:AbstractStatsProcedure, IsValidated}
+@show_StatsStep CheckData "CheckData"
 
-Record the specification for a statistical procedure of type `T`
-that may or may not be verified to be valid as indicated by `IsValidated`.
 
-The specification is recorded based on the arguments
-for a function that will conduct the procedure.
-It is assumed that a tuple of positional arguments accepted by the function
-can be constructed solely based on the type of each argument.
 
-# Fields
-- `name::String`: an optional name for the specification.
-- `args::NamedTuple`: positional arguments indexed based on their types.
-- `kwargs::NamedTuple`: keyword arguments.
-"""
-struct StatsSpec{T<:AbstractStatsProcedure, IsValidated}
-    name::String
-    args::NamedTuple
-    kwargs::NamedTuple
+
+
+
+
+
+
+
+
+
+
+
+#=
+function (step::StatsStep)(sp::StatsSpec, trace::SPTrace)
+    f = step.parameters[1].instance
+    args1 = (sp.args[n] for n in step.parameters[2])
+    args2 = (trace)
 end
+=#
 
-StatsSpec(T::Type{<:AbstractStatsProcedure}, name::String,
-    args::NamedTuple, kwargs::NamedTuple, IsValidated::Bool=false) =
-        StatsSpec{T,IsValidated}(name, args, kwargs)
-
-"""
-    ==(x::StatsSpec{T}, y::StatsSpec{T}) where T
-
-Test whether two instances of [`StatsSpec`](@ref)
-with the same parameter `T` also have the same fields `args` and `kwargs`.
-
-See also [`≊`](@ref).
-"""
-==(x::StatsSpec{T}, y::StatsSpec{T}) where T =
-    x.args == y.args && x.kwargs == y.kwargs
-
-"""
-    ≊(x::StatsSpec{T}, y::StatsSpec{T}) where T
-
-Test whether two instances of [`StatsSpec`](@ref)
-with the same parameter `T` also have the fields `args` and `kwargs`
-containing the same sets of key-value pairs
-while ignoring the orders.
-"""
-≊(x::StatsSpec{T}, y::StatsSpec{T}) where T =
-    x.args ≊ y.args && x.kwargs ≊ y.kwargs
-
-isnamed(sp::StatsSpec) = sp.name != ""
-
-struct StatsSpecSet
-    default::StatsSpec
-    specs::Vector{StatsSpec}
-end
 
