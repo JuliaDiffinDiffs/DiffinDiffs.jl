@@ -1,5 +1,5 @@
 using DiffinDiffsBase: _f, _specnames, _tracenames,
-    _share, _sharedby
+    _sharedby
 
 testvoidstep(a::String, b::String) = println(a)
 const TestVoidStep = StatsStep{:TestVoidStep, typeof(testvoidstep), (:a, :b), ()}
@@ -63,38 +63,39 @@ const TestInvalidStep = StatsStep{:TestInvalidStep, typeof(testinvalidstep), (:a
 end
 
 struct TestProcedure{A,T} <: AbstractStatsProcedure{A,T} end
-const TP = TestProcedure{:RegProcedure,Tuple{TestVoidStep,TestRegStep,TestLastStep}}
-const tp = TP()
+const RP = TestProcedure{:RegProcedure,Tuple{TestVoidStep,TestRegStep,TestLastStep}}
+const rp = RP()
+const IP = TestProcedure{:InverseProcedure,Tuple{TestRegStep,TestVoidStep,TestLastStep}}
+const ip = IP()
 const UP = TestProcedure{:UnitProcedure,Tuple{TestRegStep}}
 const up = UP()
 const NP = TestProcedure{:NullProcedure,Tuple{}}
 const np = NP()
 
 @testset "AbstractStatsProcedure" begin
-    @test length(tp) == 3
+    @test length(rp) == 3
     @test eltype(AbstractStatsProcedure) == StatsStep
-    @test eltype(TP) == StatsStep
+    @test eltype(RP) == StatsStep
 
-    @test firstindex(tp) == 1
-    @test tp[begin] == TestVoidStep()
-    @test lastindex(tp) == 3
-    @test tp[end] == TestLastStep()
-    @test tp[1] == TestVoidStep()
-    @test tp[2:-1:1] == [TestRegStep(), TestVoidStep()]
-    @test tp[[2,3]] == [TestRegStep(), TestLastStep()]
-    @test_throws BoundsError tp[4]
+    @test firstindex(rp) == 1
+    @test lastindex(rp) == 3
+    @test rp[end] == TestLastStep()
+    @test rp[1] == TestVoidStep()
+    @test rp[2:-1:1] == [TestRegStep(), TestVoidStep()]
+    @test rp[[2,3]] == [TestRegStep(), TestLastStep()]
+    @test_throws BoundsError rp[4]
 
-    @test iterate(tp) == (TestVoidStep(), 2)
-    @test iterate(tp, 2) == (TestRegStep(), 3)
-    @test iterate(tp, 4) === nothing
+    @test iterate(rp) == (TestVoidStep(), 2)
+    @test iterate(rp, 2) == (TestRegStep(), 3)
+    @test iterate(rp, 4) === nothing
 
     @test length(np) == 0
     @test eltype(NP) == StatsStep
     @test_throws BoundsError np[1]
     @test iterate(np) === nothing
 
-    @test sprint(show, tp) == "RegProcedure"
-    @test sprint(show, MIME("text/plain"), tp) == """
+    @test sprint(show, rp) == "RegProcedure"
+    @test sprint(show, MIME("text/plain"), rp) == """
         RegProcedure (TestProcedure with 3 steps):
           TestVoidStep |> TestRegStep |> TestLastStep"""
 
@@ -109,12 +110,10 @@ const np = NP()
 end
 
 @testset "SharedStatsStep" begin
-    s1 = SharedStatsStep{TestRegStep,(1,)}(TestRegStep())
-    s2 = SharedStatsStep{TestRegStep,(2,3,)}(TestRegStep())
-    @test _share(TestRegStep(), 1) == s1
-    @test _share(TestRegStep(), [3,2]) == s2
+    s1 = SharedStatsStep(TestRegStep(), 1)
+    s2 = SharedStatsStep(TestRegStep(), [3,2])
     @test _sharedby(s1) == (1,)
-    @test _sharedby(s2) == (2,3,)
+    @test _sharedby(s2) == (2,3)
     @test _f(s1) == testregstep
     @test _specnames(s1) == (:a, :b)
     @test _tracenames(s1) == ()
@@ -128,49 +127,49 @@ end
 end
 
 @testset "PooledStatsProcedure" begin
-    ps = (tp,)
-    shared = (Vector{SharedStatsStep}(undef, 3),)
-    shared[1] .= _share.(collect(tp), 1)
-    p1 = pool(tp)
-    @test p1 == PooledStatsProcedure{typeof(ps), typeof(shared), 3}(ps, shared)
+    ps = (rp,)
+    shared = ((SharedStatsStep(s, 1) for s in rp)...,)
+    p1 = pool(rp)
+    @test p1 == PooledStatsProcedure{typeof(ps), typeof(shared)}(ps, shared)
     @test length(p1) == 3
     @test eltype(PooledStatsProcedure) == SharedStatsStep
+    @test firstindex(p1) == 1
+    @test lastindex(p1) == 3
+    @test p1[1] == SharedStatsStep(rp[1], 1)
+    @test p1[1:3] == ((SharedStatsStep(s, 1) for s in rp)...,)
+    @test iterate(p1) == (shared[1], 2)
+    @test iterate(p1, 2) == (shared[2], 3)
 
-    @test iterate(p1) == (shared[1][1], (shared[1][2:3],))
-    @test iterate(p1, deepcopy((shared[1][2:3],))) == (shared[1][2], (shared[1][[3]],))
-
-    ps = (tp, tp)
-    shared = (Vector{SharedStatsStep}(undef, 3), Vector{SharedStatsStep}(undef, 3))
-    shared[1] .= _share.(collect(tp), Ref((1,2)))
-    shared[2] .= _share.(collect(tp), Ref((1,2)))
-    p2 = pool(tp, tp)
-    @test p2 == PooledStatsProcedure{typeof(ps), typeof(shared), 3}(ps, shared)
+    ps = (rp, rp)
+    shared = ((SharedStatsStep(s, (1,2)) for s in rp)...,)
+    p2 = pool(rp, rp)
+    @test p2 == PooledStatsProcedure{typeof(ps), typeof(shared)}(ps, shared)
     @test length(p2) == 3
 
     ps = (up, up)
-    shared = (Vector{SharedStatsStep}(undef, 1), Vector{SharedStatsStep}(undef, 1))
-    shared[1] .= _share.(collect(up), Ref((1,2)))
-    shared[2] .= _share.(collect(up), Ref((1,2)))
+    shared = ((SharedStatsStep(s, (1,2)) for s in up)...,)
     p3 = pool(up, up)
-    @test p3 == PooledStatsProcedure{typeof(ps), typeof(shared), 1}(ps, shared)
+    @test p3 == PooledStatsProcedure{typeof(ps), typeof(shared)}(ps, shared)
     @test length(p3) == 1
 
     ps = (np,)
-    shared = (SharedStatsStep[],)
+    shared = ()
     p4 = pool(np)
-    @test p4 == PooledStatsProcedure{typeof(ps), typeof(shared), 0}(ps, shared)
+    @test p4 == PooledStatsProcedure{typeof(ps), typeof(shared)}(ps, shared)
     @test length(p4) == 0
 
-    ps = (up, tp)
-    shared = (Vector{SharedStatsStep}(undef, 1), Vector{SharedStatsStep}(undef, 3))
-    shared[1] .= [_share(up[1], (1,2))]
-    shared[2] .= [_share(tp[1], 2), _share(tp[2], (1,2)), _share(tp[3], 2)]
-    p5 = pool(up, tp)
-    @test p5 == PooledStatsProcedure{typeof(ps), typeof(shared), 3}(ps, shared)
+    ps = (up, rp)
+    shared = (SharedStatsStep(rp[1], 2), SharedStatsStep(rp[2], (1,2)), SharedStatsStep(rp[3], 2))
+    p5 = pool(up, rp)
+    @test p5 == PooledStatsProcedure{typeof(ps), typeof(shared)}(ps, shared)
     @test length(p5) == 3
 
-    @test iterate(p5) == (shared[2][1], (shared[1], shared[2][2:3]))
-    @test iterate(p5, deepcopy((shared[1], shared[2][2:3]))) == (shared[1][1], (SharedStatsStep[],shared[2][[3]]))
+    ps = (rp, ip)
+    shared = (SharedStatsStep(rp[1], 1), SharedStatsStep(ip[1], 2), SharedStatsStep(rp[2], 1),
+        SharedStatsStep(ip[2], 2), SharedStatsStep(rp[3], (1,2)))
+    p6 = pool(rp, ip)
+    @test p6 == PooledStatsProcedure{typeof(ps), typeof(shared)}(ps, shared)
+    @test length(p6) == 5
 
     @test sprint(show, p1) == "PooledStatsProcedure"
     @test sprint(show, MIME("text/plain"), p1) == """

@@ -26,10 +26,9 @@ a message with the name of the `StatsStep` is printed to `stdout`.
 """
 struct StatsStep{Alias,F<:Function,SpecNames,TraceNames} end
 
-_alias(step::StatsStep{A}) where A = A
-_f(step::StatsStep{A,F}) where {A,F} = F.instance
-_specnames(step::StatsStep{A,F,S}) where {A,F,S} = S
-_tracenames(step::StatsStep{A,F,S,T}) where {A,F,S,T} = T
+_f(::StatsStep{A,F}) where {A,F} = F.instance
+_specnames(::StatsStep{A,F,S}) where {A,F,S} = S
+_tracenames(::StatsStep{A,F,S,T}) where {A,F,S,T} = T
 
 function (step::StatsStep{A,F,S,T})(ntargs::NamedTuple; verbose::Bool=false) where {A,F,S,T}
     verbose || (haskey(ntargs, :verbose) && ntargs.verbose) &&
@@ -45,10 +44,10 @@ function (step::StatsStep{A,F,S,T})(ntargs::NamedTuple; verbose::Bool=false) whe
     end
 end
 
-show(io::IO, s::StatsStep{A}) where A = print(io, A)
+show(io::IO, ::StatsStep{A}) where A = print(io, A)
 
 function show(io::IO, ::MIME"text/plain", s::StatsStep{A,F,S,T}) where {A,F,S,T}
-    print(io, A, " (", typeof(s).name, " that calls ")
+    print(io, A, " (", typeof(s).name.name, " that calls ")
     fmod = F.name.mt.module
     fmod == Main ? print(io, F.name.mt.name) : print(io, fmod, ".", F.name.mt.name)
     println(io, "):")
@@ -71,26 +70,26 @@ all subtypes of `AbstractStatsProcedure`.
 """
 abstract type AbstractStatsProcedure{A,T<:NTuple{N,StatsStep} where N} end
 
-length(p::AbstractStatsProcedure{A,T}) where {A,T} = length(T.parameters)
+length(::AbstractStatsProcedure{A,T}) where {A,T} = length(T.parameters)
 eltype(::Type{<:AbstractStatsProcedure}) = StatsStep
-firstindex(p::AbstractStatsProcedure{A,T}) where {A,T} = firstindex(T.parameters)
-lastindex(p::AbstractStatsProcedure{A,T}) where {A,T} = lastindex(T.parameters)
+firstindex(::AbstractStatsProcedure{A,T}) where {A,T} = firstindex(T.parameters)
+lastindex(::AbstractStatsProcedure{A,T}) where {A,T} = lastindex(T.parameters)
 
 function getindex(p::AbstractStatsProcedure{A,T}, i) where {A,T}
     fs = T.parameters[i]
     return fs isa Type && fs <: StatsStep ? fs.instance : [f.instance for f in fs]
 end
 
-getindex(p::AbstractStatsProcedure{A,T}, i::Int) where {A,T} = T.parameters[i].instance
+getindex(::AbstractStatsProcedure{A,T}, i::Int) where {A,T} = T.parameters[i].instance
 
 iterate(p::AbstractStatsProcedure, state=1) =
     state > length(p) ? nothing : (p[state], state+1)
 
-show(io::IO, p::AbstractStatsProcedure{A}) where A = print(io, A)
+show(io::IO, ::AbstractStatsProcedure{A}) where A = print(io, A)
 
 function show(io::IO, ::MIME"text/plain", p::AbstractStatsProcedure{A,T}) where {A,T}
     nstep = length(p)
-    print(io, A, " (", typeof(p).name, " with ", nstep, " step")
+    print(io, A, " (", typeof(p).name.name, " with ", nstep, " step")
     if nstep > 0
         nstep > 1 ? print(io, "s):\n  ") : print(io, "):\n  ")
         for (i, step) in enumerate(p)
@@ -103,7 +102,7 @@ function show(io::IO, ::MIME"text/plain", p::AbstractStatsProcedure{A,T}) where 
 end
 
 """
-    SharedStatsStep{T<:StatsStep,PID}
+    SharedStatsStep{T<:StatsStep,I}
 
 A [`StatsStep`](@ref) that is possibly shared by
 multiple instances of procedures that are subtypes of [`AbstractStatsProcedure`](@ref).
@@ -111,52 +110,75 @@ See also [`PooledStatsProcedure`](@ref).
 
 # Parameters
 - `T<:StatsStep`: type of the only field `step`.
-- `PID`: indices of the procedures that share this step.
+- `I`: indices of the procedures that share this step.
 """
-struct SharedStatsStep{T<:StatsStep,PID}
+struct SharedStatsStep{T<:StatsStep,I}
     step::T
+    function SharedStatsStep(s::StatsStep, pid)
+        pid = (unique!(sort!([pid...]))...,)
+        return new{typeof(s), pid}(s)
+    end
 end
 
-==(x::SharedStatsStep{T,PID1}, y::SharedStatsStep{T,PID2}) where {T,PID1,PID2} =
-    x.step == y.step && Set(PID1) == Set(PID2)
-
-_share(s::T, pid) where {T<:StatsStep} = SharedStatsStep{T,(Int.(pid)...,)}(s)
-_sharedby(s::SharedStatsStep{T,PID}) where {T,PID} = PID
+_sharedby(::SharedStatsStep{T,I}) where {T,I} = I
 _f(s::SharedStatsStep) = _f(s.step)
 _specnames(s::SharedStatsStep) = _specnames(s.step)
 _tracenames(s::SharedStatsStep) = _tracenames(s.step)
 
 show(io::IO, s::SharedStatsStep) = print(io, s.step)
 
-function show(io::IO, ::MIME"text/plain", s::SharedStatsStep{T,PID}) where {T,PID}
-    nps = length(PID)
+function show(io::IO, ::MIME"text/plain", s::SharedStatsStep{T,I}) where {T,I}
+    nps = length(I)
     print(io, s.step, " (StatsStep shared by ", nps, " procedure")
     nps > 1 ? print(io, "s)") : print(io, ")")
 end
 
-const SharedStatsSteps = NTuple{N, Vector{SharedStatsStep}} where N
+const SharedStatsSteps = NTuple{N, SharedStatsStep} where N
 const StatsProcedures = NTuple{N, AbstractStatsProcedure} where N
 
 """
-    PooledStatsProcedure{P<:StatsProcedures,S<:SharedStatsSteps,N}
+    PooledStatsProcedure{P<:StatsProcedures,S<:SharedStatsSteps}
 
 A collection of procedures and shared steps.
 
-An instance of `PooledStatsProcedure` is iterable among the shared steps
+An instance of `PooledStatsProcedure` is indexed and iterable among the shared steps
 in a way that helps avoid repeating identical steps.
 See also [`pool`](@ref).
 
 # Fields
 - `procs::P`: a tuple of instances of subtypes of [`AbstractStatsProcedure`](@ref).
-- `steps::S`: a tuple of vectors [`SharedStatsStep`](@ref) for each procedure in `procs`.
+- `steps::S`: a tuple of [`SharedStatsStep`](@ref) for the procedures in `procs`.
 """
-struct PooledStatsProcedure{P<:StatsProcedures,S<:SharedStatsSteps,N}
+struct PooledStatsProcedure{P<:StatsProcedures,S<:SharedStatsSteps}
     procs::P
     steps::S
 end
 
-==(x::PooledStatsProcedure{P,S,N}, y::PooledStatsProcedure{P,S,N}) where {P,S,N} =
-    x.procs == y.procs && x.steps == y.steps
+function _sort(psteps::NTuple{N, Vector{SharedStatsStep}}) where N
+    sorted = SharedStatsStep[]
+    state = [length(s) for s in psteps]
+    pending = BitArray(state.>0)
+    while any(pending)
+        pid = (1:N)[pending]
+        firsts = [psteps[i][end-state[i]+1] for i in pid]
+        for i in 1:length(firsts)
+            nshared = length(_sharedby(firsts[i]))
+            if nshared == 1
+                push!(sorted, firsts[i])
+                state[pid[i]] -= 1
+            else
+                shared = BitArray(s==firsts[i] for s in firsts)
+                if sum(shared) == nshared
+                    push!(sorted, firsts[i])
+                    state[pid[shared]] .-= 1
+                    break
+                end
+            end
+        end
+        pending = BitArray(state.>0)
+    end
+    return sorted
+end
 
 """
     pool(ps::AbstractStatsProcedure...)
@@ -164,7 +186,7 @@ end
 Construct a [`PooledStatsProcedure`](@ref) by determining
 how each [`StatsStep`](@ref) is shared among several procedures in `ps`.
 
-It might not be safe to share the same [`StatsStep`](@ref) in different procedures
+It is unsafe to share the same [`StatsStep`](@ref) in different procedures
 due to the relative position of this step to the other common steps
 among these procedures.
 The fallback method implemented for a collection of [`AbstractStatsProcedure`](@ref)
@@ -174,79 +196,69 @@ are not compatible between a pair of procedures.
 function pool(ps::AbstractStatsProcedure...)
     ps = (ps...,)
     nps = length(ps)
-    shared = ((Vector{SharedStatsStep}(undef, length(p)) for p in ps)...,)
-    for (pid, p) in enumerate(ps)
-        shared[pid] .= _share.(collect(p), pid)
-    end
-    steps = union(collect(p) for p in ps)
+    steps = union(ps...)
     N = sum(length.(ps))
     if length(steps) < N
-        step_loc = Dict{StatsStep,Dict{Int64,Int64}}()
+        shared = ((Vector{SharedStatsStep}(undef, length(p)) for p in ps)...,)
+        step_pos = Dict{StatsStep,Dict{Int64,Int64}}()
         for (i, p) in enumerate(ps)
             for n in 1:length(p)
-                if haskey(step_loc, p[n])
-                    step_loc[p[n]][i] = n
+                if haskey(step_pos, p[n])
+                    step_pos[p[n]][i] = n
                 else
-                    step_loc[p[n]] = Dict(i=>n)
+                    step_pos[p[n]] = Dict(i=>n)
                 end
             end
         end
-        for (step, loc) in step_loc
-            if length(loc) == 1
-                continue
+        for (step, pos) in step_pos
+            if length(pos) == 1
+                kv = collect(pos)[1]
+                shared[kv[1]][kv[2]] = SharedStatsStep(step, kv[1])
             else
-                shared_pid = collect(keys(loc))
+                shared_pid = collect(keys(pos))
                 for c in combinations(shared_pid, 2)
                     csteps = intersect(ps[c[1]], ps[c[2]])
-                    rank1 = findfirst(x->x==step, sort!([step_loc[s][c[1]] for s in csteps]))
-                    rank2 = findfirst(x->x==step, sort!([step_loc[s][c[2]] for s in csteps]))
+                    pos1 = sort(csteps, by=x->step_pos[x][c[1]])
+                    pos2 = sort(csteps, by=x->step_pos[x][c[2]])
+                    rank1 = findfirst(x->x==step, pos1)
+                    rank2 = findfirst(x->x==step, pos2)
                     if rank1 != rank2
-                        setdiff(shared_pid, c)
+                        setdiff!(shared_pid, c)
+                        shared[c[1]][pos[c[1]]] = SharedStatsStep(step, c[1])
+                        shared[c[2]][pos[c[2]]] = SharedStatsStep(step, c[2])
                         length(shared_pid) <= 1 && break
                     end
                 end
-                if length(shared_pid) >= 2
+                if length(shared_pid) > 0
                     N = N - length(shared_pid) + 1
-                    for s in shared_pid
-                        shared[s][loc[s]] = _share(step, shared_pid)
+                    for p in shared_pid
+                        shared[p][pos[p]] = SharedStatsStep(step, shared_pid)
                     end
                 end
             end
         end
+        shared = (_sort(shared)...,)
+    else
+        shared = ((SharedStatsStep(s, i) for (i,p) in enumerate(ps) for s in p)...,)
     end
-    return PooledStatsProcedure{typeof(ps), typeof(shared), N}(ps, shared)
+    return PooledStatsProcedure{typeof(ps), typeof(shared)}(ps, shared)
 end
 
-length(ps::PooledStatsProcedure{P,S,N}) where {P,S,N} = N
+length(::PooledStatsProcedure{P,S}) where {P,S} = length(S.parameters)
 eltype(::Type{<:PooledStatsProcedure}) = SharedStatsStep
+firstindex(::PooledStatsProcedure{P,S}) where {P,S} = firstindex(S.parameters)
+lastindex(::PooledStatsProcedure{P,S}) where {P,S} = lastindex(S.parameters)
 
-function iterate(ps::PooledStatsProcedure, state=deepcopy(ps.steps))
-    state = state[BitArray(length.(state).>0)]
-    length(state) > 0 || return nothing
-    firsts = first.(state)
-    for i in 1:length(firsts)
-        nshared = length(_sharedby(firsts[i]))
-        if nshared == 1
-            deleteat!(state[i],1)
-            return (firsts[i], state)
-        else
-            shared = BitArray(s==firsts[i] for s in firsts)
-            if sum(shared) == nshared
-                for p in state[shared]
-                    deleteat!(p, 1)
-                end
-                return (firsts[i], state)
-            end
-        end
-    end
-    error("bad construction of $(typeof(ps))")
-end
+getindex(ps::PooledStatsProcedure, i) = getindex(ps.steps, i)
 
-show(io::IO, ps::PooledStatsProcedure) = print(io, typeof(ps).name)
+iterate(ps::PooledStatsProcedure, state=1) = iterate(ps.steps, state)
 
-function show(io::IO, ::MIME"text/plain", ps::PooledStatsProcedure{P,S,N}) where {P,S,N}
-    print(io, typeof(ps).name, " with ", N, " step")
-    N > 1 ? print(io, "s ") : print(io, " ")
+show(io::IO, ps::PooledStatsProcedure) = print(io, typeof(ps).name.name)
+
+function show(io::IO, ::MIME"text/plain", ps::PooledStatsProcedure{P,S}) where {P,S}
+    nstep = length(S.parameters)
+    print(io, typeof(ps).name.name, " with ", nstep, " step")
+    nstep > 1 ? print(io, "s ") : print(io, " ")
     nps = length(P.parameters)
     print(io, "from ", nps, " procedure")
     nps > 1 ? print(io, "s:") : print(io, ":")
@@ -308,8 +320,6 @@ while ignoring the orders.
 ≊(x::StatsSpec{A1,T}, y::StatsSpec{A2,T}) where {A1,A2,T} =
     x.args ≊ y.args
 
-_procedure(sp::StatsSpec{A,T}) where {A,T} = T
-
 function (sp::StatsSpec{A,T})(;
         verbose::Bool=false, keep=nothing, keepall::Bool=false) where {A,T}
     args = verbose ? merge(sp.args, (verbose=true,)) : sp.args
@@ -333,12 +343,12 @@ function (sp::StatsSpec{A,T})(;
     end
 end
 
-show(io::IO, sp::StatsSpec{A,T}) where {A,T} = print(io, A==Symbol("") ? "unnamed" : A)
+show(io::IO, ::StatsSpec{A}) where {A} = print(io, A==Symbol("") ? "unnamed" : A)
 
-_show_args(io::IO, sp::StatsSpec) = nothing
+_show_args(::IO, ::StatsSpec) = nothing
 
 function show(io::IO, ::MIME"text/plain", sp::StatsSpec{A,T}) where {A,T}
-    print(io, A==Symbol("") ? "unnamed" : A, " (", typeof(sp).name,
+    print(io, A==Symbol("") ? "unnamed" : A, " (", typeof(sp).name.name,
         " for ", T.parameters[1], ")")
     _show_args(io, sp)
 end
