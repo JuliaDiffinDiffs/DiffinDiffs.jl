@@ -1,17 +1,18 @@
 """
-    StatsStep{F<:Function,SpecNames,TraceNames}
+    StatsStep{Alias,F<:Function,SpecNames,TraceNames}
 
 Specify the function and arguments for moving a step
 in an [`AbstractStatsProcedure`](@ref).
 An instance of `StatsStep` is callable.
 
 # Parameters
+- `Alias::Symbol`: alias of the type for pretty-printing.
 - `F<:Function`: type of the function to be called by `StatsStep`.
 - `SpecNames::NTuple{N,Symbol}`: keys for arguments from [`StatsSpec`](@ref).
 - `TraceNames::NTuple{N,Symbol}`: keys for arguments from objects returned by a previous `StatsStep`.
 
 # Methods
-    (step::StatsStep{F,S,T})(ntargs::NamedTuple; verbose::Bool=false) where {F,S,T}
+    (step::StatsStep{A,F,S,T})(ntargs::NamedTuple; verbose::Bool=false) where {A,F,S,T}
 
 Call an instance of function of type `F` with arguments from `ntargs`
 formed by accessing the keys in `S` and `T` sequentially.
@@ -23,13 +24,14 @@ a message with the name of the `StatsStep` is printed to `stdout`.
 ## Returns
 - `NamedTuple`: named intermidiate results.
 """
-struct StatsStep{F<:Function,SpecNames,TraceNames} end
+struct StatsStep{Alias,F<:Function,SpecNames,TraceNames} end
 
-_f(step::StatsStep{F}) where {F} = F.instance
-_specnames(step::StatsStep{F,S}) where {F,S} = S
-_tracenames(step::StatsStep{F,S,T}) where {F,S,T} = T
+_alias(step::StatsStep{A}) where A = A
+_f(step::StatsStep{A,F}) where {A,F} = F.instance
+_specnames(step::StatsStep{A,F,S}) where {A,F,S} = S
+_tracenames(step::StatsStep{A,F,S,T}) where {A,F,S,T} = T
 
-function (step::StatsStep{F,S,T})(ntargs::NamedTuple; verbose::Bool=false) where {F,S,T}
+function (step::StatsStep{A,F,S,T})(ntargs::NamedTuple; verbose::Bool=false) where {A,F,S,T}
     verbose || (haskey(ntargs, :verbose) && ntargs.verbose) &&
         println("  Running ", step)
     args = NamedTuple{(S...,T...)}(ntargs)
@@ -43,47 +45,62 @@ function (step::StatsStep{F,S,T})(ntargs::NamedTuple; verbose::Bool=false) where
     end
 end
 
-macro show_StatsStep(step, name)
-    return esc(quote
-        function Base.show(io::IO, s::$step)
-            if get(io, :compact, false)
-                print(io, $name)
-            else
-                println(io, "StatsStep: ", $name)
-                println(io, "  arguments from StatsSpec: ", $step.parameters[2])
-                print(io, "  arguments from trace: ")
-                $step.parameters[3] == () ? print(io, "()") : print(io, $step.parameters[3])
-            end
-        end
-    end)
+show(io::IO, s::StatsStep{A}) where A = print(io, A)
+
+function show(io::IO, ::MIME"text/plain", s::StatsStep{A,F,S,T}) where {A,F,S,T}
+    print(io, A, " (", typeof(s).name, " that calls ")
+    fmod = F.name.mt.module
+    fmod == Main ? print(io, F.name.mt.name) : print(io, fmod, ".", F.name.mt.name)
+    println(io, "):")
+    println(io, "  arguments from StatsSpec: ", S)
+    print(io, "  arguments from trace: ")
+    T==() ? print(io, "()") : print(io, T)
 end
 
 """
-    AbstractStatsProcedure{T<:NTuple{N,StatsStep} where N}
+    AbstractStatsProcedure{Alias,T<:NTuple{N,StatsStep} where N}
 
 Supertype for all types specifying the procedure for statistical estimation or inference.
 
-The procedure is determined by the parameter `T`,
-which is a tuple of [`StatsStep`](@ref).
 Fallback methods for indexing and iteration are defined for
 all subtypes of `AbstractStatsProcedure`.
+
+# Parameters
+- `Alias::Symbol`: alias of the type for pretty-printing.
+- `T<:NTuple{N,StatsStep}`: steps involved in the procedure.
 """
-abstract type AbstractStatsProcedure{T<:NTuple{N,StatsStep} where N} end
+abstract type AbstractStatsProcedure{A,T<:NTuple{N,StatsStep} where N} end
 
-length(p::AbstractStatsProcedure{T}) where T = length(T.parameters)
+length(p::AbstractStatsProcedure{A,T}) where {A,T} = length(T.parameters)
 eltype(::Type{<:AbstractStatsProcedure}) = StatsStep
-firstindex(p::AbstractStatsProcedure{T}) where T = firstindex(T.parameters)
-lastindex(p::AbstractStatsProcedure{T}) where T = lastindex(T.parameters)
+firstindex(p::AbstractStatsProcedure{A,T}) where {A,T} = firstindex(T.parameters)
+lastindex(p::AbstractStatsProcedure{A,T}) where {A,T} = lastindex(T.parameters)
 
-function getindex(p::AbstractStatsProcedure{T}, i) where T
+function getindex(p::AbstractStatsProcedure{A,T}, i) where {A,T}
     fs = T.parameters[i]
     return fs isa Type && fs <: StatsStep ? fs.instance : [f.instance for f in fs]
 end
 
-getindex(p::AbstractStatsProcedure{T}, i::Int) where T = T.parameters[i].instance
+getindex(p::AbstractStatsProcedure{A,T}, i::Int) where {A,T} = T.parameters[i].instance
 
 iterate(p::AbstractStatsProcedure, state=1) =
     state > length(p) ? nothing : (p[state], state+1)
+
+show(io::IO, p::AbstractStatsProcedure{A}) where A = print(io, A)
+
+function show(io::IO, ::MIME"text/plain", p::AbstractStatsProcedure{A,T}) where {A,T}
+    nstep = length(p)
+    print(io, A, " (", typeof(p).name, " with ", nstep, " step")
+    if nstep > 0
+        nstep > 1 ? print(io, "s):\n  ") : print(io, "):\n  ")
+        for (i, step) in enumerate(p)
+            print(io, step)
+            i < nstep && print(io, " |> ")
+        end
+    else
+        print(io, ")")
+    end
+end
 
 """
     SharedStatsStep{T<:StatsStep,PID}
@@ -100,18 +117,6 @@ struct SharedStatsStep{T<:StatsStep,PID}
     step::T
 end
 
-#show(io::IO, step::SharedStatsStep) = show(io, step.step)
-
-function show(io::IO, step::SharedStatsStep{T,PID}) where {T,PID}
-    if get(io, :compact, false)
-        show(io, step.step)
-    else
-        print(io, "Shared")
-        show(io, step.step)
-        print(io, "\n  shared by ", length(PID), " procedures")
-    end
-end
-
 ==(x::SharedStatsStep{T,PID1}, y::SharedStatsStep{T,PID2}) where {T,PID1,PID2} =
     x.step == y.step && Set(PID1) == Set(PID2)
 
@@ -120,6 +125,14 @@ _sharedby(s::SharedStatsStep{T,PID}) where {T,PID} = PID
 _f(s::SharedStatsStep) = _f(s.step)
 _specnames(s::SharedStatsStep) = _specnames(s.step)
 _tracenames(s::SharedStatsStep) = _tracenames(s.step)
+
+show(io::IO, s::SharedStatsStep) = print(io, s.step)
+
+function show(io::IO, ::MIME"text/plain", s::SharedStatsStep{T,PID}) where {T,PID}
+    nps = length(PID)
+    print(io, s.step, " (StatsStep shared by ", nps, " procedure")
+    nps > 1 ? print(io, "s)") : print(io, ")")
+end
 
 const SharedStatsSteps = NTuple{N, Vector{SharedStatsStep}} where N
 const StatsProcedures = NTuple{N, AbstractStatsProcedure} where N
@@ -211,15 +224,15 @@ function iterate(ps::PooledStatsProcedure, state=deepcopy(ps.steps))
     state = state[BitArray(length.(state).>0)]
     length(state) > 0 || return nothing
     firsts = first.(state)
-    for i in length(firsts)
+    for i in 1:length(firsts)
         nshared = length(_sharedby(firsts[i]))
         if nshared == 1
             deleteat!(state[i],1)
             return (firsts[i], state)
         else
-            shared = firsts.==firsts[i]
+            shared = BitArray(s==firsts[i] for s in firsts)
             if sum(shared) == nshared
-                for p in state[BitArray(shared)]
+                for p in state[shared]
                     deleteat!(p, 1)
                 end
                 return (firsts[i], state)
@@ -229,19 +242,33 @@ function iterate(ps::PooledStatsProcedure, state=deepcopy(ps.steps))
     error("bad construction of $(typeof(ps))")
 end
 
+show(io::IO, ps::PooledStatsProcedure) = print(io, typeof(ps).name)
+
+function show(io::IO, ::MIME"text/plain", ps::PooledStatsProcedure{P,S,N}) where {P,S,N}
+    print(io, typeof(ps).name, " with ", N, " step")
+    N > 1 ? print(io, "s ") : print(io, " ")
+    nps = length(P.parameters)
+    print(io, "from ", nps, " procedure")
+    nps > 1 ? print(io, "s:") : print(io, ":")
+    for p in P.parameters
+        print(io, "\n  ", p.parameters[1])
+    end
+end
+
 """
-    StatsSpec{T<:AbstractStatsProcedure}
+    StatsSpec{Alias,T<:AbstractStatsProcedure}
 
 Record the specification for a statistical procedure of type `T`.
+
 An instance of `StatsSpec` is callable and
 its fields provide all information necessary for conducting the procedure.
+An optional name for the specification can be attached as parameter `Alias`.
 
 # Fields
-- `name::String`: an optional name for the specification.
-- `args::NamedTuple`: arguments for the [`StatsStep`](@ref) in `T`.
+- `args::NamedTuple`: arguments for the [`StatsStep`](@ref)s in `T`.
 
 # Methods
-    (sp::StatsSpec{T})(; verbose::Bool=false, keep=nothing, keepall::Bool=false)
+    (sp::StatsSpec{A,T})(; verbose::Bool=false, keep=nothing, keepall::Bool=false)
 
 Execute the procedure of type `T` with the arguments specified in `args`.
 By default, only an object with a key `result` assigned by a [`StatsStep`](@ref)
@@ -252,40 +279,39 @@ or the last value returned by the last [`StatsStep`](@ref) is returned.
 - `keep=nothing`: names (of type `Symbol`) of additional objects to be returned.
 - `keepall::Bool=false`: return all objects returned by each step.
 """
-struct StatsSpec{T<:AbstractStatsProcedure}
-    name::String
+struct StatsSpec{Alias,T<:AbstractStatsProcedure}
     args::NamedTuple
+    StatsSpec(name::Union{Symbol,String},
+        T::Type{<:AbstractStatsProcedure}, args::NamedTuple) =
+            new{Symbol(name),T}(args)
 end
 
-StatsSpec(T::Type{<:AbstractStatsProcedure}, name::String, args::NamedTuple) =
-    StatsSpec{T}(name, args)
-
 """
-    ==(x::StatsSpec{T}, y::StatsSpec{T})
+    ==(x::StatsSpec{A1,T}, y::StatsSpec{A2,T})
 
 Test whether two instances of [`StatsSpec`](@ref)
 with the same parameter `T` also have the same field `args`.
 
 See also [`≊`](@ref).
 """
-==(x::StatsSpec{T}, y::StatsSpec{T}) where T =
+==(x::StatsSpec{A1,T}, y::StatsSpec{A2,T}) where {A1,A2,T} =
     x.args == y.args
 
 """
-    ≊(x::StatsSpec{T}, y::StatsSpec{T})
+    ≊(x::StatsSpec{A1,T}, y::StatsSpec{A2,T})
 
 Test whether two instances of [`StatsSpec`](@ref)
 with the same parameter `T` also have the field `args`
 containing the same sets of key-value pairs
 while ignoring the orders.
 """
-≊(x::StatsSpec{T}, y::StatsSpec{T}) where T =
+≊(x::StatsSpec{A1,T}, y::StatsSpec{A2,T}) where {A1,A2,T} =
     x.args ≊ y.args
 
-_isnamed(sp::StatsSpec) = sp.name != ""
-_procedure(sp::StatsSpec{T}) where T = T
+_procedure(sp::StatsSpec{A,T}) where {A,T} = T
 
-function (sp::StatsSpec{T})(; verbose::Bool=false, keep=nothing, keepall::Bool=false) where T
+function (sp::StatsSpec{A,T})(;
+        verbose::Bool=false, keep=nothing, keepall::Bool=false) where {A,T}
     args = verbose ? merge(sp.args, (verbose=true,)) : sp.args
     ntall = foldl(|>, T(), init=sp.args)
     if keepall
@@ -305,6 +331,16 @@ function (sp::StatsSpec{T})(; verbose::Bool=false, keep=nothing, keepall::Bool=f
     else
         return nothing
     end
+end
+
+show(io::IO, sp::StatsSpec{A,T}) where {A,T} = print(io, A==Symbol("") ? "unnamed" : A)
+
+_show_args(io::IO, sp::StatsSpec) = nothing
+
+function show(io::IO, ::MIME"text/plain", sp::StatsSpec{A,T}) where {A,T}
+    print(io, A==Symbol("") ? "unnamed" : A, " (", typeof(sp).name,
+        " for ", T.parameters[1], ")")
+    _show_args(io, sp)
 end
 
 function run_specset(sps::AbstractVector{<:StatsSpec};
@@ -356,7 +392,7 @@ function parse_specset_options(args)
 end
 
 function spec_walker(x, parsers, formatters)
-    @capture(x, StatsSpec(formatter_(parser_(rawargs__))))(;o__) || return x
+    @capture(x, StatsSpec(formatter_(parser_(rawargs__)))(;o__)) || return x
     push!(parsers, parser)
     push!(formatters, formatter)
     length(o) > 0 &&

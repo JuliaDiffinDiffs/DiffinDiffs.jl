@@ -106,14 +106,13 @@ struct NeverTreatedParallel{T<:Integer,C,S} <: TrendParallel{C,S}
             new{T,C,S}(unique!(sort!(e)), c, s)
 end
 
-function show(io::IO, pr::NeverTreatedParallel)
-    if get(io, :compact, false)
-        print(io, "NeverTreated{", pr.c, ",", pr.s, "}(", pr.e,")")
-    else
-        println(io, pr.s, " trends with any never-treated group:")
-        print(io, "  Never-treated groups: ", pr.e)
-        pr.c isa Unconditional || print(io, "\n  ", pr.c)
-    end
+show(io::IO, pr::NeverTreatedParallel) =
+    print(IOContext(io, :compact=>true), "NeverTreated{", pr.c, ",", pr.s, "}(", pr.e,")")
+
+function show(io::IO, ::MIME"text/plain", pr::NeverTreatedParallel)
+    println(io, pr.s, " trends with any never-treated group:")
+    print(io, "  Never-treated groups: ", pr.e)
+    pr.c isa Unconditional || print(io, "\n  ", pr.c)
 end
 
 """
@@ -187,15 +186,15 @@ struct NotYetTreatedParallel{T<:Integer,C,S} <: TrendParallel{C,S}
 end
 
 function show(io::IO, pr::NotYetTreatedParallel)
-    if get(io, :compact, false)
-        print(io, "NotYetTreated{", pr.c, ",", pr.s, "}(", pr.e, ", ")
-        print(io, pr.emin isa Nothing ? "NA" : pr.emin, ")")
-    else
-        println(io, pr.s, " trends with any not-yet-treated group:")
-        println(io, "  Not-yet-treated groups: ", pr.e)
-        print(io, "  Treated since: ", pr.emin isa Nothing ? "not specified" : pr.emin)
-        pr.c isa Unconditional || print(io, "\n  ", pr.c)
-    end
+    print(IOContext(io, :compact=>true), "NotYetTreated{", pr.c, ",", pr.s, "}(", pr.e, ", ")
+    print(IOContext(io, :compact=>true), pr.emin isa Nothing ? "NA" : pr.emin, ")")
+end
+
+function show(io::IO, ::MIME"text/plain", pr::NotYetTreatedParallel)
+    println(io, pr.s, " trends with any not-yet-treated group:")
+    println(io, "  Not-yet-treated groups: ", pr.e)
+    print(io, "  Treated since: ", pr.emin isa Nothing ? "not specified" : pr.emin)
+    pr.c isa Unconditional || print(io, "\n  ", pr.c)
 end
 
 """

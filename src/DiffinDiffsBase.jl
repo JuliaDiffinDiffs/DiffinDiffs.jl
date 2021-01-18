@@ -26,7 +26,6 @@ export @fieldequal,
        @unpack,
        ≊,
        exampledata,
-       sprintcompact,
 
        EleOrVec,
        TreatmentSharpness,
@@ -57,7 +56,6 @@ export @fieldequal,
        parse_treat,
 
        StatsStep,
-       @show_StatsStep,
        AbstractStatsProcedure,
        SharedStatsStep,
        PooledStatsProcedure,
@@ -65,7 +63,6 @@ export @fieldequal,
        StatsSpec,
        @specset,
 
-       check_data,
        CheckData,
 
        DiffinDiffsEstimator,

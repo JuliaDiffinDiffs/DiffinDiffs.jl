@@ -141,5 +141,3 @@ function exampledata(name::Union{Symbol,String})
         throw(ArgumentError("example dataset $(name) is not found"))
     return File((@__DIR__)*"/../data/$(name).csv")
 end
-
-sprintcompact(x) = sprint(show, x; context=:compact=>true)

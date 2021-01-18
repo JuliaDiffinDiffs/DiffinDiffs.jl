@@ -7,7 +7,7 @@ function valid_didargs(d::Type{TestDID}, ::AbstractTreatment, ::AbstractParallel
         ntargs::NamedTuple)
     name = haskey(ntargs, :name) ? ntargs.name : ""
     ntargs = NamedTuple{(setdiff([keys(ntargs)...], [:name, :d])...,)}(ntargs)
-    return d, name, ntargs
+    return name, d, ntargs
 end
 
 @testset "DiffinDiffsEstimator" begin
@@ -68,54 +68,54 @@ end
 
 @testset "StatsSpec" begin
     @testset "== ≊" begin
-        sp1 = StatsSpec(DefaultDID, "", NamedTuple())
-        sp2 = StatsSpec(DefaultDID, "name", NamedTuple())
+        sp1 = StatsSpec("", DefaultDID, NamedTuple())
+        sp2 = StatsSpec("", DefaultDID, NamedTuple())
         @test sp1 == sp2
         @test sp1 ≊ sp2
 
-        sp1 = StatsSpec(DefaultDID, "", (tr=TR, pr=PR, a=1, b=2))
-        sp2 = StatsSpec(DefaultDID, "", (pr=PR, tr=TR, b=2, a=1))
+        sp1 = StatsSpec("", DefaultDID, (tr=TR, pr=PR, a=1, b=2))
+        sp2 = StatsSpec("", DefaultDID, (pr=PR, tr=TR, b=2, a=1))
         @test sp1 != sp2
         @test sp1 ≊ sp2
 
-        sp2 = StatsSpec(DefaultDID, "", (tr=TR, pr=PR, a=1.0, b=2.0))
+        sp2 = StatsSpec("", DefaultDID, (tr=TR, pr=PR, a=1.0, b=2.0))
         @test sp1 == sp2
         @test sp1 ≊ sp2
 
-        sp2 = StatsSpec(DefaultDID, "", (tr=TR, pr=PR, a=1, b=2, c=3))
+        sp2 = StatsSpec("", DefaultDID, (tr=TR, pr=PR, a=1, b=2, c=3))
         @test !(sp1 ≊ sp2)
 
-        sp2 = StatsSpec(DefaultDID, "", (tr=TR, pr=PR, a=1, b=1))
+        sp2 = StatsSpec("", DefaultDID, (tr=TR, pr=PR, a=1, b=1))
         @test !(sp1 ≊ sp2)
     end
 
     @testset "show" begin
-        sp = StatsSpec(DefaultDID, "", NamedTuple())
-        @test sprint(show, sp) == "StatsSpec{DefaultDID}"
-        @test sprintcompact(sp) == "StatsSpec{DefaultDID}"
+        sp = StatsSpec("", DefaultDID, NamedTuple())
+        @test sprint(show, sp) == "unnamed"
+        @test sprint(show, MIME("text/plain"), sp) == "unnamed (StatsSpec for DefaultDID)"
 
-        sp = StatsSpec(DefaultDID, "name", NamedTuple())
-        @test sprint(show, sp) == "StatsSpec{DefaultDID}: name"
-        @test sprintcompact(sp) == "StatsSpec{DefaultDID}: name"
-        
-        sp = StatsSpec(TestDID, "", (tr=dynamic(:time,-1), pr=nevertreated(-1)))
-        @test sprint(show, sp) == """
-            StatsSpec{TestDID}:
+        sp = StatsSpec("name", DefaultDID, NamedTuple())
+        @test sprint(show, sp) == "name"
+        @test sprint(show, MIME("text/plain"), sp) == "name (StatsSpec for DefaultDID)"
+
+        sp = StatsSpec("", TestDID, (tr=dynamic(:time,-1), pr=nevertreated(-1)))
+        @test sprint(show, sp) == "unnamed"
+        @test sprint(show, MIME("text/plain"), sp) == """
+            unnamed (StatsSpec for TestDID):
               Dynamic{S}(-1)
               NeverTreated{U,P}([-1])"""
-        @test sprintcompact(sp) == "StatsSpec{TestDID}"
-        
-        sp = StatsSpec(TestDID, "", (tr=dynamic(:time,-1),))
-        @test sprint(show, sp) == """
-            StatsSpec{TestDID}:
+
+        sp = StatsSpec("", TestDID, (tr=dynamic(:time,-1),))
+        @test sprint(show, sp) == "unnamed"
+        @test sprint(show, MIME("text/plain"), sp) == """
+            unnamed (StatsSpec for TestDID):
               Dynamic{S}(-1)"""
-        @test sprintcompact(sp) == "StatsSpec{TestDID}"
         
-        sp = StatsSpec(TestDID, "name", (pr=nevertreated(-1),))
-        @test sprint(show, sp) == """
-            StatsSpec{TestDID}: name
+        sp = StatsSpec("name", TestDID, (pr=nevertreated(-1),))
+        @test sprint(show, sp) == "name"
+        @test sprint(show, MIME("text/plain"), sp) == """
+            name (StatsSpec for TestDID):
               NeverTreated{U,P}([-1])"""
-        @test sprintcompact(sp) == "StatsSpec{TestDID}: name"
     end
 end
 
@@ -123,23 +123,23 @@ end
     @test_throws ArgumentError @didspec
     @test_throws ArgumentError didspec()
 
-    sp0 = StatsSpec(TestDID, "", (tr=TR, pr=PR, a=1, b=2))
+    sp0 = StatsSpec("", TestDID, (tr=TR, pr=PR, a=1, b=2))
     sp1 = didspec(TestDID, TR, PR, a=1, b=2)
     @test sp1 ≊ sp0
     @test sp0 ≊ @didspec TR a=1 b=2 PR TestDID
 
-    sp2 = StatsSpec(TestDID, "name", (tr=TR, pr=PR, a=1, b=2))
+    sp2 = StatsSpec("name", TestDID, (tr=TR, pr=PR, a=1, b=2))
     sp3 = didspec("name", TR, PR, TestDID, b=2, a=1)
     @test sp2 ≊ sp1
     @test sp3 ≊ sp2
     @test sp3 ≊ @didspec TR PR TestDID "name" b=2 a=1
 
-    sp4 = StatsSpec(TestDID, "name", (tr=TR, pr=PR, treatname=:g))
+    sp4 = StatsSpec("name", TestDID, (tr=TR, pr=PR, treatname=:g))
     sp5 = didspec(TestDID, testterm)
     @test sp5 ≊ sp4
     @test sp4 ≊ @didspec TestDID testterm "name"
 
-    sp6 = StatsSpec(TestDID, "", (tr=TR, pr=PR, 
+    sp6 = StatsSpec("", TestDID, (tr=TR, pr=PR, 
         yterm=term(:y), treatname=:g, treatintterms=(term(:z),), xterms=(term(:x),)))
     sp7 = didspec(TestDID, term(:y) ~ testterm & term(:z) + term(:x))
     sp8 = didspec(TestDID, @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) & z + x))

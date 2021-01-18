@@ -1,7 +1,4 @@
 
-
-
-
 function check_data(data, tr::AbstractTreatment, pr::AbstractParallel,
     yterm::AbstractTerm, treatname::Symbol, xterms::TupleTerm,
     weights::Union{Symbol, Nothing}, subset::Union{AbstractVector, Nothing})
@@ -28,29 +25,7 @@ function check_data(data, tr::AbstractTreatment, pr::AbstractParallel,
     return (vars=vars, esample=esample,)
 end
 
-const CheckData = StatsStep{typeof(check_data), (:data, :tr, :pr, :yterm, :treatname, :xterms, :weights, :subset), ()}
+const CheckData = StatsStep{:CheckData, typeof(check_data), (:data, :tr, :pr, :yterm, :treatname, :xterms, :weights, :subset), ()}
 
-@show_StatsStep CheckData "CheckData"
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#=
-function (step::StatsStep)(sp::StatsSpec, trace::SPTrace)
-    f = step.parameters[1].instance
-    args1 = (sp.args[n] for n in step.parameters[2])
-    args2 = (trace)
-end
-=#
 
 

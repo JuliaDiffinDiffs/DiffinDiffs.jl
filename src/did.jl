@@ -1,18 +1,16 @@
 """
-    DiffinDiffsEstimator{T} <: AbstractStatsProcedure{T}
+    DiffinDiffsEstimator{A,T} <: AbstractStatsProcedure{A,T}
 
 Specify the estimation procedure for difference-in-differences.
 """
-struct DiffinDiffsEstimator{T} <: AbstractStatsProcedure{T} end
+struct DiffinDiffsEstimator{A,T} <: AbstractStatsProcedure{A,T} end
 
 """
     DefaultDID <: DiffinDiffsEstimator
 
 Default difference-in-differences estimator selected based on the context.
 """
-const DefaultDID = DiffinDiffsEstimator{Tuple{}}
-
-show(io::IO, d::Type{DefaultDID}) = print(io, "DefaultDID")
+const DefaultDID = DiffinDiffsEstimator{:DefaultDID, Tuple{}}
 
 _argpair(arg::Type{<:DiffinDiffsEstimator}) = :d => arg
 _argpair(arg::AbstractString) = :name => String(arg)
@@ -100,16 +98,12 @@ macro didspec(exprs...)
     return esc(:(didspec($(args...); $(kwargs...))))
 end
 
-function show(io::IO, sp::StatsSpec{T}) where {T<:DiffinDiffsEstimator}
-    print(io, "StatsSpec{", sprintcompact(T), "}")
-    _isnamed(sp) && print(io, ": ", sp.name)
-    if get(io, :compact, false) || !haskey(sp.args, :tr) && !haskey(sp.args, :pr)
-        return
-    elseif !_isnamed(sp)
-        print(io, ":")    
+function _show_args(io::IO, sp::StatsSpec{A,<:DiffinDiffsEstimator}) where A
+    if haskey(sp.args, :tr) || haskey(sp.args, :pr)
+        print(io, ":")
+        haskey(sp.args, :tr) && print(io, "\n  ", sp.args[:tr])
+        haskey(sp.args, :pr) && print(io, "\n  ", sp.args[:pr])
     end
-    haskey(sp.args, :tr) && print(io, "\n  ", sprintcompact(sp.args[:tr]))
-    haskey(sp.args, :pr) && print(io, "\n  ", sprintcompact(sp.args[:pr]))
 end
 
 function did(args...; verbose::Bool=false, keep=nothing, keepall::Bool=false, kwargs...)

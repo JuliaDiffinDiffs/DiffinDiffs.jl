@@ -66,14 +66,13 @@ struct DynamicTreatment{E<:EleOrVec{<:Integer},S<:TreatmentSharpness} <: Abstrac
     end
 end
 
-function show(io::IO, tr::DynamicTreatment)
-    if get(io, :compact, false)
-        print(io, "Dynamic{", tr.s, "}(", tr.exc, ")")
-    else
-        println(io, tr.s, " dynamic treatment:")
-        println(io, "  column name of time variable: ", tr.time)
-        print(io, "  excluded relative time: ", tr.exc)
-    end
+show(io::IO, tr::DynamicTreatment) =
+    print(IOContext(io, :compact=>true), "Dynamic{", tr.s, "}(", tr.exc, ")")
+
+function show(io::IO, ::MIME"text/plain", tr::DynamicTreatment)
+    println(io, tr.s, " dynamic treatment:")
+    println(io, "  column name of time variable: ", tr.time)
+    print(io, "  excluded relative time: ", tr.exc)
 end
 
 """
