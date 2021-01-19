@@ -243,6 +243,13 @@ A wrapper method of `notyettreated` for working with `@formula`.
 """
 @unpack notyettreated
 
-termvars(c::ParallelCondition) = Symbol[]
-termvars(s::ParallelStrength) = Symbol[]
-termvars(pr::AbstractParallel) = union(termvars(pr.c), termvars(pr.s))
+termvars(c::ParallelCondition) =
+    error("StatsModels.termvars is not defined for $(typeof(c))")
+termvars(::Unconditional) = Symbol[]
+termvars(s::ParallelStrength) =
+    error("StatsModels.termvars is not defined for $(typeof(s))")
+termvars(::Exact) = Symbol[]
+termvars(pr::AbstractParallel) =
+    error("StatsModels.termvars is not defined for $(typeof(pr))")
+termvars(pr::NeverTreatedParallel) = union(termvars(pr.c), termvars(pr.s))
+termvars(pr::NotYetTreatedParallel) = union(termvars(pr.c), termvars(pr.s))

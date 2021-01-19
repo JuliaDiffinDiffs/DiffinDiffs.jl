@@ -4,6 +4,10 @@ import Base: show
 
 sprintcompact(x) = sprint(show, x; context=:compact=>true)
 
+struct TestSharpness <: TreatmentSharpness end
+struct TestParaCondition <: ParallelCondition end
+struct TestParaStrength <: ParallelStrength end
+
 struct TestTreatment <: AbstractTreatment
     time::Symbol
     ref::Int

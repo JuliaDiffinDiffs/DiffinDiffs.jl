@@ -41,7 +41,7 @@ abstract type AbstractTreatment end
 @fieldequal AbstractTreatment
 
 """
-    DynamicTreatment{E<:EleOrVec{<:Integer},S<:TreatmentSharpness} <: AbstractTreatment
+    DynamicTreatment{E<:EleOrVec{<:Integer}, S<:TreatmentSharpness} <: AbstractTreatment
 
 Specify an absorbing binary treatment with effects allowed to evolve over time.
 See also [`dynamic`](@ref).
@@ -51,18 +51,14 @@ See also [`dynamic`](@ref).
 - `exc::E`: excluded relative time (either an integer or vector of integers).
 - `s::S`: a [`TreatmentSharpness`](@ref).
 """
-struct DynamicTreatment{E<:EleOrVec{<:Integer},S<:TreatmentSharpness} <: AbstractTreatment
+struct DynamicTreatment{E<:EleOrVec{<:Integer}, S<:TreatmentSharpness} <: AbstractTreatment
     time::Symbol
     exc::E
     s::S
-    function DynamicTreatment(time::Symbol, exc::E, s::S) where
-        {E<:EleOrVec{<:Integer},S<:TreatmentSharpness}
-        if length(exc) > 1
-            exc = sort!(exc)
-        elseif E <: Vector
-            exc = exc[1]
-        end
-        return new{typeof(exc),S}(time, exc, s)
+    function DynamicTreatment(time::Symbol, exc, s::TreatmentSharpness)
+        exc = unique!(sort!([exc...]))
+        length(exc)==1 && (exc = exc[1])
+        return new{typeof(exc),typeof(s)}(time, exc, s)
     end
 end
 
@@ -105,7 +101,7 @@ Sharp dynamic treatment:
 ```
 """
 dynamic(time::Symbol, exc, s::TreatmentSharpness=sharp()) =
-    DynamicTreatment(time, [exc...], s)
+    DynamicTreatment(time, exc, s)
 
 """
     dynamic(ts::AbstractTerm...)
@@ -114,6 +110,9 @@ A wrapper method of `dynamic` for working with `@formula`.
 """
 @unpack dynamic
 
-termvars(s::TreatmentSharpness) = Symbol[]
-termvars(tr::AbstractTreatment) = termvars(tr.s)
-termvars(tr::DynamicTreatment) = pushfirst!(termvars(s::TreatmentSharpness), tr.time)
+termvars(s::TreatmentSharpness) =
+    error("StatsModels.termvars is not defined for $(typeof(s))")
+termvars(::SharpDesign) = Symbol[]
+termvars(tr::AbstractTreatment) =
+    error("StatsModels.termvars is not defined for $(typeof(tr))")
+termvars(tr::DynamicTreatment) = [tr.time, termvars(tr.s)...]

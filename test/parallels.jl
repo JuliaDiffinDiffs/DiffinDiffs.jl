@@ -170,3 +170,14 @@ end
               Treated since: [0, 1]"""
     end
 end
+
+@testset "termvars" begin
+    @test termvars(Unconditional()) == Symbol[]
+    @test termvars(Exact()) == Symbol[]
+    @test termvars(nevertreated(-1)) == Symbol[]
+    @test termvars(notyettreated(5)) == Symbol[]
+
+    @test_throws ErrorException termvars(TestParaCondition())
+    @test_throws ErrorException termvars(TestParaStrength())
+    @test_throws ErrorException termvars(PR)
+end

@@ -56,3 +56,11 @@ end
               excluded relative time: [-2, -1]"""
     end
 end
+
+@testset "termvars" begin
+    @test termvars(sharp()) == Symbol[]
+    @test termvars(dynamic(:month, -1)) == [:month]
+
+    @test_throws ErrorException termvars(TestSharpness())
+    @test_throws ErrorException termvars(TR)
+end

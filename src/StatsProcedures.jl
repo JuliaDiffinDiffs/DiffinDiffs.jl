@@ -17,9 +17,11 @@ An instance of `StatsStep` is callable.
 Call an instance of function of type `F` with arguments from `ntargs`
 formed by accessing the keys in `S` and `T` sequentially.
 
-If a keyword argument `verbose` takes `true`
-or `ntargs` contains a key-value pair `verbose=true`,
-a message with the name of the `StatsStep` is printed to `stdout`.
+A message with the name of the `StatsStep` is printed to `stdout`
+if a keyword `verbose` takes the value `true`
+or `ntargs` contains a key-value pair `verbose=true`.
+The value from `ntargs` supersedes the keyword argument
+in case both are specified.
 
 ## Returns
 - `NamedTuple`: named intermidiate results.
@@ -31,8 +33,8 @@ _specnames(::StatsStep{A,F,S}) where {A,F,S} = S
 _tracenames(::StatsStep{A,F,S,T}) where {A,F,S,T} = T
 
 function (step::StatsStep{A,F,S,T})(ntargs::NamedTuple; verbose::Bool=false) where {A,F,S,T}
-    verbose || (haskey(ntargs, :verbose) && ntargs.verbose) &&
-        println("  Running ", step)
+    haskey(ntargs, :verbose) && (verbose = ntargs.verbose)
+    verbose && printstyled("Running ", step, "\n", color=:green)
     args = NamedTuple{(S...,T...)}(ntargs)
     ret = F.instance(args...)
     if ret isa NamedTuple
@@ -323,7 +325,7 @@ while ignoring the orders.
 function (sp::StatsSpec{A,T})(;
         verbose::Bool=false, keep=nothing, keepall::Bool=false) where {A,T}
     args = verbose ? merge(sp.args, (verbose=true,)) : sp.args
-    ntall = foldl(|>, T(), init=sp.args)
+    ntall = foldl(|>, T(), init=args)
     if keepall
         return ntall
     elseif !isempty(ntall)
@@ -336,7 +338,7 @@ function (sp::StatsSpec{A,T})(;
             elseif eltype(keep) != Symbol
                 throw(ArgumentError("expect Symbol or collections of Symbols for the value of option `keep`"))
             end
-            return (result=res, (kv for kv in pairs(ntall) if kv[1] in keep)...)
+            return ((kv for kv in pairs(ntall) if kv[1] in keep)..., result=res)
         end
     else
         return nothing
@@ -361,7 +363,7 @@ function run_specset(sps::AbstractVector{<:StatsSpec};
     gids = groupfind(r->procedure(r.spec), tb)
     steps = pool((p() for p in keys(gids))...)
     for step in steps
-        verbose && println("  Running ", step)
+        verbose && printstyled("Running ", step, "\n", color=:green)
         args = _specnames(step)
         tras = _tracenames(step)
         byf = r->merge(NamedTuple{args}(r.spec.args), NamedTuple{tras}(r.trace))

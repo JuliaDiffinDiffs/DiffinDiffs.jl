@@ -1,6 +1,8 @@
 using Test
 using DiffinDiffsBase
 
+using StatsModels: termvars
+
 include("testutils.jl")
 
 const tests = [

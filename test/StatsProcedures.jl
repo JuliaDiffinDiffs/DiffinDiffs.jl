@@ -1,7 +1,7 @@
 using DiffinDiffsBase: _f, _specnames, _tracenames,
-    _sharedby
+    _sharedby, _show_args
 
-testvoidstep(a::String, b::String) = println(a)
+testvoidstep(a::String, b::String) = nothing
 const TestVoidStep = StatsStep{:TestVoidStep, typeof(testvoidstep), (:a, :b), ()}
 
 testregstep(a::String, b::String) = (b=a, c=a*b,)
@@ -192,3 +192,32 @@ end
           NullProcedure"""
 end
 
+@testset "StatsSpec" begin
+    s1 = StatsSpec("name", RP, (a="a",b="b"))
+    s2 = StatsSpec("", RP, (a="a",b="b"))
+    s3 = StatsSpec("", UP, (a="a",b="b"))
+    s4 = StatsSpec("name", RP, (b="b", a="a"))
+    s5 = StatsSpec("name", RP, (b="b", a="a", d="d"))
+    @test s1 == s2
+    @test s2 != s3
+    @test s2 != s4
+    @test s2 ≊ s4
+
+    @test s1() == "aab"
+    @test s3() == "ab"
+    
+    @test s1(keep=:a) == (a="a", result="aab")
+    @test s1(keep=(:a,:c)) == (a="a", c="ab", result="aab")
+    @test_throws ArgumentError s1(keep=1)
+    @test s1(keepall=true) == (a="a", b="a", c="ab", result="aab")
+
+    s6 = StatsSpec("", NP, NamedTuple())
+    @test s6() === nothing
+
+    @test sprint(show, s1) == "name"
+    @test sprint(show, s2) == "unnamed"
+    @test sprint(show, MIME("text/plain"), s1) == "name (StatsSpec for RegProcedure)"
+    @test sprint(show, MIME("text/plain"), s2) == "unnamed (StatsSpec for RegProcedure)"
+
+    @test _show_args(stdout, s1) === nothing
+end
