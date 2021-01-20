@@ -94,7 +94,7 @@ The order of arguments is irrelevant.
 - `args... kwargs...`: a list of arguments to be processed by [`parse_didargs`](@ref) and [`valid_didargs`](@ref).
 """
 macro didspec(exprs...)
-    args, kwargs = args_kwargs(exprs)
+    args, kwargs = _args_kwargs(exprs)
     return esc(:(didspec($(args...); $(kwargs...))))
 end
 
@@ -110,8 +110,6 @@ function did(args...; verbose::Bool=false, keep=nothing, keepall::Bool=false, kw
     sp = didspec(args...; kwargs...)
     return sp(verbose=verbose, keep=keep, keepall=keepall)
 end
-
-const parse_did_options = parse_specset_options
 
 """
     @did [option option=val ...] "name" args... kwargs...
@@ -130,16 +128,16 @@ The options available are the same as the keyword arguments available for
 """
 macro did(args...)
     nargs = length(args)
+    options = :(Dict{Symbol, Any}())
     if nargs > 0 && isexpr(args[1], :vect, :hcat, :vcat)
-        options = parse_did_options(args[1].args)
+        _parse_kwargs!(options, args[1].args)
         if nargs > 1
             didargs = args[2:end]
         end
     else
-        options = :(Dict{Symbol, Any}())
         didargs = args
     end
-    dargs, dkwargs = args_kwargs(didargs)
+    dargs, dkwargs = _args_kwargs(didargs)
     return esc(:(StatsSpec(valid_didargs(parse_didargs($(dargs...); $(dkwargs...)))...)(; $options...)))
 end
 

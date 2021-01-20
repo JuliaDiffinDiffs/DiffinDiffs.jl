@@ -7,9 +7,9 @@ using Reexport
 using StatsBase
 @reexport using StatsModels
 using StatsModels: TupleTerm
-using SplitApplyCombine: groupfind
+using SplitApplyCombine: groupfind, groupview
 using Tables: columntable, istable, rows, columns, getcolumn
-using TypedTables: Table, getproperty, getproperties
+using TypedTables: Table
 
 import Base: ==, show, union
 import Base: eltype, firstindex, lastindex, getindex, iterate, length

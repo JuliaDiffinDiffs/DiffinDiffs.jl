@@ -322,6 +322,8 @@ while ignoring the orders.
 ≊(x::StatsSpec{A1,T}, y::StatsSpec{A2,T}) where {A1,A2,T} =
     x.args ≊ y.args
 
+_procedure(::StatsSpec{A,T}) where {A,T} = T
+
 function (sp::StatsSpec{A,T})(;
         verbose::Bool=false, keep=nothing, keepall::Bool=false) where {A,T}
     args = verbose ? merge(sp.args, (verbose=true,)) : sp.args
@@ -357,37 +359,57 @@ end
 
 function run_specset(sps::AbstractVector{<:StatsSpec};
         verbose::Bool=false, keep=nothing, keepall::Bool=false)
-    traces = Vector{NamedTuple}(undef, length(sps))
+    nsps = length(sps)
+    nsps == 0 && throw(ArgumentError("expect a nonempty vector"))
+    traces = Vector{NamedTuple}(undef, nsps)
     fill!(traces, NamedTuple())
     tb = Table(spec=sps, trace=traces)
-    gids = groupfind(r->procedure(r.spec), tb)
-    steps = pool((p() for p in keys(gids))...)
+    gids = groupfind(r->_procedure(r.spec)(), tb)
+    steps = pool((p for p in keys(gids))...)
+    ntask_total = 0
     for step in steps
-        verbose && printstyled("Running ", step, "\n", color=:green)
-        args = _specnames(step)
-        tras = _tracenames(step)
-        byf = r->merge(NamedTuple{args}(r.spec.args), NamedTuple{tras}(r.trace))
+        ntask = 0
+        verbose && printstyled("Running ", step, "...")
+        specn = _specnames(step)
+        tracn = _tracenames(step)
+        byf = r->merge(NamedTuple{specn}(r.spec.args), NamedTuple{tracn}(r.trace))
         taskids = vcat((gids[steps.procs[i]] for i in _sharedby(step))...)
         tasks = groupview(byf, view(tb, taskids))
         for (ins, subtb) in pairs(tasks)
             ret = _f(step)(ins...)
-            for tr in subtb.trace
-                tr = merge(tr, deepcopy(ret))
+            ntask += 1
+            ntask_total += 1
+            if ret !== nothing
+                for i in eachindex(subtb.trace)
+                    subtb.trace[i] = merge(subtb.trace[i], deepcopy(ret))
+                end
             end
         end
+        nprocs = length(_sharedby(step))
+        verbose && printstyled("Finished ", ntask, ntask > 1 ? " tasks" : " task", " for ",
+            nprocs, nprocs > 1 ? " procedures\n" : " procedure\n")
     end
+    nprocs = length(steps.procs)
+    verbose && printstyled("All steps finished (", ntask_total,
+        ntask_total > 1 ? " tasks" : " task", " for ", nprocs,
+        nprocs > 1 ? " procedures)\n" : " procedure)\n", bold=true, color=:green)
     if keepall
         return tb
     elseif keep===nothing
         return [r[end] for r in tb.trace]
     else
-        return [(;result=r.trace[end], (kv for kv in pairs(r.trace) if kv[1] in keep)...,
-            (kv for kv in pairs(r.spec.args) if kv[1] in keep)...) for r in tb]
+        if keep isa Symbol
+            keep = [keep]
+        elseif eltype(keep) != Symbol
+            throw(ArgumentError("expect Symbol or collections of Symbols for the value of option `keep`"))
+        end
+        return [(; (kv for kv in pairs(r.spec.args) if kv[1] in keep)...,
+            (kv for (i,kv) in enumerate(pairs(r.trace)) if
+            kv[1] in keep || i==length(r.trace))...,) for r in tb]
     end
 end
 
-function parse_specset_options(args)
-    options = :(Dict{Symbol, Any}())
+function _parse_kwargs!(options::Expr, args)
     for arg in args
         # Assume a symbol means the kwarg takes value true
         if isa(arg, Symbol)
@@ -397,19 +419,19 @@ function parse_specset_options(args)
             key = Expr(:quote, arg.args[1])
             push!(options.args, Expr(:call, :(=>), key, arg.args[2]))
         else
-            throw(ArgumentError("unexpected argument $arg to @specset"))
+            throw(ArgumentError("unexpected argument $arg"))
         end
     end
-    return options
 end
 
-function spec_walker(x, parsers, formatters)
-    @capture(x, StatsSpec(formatter_(parser_(rawargs__)))(;o__)) || return x
+function _spec_walker(x, parsers, formatters, ntargs_set)
+    @capture(x, StatsSpec(formatter_(parser_(rawargs__))...)(;o__)) || return x
     push!(parsers, parser)
     push!(formatters, formatter)
+    push!(ntargs_set, esc(:($parser($(rawargs...)))))
     length(o) > 0 &&
         @warn "[options] specified for individual StatsSpec are ignored inside @specset"
-    return :(push!(ntargs_set, $parser($(rawargs...))))
+    return :()
 end
 
 """
@@ -460,39 +482,35 @@ macro specset(args...)
     nargs = length(args)
     nargs == 0 && throw(ArgumentError("no argument is found for @specset"))
 
+    options = :(Dict{Symbol, Any}())
     if nargs > 1
         if isexpr(args[1], :vect, :hcat, :vcat)
-            options = parse_specset_options(args[1].args)
-            nargs > 2 && (default_args = args[2:end-1])
+            _parse_kwargs!(options, args[1].args)
+            nargs > 2 && (default_args = _args_kwargs(args[2:end-1]))
         else
-            default_args = args[1:end-1]
+            default_args = _args_kwargs(args[1:end-1])
         end
     else
-        options = :((;))
         default_args = nothing
     end
-
     specs = args[end]
     isexpr(specs, :block, :for) ||
         throw(ArgumentError("last argument to @specset must be begin/end block or for loop"))
 
-    parsers = []
-    formatters = []
-    blk = postwalk(x->spec_walker(x, parsers, formatters), specs)
-    length(parsers)==1 && length(formatters)==1 ||
+    parsers, formatters, ntargs_set = [], [], []
+    postwalk(x->_spec_walker(x, parsers, formatters, ntargs_set), specs)
+    length(unique!(parsers))==1 && length(unique!(formatters))==1 ||
         throw(ArgumentError("exactly one parser and one formatter are allowed for the inner @specset"))
     
-    parser = parsers[1]
-    formatter = formatters[1]
-    defaults = default_args === nothing ? :((;)) : :($parser($(default_args...)))
-    
-    return quote
-        local default_args = $defaults
-        local ntargs_set = NamedTuple[]
-        $blk
-        local nsps = length(ntargs_set)
-        local sps_set = [StatsSpec($formatter(merge(default_args, ntargs_set[i])))
-            for i in 1:nsps]
-        run_specset(sps_set; $(options...))
+    parser, formatter = parsers[1], formatters[1]
+    if default_args === nothing
+        defaults = :(NamedTuple())
+    else
+        defaults = esc(:($parser($(default_args[1]...); $(default_args[2]...))))
     end
+    sps = :([])
+    for ntargs in ntargs_set
+        push!(sps.args, :(StatsSpec($(esc(formatter))($(esc(merge))($defaults, $ntargs))...)))
+    end
+    return :(run_specset($sps; $options...))
 end
