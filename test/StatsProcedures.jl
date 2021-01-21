@@ -1,64 +1,55 @@
-using DiffinDiffsBase: _f, _specnames, _tracenames,
-    _sharedby, _show_args, _args_kwargs, _parse_kwargs!, _spec_walker, run_specset
+using DiffinDiffsBase: _f, _getargs, _update,
+    _sharedby, _show_args, _args_kwargs, _parse_kwargs!, _spec_walker, proceed
 
 testvoidstep(a::String) = nothing
-const TestVoidStep = StatsStep{:TestVoidStep, typeof(testvoidstep), (:a,), ()}
+const TestVoidStep = StatsStep{:TestVoidStep, typeof(testvoidstep)}
+namedargs(::TestVoidStep) = (a="a",)
 
 testregstep(a::String, b::String) = (c=a*b,)
-const TestRegStep = StatsStep{:TestRegStep, typeof(testregstep), (:a, :b), ()}
+const TestRegStep = StatsStep{:TestRegStep, typeof(testregstep)}
+namedargs(::TestRegStep) = (a="a", b="b")
 
 testlaststep(a::String, c::String) = (result=a*c,)
-const TestLastStep = StatsStep{:TestLastStep, typeof(testlaststep), (:a,), (:c,)}
+const TestLastStep = StatsStep{:TestLastStep, typeof(testlaststep)}
+namedargs(::TestLastStep) = (a="a", c="b")
 
 testinvalidstep(a::String, b::String) = b
-const TestInvalidStep = StatsStep{:TestInvalidStep, typeof(testinvalidstep), (:a,:b), ()}
+const TestInvalidStep = StatsStep{:TestInvalidStep, typeof(testinvalidstep)}
+namedargs(::TestInvalidStep) = (a=nothing, b=nothing)
 
 @testset "StatsStep" begin
     @testset "TestVoidStep" begin
         @test sprint(show, TestVoidStep()) == "TestVoidStep"
-        @test sprint(show, MIME("text/plain"), TestVoidStep()) == """
-        TestVoidStep (StatsStep that calls testvoidstep):
-          arguments from StatsSpec: (:a,)
-          arguments from trace: ()"""
+        @test sprint(show, MIME("text/plain"), TestVoidStep()) ==
+            "TestVoidStep (StatsStep that calls testvoidstep)"
 
         @test _f(TestVoidStep()) == testvoidstep
-        @test _specnames(TestVoidStep()) == (:a,)
-        @test _tracenames(TestVoidStep()) == ()
-
         @test TestVoidStep()((a="a", b="b")) == (a="a", b="b")
     end
 
     @testset "TestRegStep" begin
         @test sprint(show, TestRegStep()) == "TestRegStep"
-        @test sprint(show, MIME("text/plain"), TestRegStep()) == """
-        TestRegStep (StatsStep that calls testregstep):
-          arguments from StatsSpec: (:a, :b)
-          arguments from trace: ()"""
+        @test sprint(show, MIME("text/plain"), TestRegStep()) ==
+            "TestRegStep (StatsStep that calls testregstep)"
 
         @test _f(TestRegStep()) == testregstep
-        @test _specnames(TestRegStep()) == (:a, :b)
-        @test _tracenames(TestRegStep()) == ()
-
-        @test TestRegStep()((a="a", b="b")) == (a="a", b="b", c="ab")
+        @test TestRegStep()() == (c="ab",)
+        @test TestRegStep()((a="c", b="d")) == (a="c", b="d", c="cd")
     end
 
     @testset "TestLastStep" begin
         @test sprint(show, TestLastStep()) == "TestLastStep"
-        @test sprint(show, MIME("text/plain"), TestLastStep()) == """
-        TestLastStep (StatsStep that calls testlaststep):
-          arguments from StatsSpec: (:a,)
-          arguments from trace: (:c,)"""
+        @test sprint(show, MIME("text/plain"), TestLastStep()) ==
+            "TestLastStep (StatsStep that calls testlaststep)"
         
         @test _f(TestLastStep()) == testlaststep
-        @test _specnames(TestLastStep()) == (:a,)
-        @test _tracenames(TestLastStep()) == (:c,)
-
-        @test TestLastStep()((a="a", b="a", c="ab")) == (a="a", b="a", c="ab", result="aab")
+        @test TestLastStep()((a="a", b="a", c="ab")) ==
+            (a="a", b="a", c="ab", result="aab")
     end
 
     @testset "TestInvalidStep" begin
         @test_throws ErrorException TestInvalidStep()((a="a", b="a", c="ab"))
-        @test_throws ErrorException TestInvalidStep()((a="a",))
+        @test_throws MethodError TestInvalidStep()((a="a",))
     end
 end
 
@@ -115,8 +106,6 @@ end
     @test _sharedby(s1) == (1,)
     @test _sharedby(s2) == (2,3)
     @test _f(s1) == testregstep
-    @test _specnames(s1) == (:a, :b)
-    @test _tracenames(s1) == ()
 
     @test sprint(show, s1) == "TestRegStep"
     @test sprint(show, MIME("text/plain"), s1) ==
@@ -234,71 +223,83 @@ end
 
 testformatter(nt::NamedTuple) = (haskey(nt, :name) ? nt.name : "", nt.p, (a=nt.a, b=nt.b))
 
-@testset "specset" begin
-    @testset "run_specset" begin
-        s1 = StatsSpec("s1", RP, (a="a",b="b"))
-        s2 = StatsSpec("s2", RP, (a="a",b="b"))
-        s3 = StatsSpec("s3", RP, (a="a",b="b1"))
-        s4 = StatsSpec("s4", UP, (a="a",b="b"))
-        s5 = StatsSpec("s5", IP, (a="a",b="b"))
-        
-        @test run_specset([s1]) == ["aab"]
-        @test run_specset([s1,s2], verbose=true) == ["aab", "aab"]
-        @test run_specset([s1,s3], verbose=true) == ["aab", "aab1"]
-        @test run_specset([s1,s4], verbose=true) == ["aab", "ab"]
-        @test run_specset([s1,s5], verbose=true) == ["aab", "aab"]
-        @test run_specset([s1,s4,s5], verbose=true) == ["aab", "ab", "aab"]
-        @test_throws ArgumentError run_specset(StatsSpec[])
+@testset "proceed" begin
+    s1 = StatsSpec("s1", RP, (a="a",b="b"))
+    s2 = StatsSpec("s2", RP, NamedTuple())
+    s3 = StatsSpec("s3", RP, (a="a",b="b1"))
+    s4 = StatsSpec("s4", UP, (a="a",b="b"))
+    s5 = StatsSpec("s5", IP, (a="a",b="b"))
 
-        @test run_specset([s1], keep=:a) == [(a="a",result="aab")]
-        @test run_specset([s1], keep=[:a,:b]) == [(a="a", b="b", result="aab")]
-        @test run_specset([s1], keep=(:d,)) == [(result="aab",)]
-        @test run_specset([s1,s4], keep=[:a, :result]) ==
-            [(a="a", result="aab"), (a="a", c="ab")]
-         
+    @test proceed([s1]) == ["aab"]
+    @test proceed([s1,s2], verbose=true) == ["aab", "aab"]
+    @test proceed([s1,s3], verbose=true) == ["aab", "aab1"]
+    @test proceed([s1,s4], verbose=true) == ["aab", "ab"]
+    @test proceed([s1,s5], verbose=true) == ["aab", "aab"]
+    @test proceed([s1,s4,s5], verbose=true) == ["aab", "ab", "aab"]
+    @test_throws ArgumentError proceed(StatsSpec[])
+
+    @test proceed([s1], keep=:a) == [(a="a",result="aab")]
+    @test proceed([s1], keep=[:a,:b]) == [(a="a", b="b", result="aab")]
+    @test proceed([s1], keep=(:d,)) == [(result="aab",)]
+    @test proceed([s1], keepall=true) == [(a="a", b="b", c="ab", result="aab")]
+
+    @test proceed([s2]) == ["aab"]
+    @test proceed([s2], keep=:a) == [(result="aab",)]
+    @test proceed([s2], keepall=true) == [(c="ab", result="aab",)]
+
+    @test proceed([s1,s4], keep=[:a, :result]) ==
+            [(a="a", result="aab"), (a="a",)]
+    @test proceed([s1,s4], keepall=true) ==
+        [(a="a", b="b", c="ab", result="aab"), (a="a", b="b", c="ab")]
+end
+
+@testset "@specset" begin
+    r = @specset a="a0" begin
+        StatsSpec(testformatter(testparser(RP; a="a1", b="b"))...)(;) end
+    @test r == StatsSpec[StatsSpec("", RP, (a="a1", b="b"))]
+    @test proceed(r) == ["a1a1b"]
+    
+    r = @specset a="a0" begin
+        StatsSpec(testformatter(testparser(RP; b="b"))...)(;) end
+    @test r == StatsSpec[StatsSpec("", RP, (a="a0", b="b"))]
+    @test proceed(r) == ["a0a0b"]
+
+    r = @specset a="a0" b="b0" begin
+        StatsSpec(testformatter(testparser(RP))...)(;)
+        StatsSpec(testformatter(testparser(RP; a="a1", b="b1"))...)(;)
     end
+    @test r == StatsSpec[StatsSpec("", RP, (a="a0", b="b0")), StatsSpec("", RP, (a="a1", b="b1"))]
+    @test proceed(r) == ["a0a0b0", "a1a1b1"]
 
-    @testset "_parse_kwargs!" begin
-        options = :(Dict{Symbol, Any}())
-        _parse_kwargs!(options, [:(a), :(b=1)])
-        @test eval(options) == Dict{Symbol, Any}(:a => true, :b => 1)
-        @test_throws ArgumentError _parse_kwargs!(options, [1])
+    r = @specset a="a0" b="b0" begin
+        StatsSpec(testformatter(testparser(RP))...)(;)
+        StatsSpec(testformatter(testparser(RP; a="a1", c="c"))...)(;)
     end
+    @test r == StatsSpec[StatsSpec("", RP, (a="a0", b="b0")), StatsSpec("", RP, (a="a1", b="b0"))]
+    @test proceed(r) == ["a0a0b0", "a1a1b0"]
 
-    @testset "@specset" begin
-        r = @specset a="a0" begin
-            StatsSpec(testformatter(testparser(RP; a="a1", b="b"))...)(;) end
-        @test r == ["a1a1b"]
+    a = "a0"
+    r = @specset a=a begin
+        StatsSpec(testformatter(testparser(RP; b="b"))...)(;) end
+    @test proceed(r) == ["a0a0b"]
+    
+    r0 = @specset for i in 1:3
+        a = "a"*string(i)
+        StatsSpec(testformatter(testparser(RP; a=a, b="b"))...)(;)
+        StatsSpec(testformatter(testparser(RP; a=a, b="b1"))...)(;)
+    end
+    @test proceed(r0) == ["a1a1b", "a1a1b1", "a2a2b", "a2a2b1", "a3a3b", "a3a3b1"]
 
-        r = @specset a="a0" begin
-            StatsSpec(testformatter(testparser(RP; b="b"))...)(;) end
-        @test r == ["a0a0b"]
-
-        r = @specset a="a0" b="b0" begin
-            StatsSpec(testformatter(testparser(RP))...)(;)
-            StatsSpec(testformatter(testparser(RP; a="a1", b="b1"))...)(;)
-        end
-        @test r == ["a0a0b0", "a1a1b1"]
-
-        r = @specset [verbose] a="a0" b="b0" begin
-            StatsSpec(testformatter(testparser(RP))...)(;)
-            StatsSpec(testformatter(testparser(RP; a="a1", c="c"))...)(;)
-        end
-        @test r == ["a0a0b0", "a1a1b0"]
-
-        a = "a0"
-        r = @specset [verbose] a=a begin
-            StatsSpec(testformatter(testparser(RP; b="b"))...)(;) end
-        @test r == ["a0a0b"]
-
-        r = []
-        for i in 1:3
+    r1 = @specset begin
+        i = 1
+        a = "a"*string(i)
+        StatsSpec(testformatter(testparser(RP; a=a, b="b"))...)(;)
+        StatsSpec(testformatter(testparser(RP; a=a, b="b1"))...)(;)
+        for i in 2:3
             a = "a"*string(i)
-            push!(r, @specset [verbose] a=a begin
-                StatsSpec(testformatter(testparser(RP; b="b"))...)(;)
-                StatsSpec(testformatter(testparser(RP; b="b1"))...)(;)
-            end)
+            StatsSpec(testformatter(testparser(RP; a=a, b="b"))...)(;)
+            StatsSpec(testformatter(testparser(RP; a=a, b="b1"))...)(;)
         end
-        @test r == [["a1a1b", "a1a1b1"], ["a2a2b", "a2a2b1"], ["a3a3b", "a3a3b1"]]
     end
+    @test r1 == r0
 end

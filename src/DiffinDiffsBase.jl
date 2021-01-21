@@ -9,10 +9,9 @@ using StatsBase
 using StatsModels: TupleTerm
 using SplitApplyCombine: groupfind, groupview
 using Tables: columntable, istable, rows, columns, getcolumn
-using TypedTables: Table
 
 import Base: ==, show, union
-import Base: eltype, firstindex, lastindex, getindex, iterate, length
+import Base: eltype, firstindex, lastindex, getindex, iterate, length, sym_in
 
 import StatsModels: termvars
 
@@ -56,12 +55,14 @@ export @fieldequal,
        parse_treat,
 
        StatsStep,
+       namedargs,
        AbstractStatsProcedure,
        SharedStatsStep,
        PooledStatsProcedure,
        pool,
        StatsSpec,
        @specset,
+       proceed,
 
        CheckData,
 

@@ -2,6 +2,7 @@ using Test
 using DiffinDiffsBase
 
 using StatsModels: termvars
+import DiffinDiffsBase: namedargs
 
 include("testutils.jl")
 

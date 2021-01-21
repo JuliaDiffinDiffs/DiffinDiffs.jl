@@ -1,21 +1,18 @@
 """
-    StatsStep{Alias,F<:Function,SpecNames,TraceNames}
+    StatsStep{Alias,F<:Function}
 
-Specify the function and arguments for moving a step
-in an [`AbstractStatsProcedure`](@ref).
+Specify the function for moving a step in an [`AbstractStatsProcedure`](@ref).
 An instance of `StatsStep` is callable.
 
 # Parameters
 - `Alias::Symbol`: alias of the type for pretty-printing.
 - `F<:Function`: type of the function to be called by `StatsStep`.
-- `SpecNames::NTuple{N,Symbol}`: keys for arguments from [`StatsSpec`](@ref).
-- `TraceNames::NTuple{N,Symbol}`: keys for arguments from objects returned by a previous `StatsStep`.
 
 # Methods
-    (step::StatsStep{A,F,S,T})(ntargs::NamedTuple; verbose::Bool=false) where {A,F,S,T}
+    (step::StatsStep{A,F})(ntargs::NamedTuple; verbose::Bool=false)
 
-Call an instance of function of type `F` with arguments from `ntargs`
-formed by accessing the keys in `S` and `T` sequentially.
+Call an instance of function of type `F` with arguments
+formed by updating `NamedArgs` with `ntargs`.
 
 A message with the name of the `StatsStep` is printed to `stdout`
 if a keyword `verbose` takes the value `true`
@@ -26,17 +23,18 @@ in case both are specified.
 ## Returns
 - `NamedTuple`: named intermidiate results.
 """
-struct StatsStep{Alias,F<:Function,SpecNames,TraceNames} end
+struct StatsStep{Alias,F<:Function} end
 
 _f(::StatsStep{A,F}) where {A,F} = F.instance
-_specnames(::StatsStep{A,F,S}) where {A,F,S} = S
-_tracenames(::StatsStep{A,F,S,T}) where {A,F,S,T} = T
 
-function (step::StatsStep{A,F,S,T})(ntargs::NamedTuple; verbose::Bool=false) where {A,F,S,T}
+_getargs(ntargs::NamedTuple, s::StatsStep) = _update(ntargs, namedargs(s))
+_update(a::NamedTuple{N1}, b::NamedTuple{N2}) where {N1,N2} =
+    NamedTuple{N2}(map(n->getfield(sym_in(n, N1) ? a : b, n), N2))
+
+function (step::StatsStep{A,F})(ntargs::NamedTuple; verbose::Bool=false) where {A,F}
     haskey(ntargs, :verbose) && (verbose = ntargs.verbose)
     verbose && printstyled("Running ", step, "\n", color=:green)
-    args = NamedTuple{(S...,T...)}(ntargs)
-    ret = F.instance(args...)
+    ret = F.instance(_getargs(ntargs, step)...)
     if ret isa NamedTuple
         return merge(ntargs, ret)
     elseif ret === nothing
@@ -46,17 +44,24 @@ function (step::StatsStep{A,F,S,T})(ntargs::NamedTuple; verbose::Bool=false) whe
     end
 end
 
+(step::StatsStep)(; verbose::Bool=false) = step(NamedTuple(), verbose=verbose)
+
 show(io::IO, ::StatsStep{A}) where A = print(io, A)
 
-function show(io::IO, ::MIME"text/plain", s::StatsStep{A,F,S,T}) where {A,F,S,T}
+function show(io::IO, ::MIME"text/plain", s::StatsStep{A,F}) where {A,F}
     print(io, A, " (", typeof(s).name.name, " that calls ")
     fmod = F.name.mt.module
-    fmod == Main ? print(io, F.name.mt.name) : print(io, fmod, ".", F.name.mt.name)
-    println(io, "):")
-    println(io, "  arguments from StatsSpec: ", S)
-    print(io, "  arguments from trace: ")
-    T==() ? print(io, "()") : print(io, T)
+    fmod == Main || print(io, fmod, ".")
+    print(io, F.name.mt.name, ")")
 end
+
+"""
+    namedargs(s::StatsStep)
+
+Return a `NamedTuple` with keys showing the names of arguments
+accepted by `s` and values representing the defaults.
+"""
+namedargs(s::StatsStep) = error("method for $(typeof(s)) is not defined")
 
 """
     AbstractStatsProcedure{Alias,T<:NTuple{N,StatsStep} where N}
@@ -77,7 +82,7 @@ eltype(::Type{<:AbstractStatsProcedure}) = StatsStep
 firstindex(::AbstractStatsProcedure{A,T}) where {A,T} = firstindex(T.parameters)
 lastindex(::AbstractStatsProcedure{A,T}) where {A,T} = lastindex(T.parameters)
 
-function getindex(p::AbstractStatsProcedure{A,T}, i) where {A,T}
+function getindex(::AbstractStatsProcedure{A,T}, i) where {A,T}
     fs = T.parameters[i]
     return fs isa Type && fs <: StatsStep ? fs.instance : [f.instance for f in fs]
 end
@@ -124,8 +129,7 @@ end
 
 _sharedby(::SharedStatsStep{T,I}) where {T,I} = I
 _f(s::SharedStatsStep) = _f(s.step)
-_specnames(s::SharedStatsStep) = _specnames(s.step)
-_tracenames(s::SharedStatsStep) = _tracenames(s.step)
+_getargs(ntargs::NamedTuple, s::SharedStatsStep) = _getargs(ntargs, s.step)
 
 show(io::IO, s::SharedStatsStep) = print(io, s.step)
 
@@ -308,8 +312,7 @@ with the same parameter `T` also have the same field `args`.
 
 See also [`≊`](@ref).
 """
-==(x::StatsSpec{A1,T}, y::StatsSpec{A2,T}) where {A1,A2,T} =
-    x.args == y.args
+==(x::StatsSpec{A1,T}, y::StatsSpec{A2,T}) where {A1,A2,T} = x.args == y.args
 
 """
     ≊(x::StatsSpec{A1,T}, y::StatsSpec{A2,T})
@@ -319,8 +322,7 @@ with the same parameter `T` also have the field `args`
 containing the same sets of key-value pairs
 while ignoring the orders.
 """
-≊(x::StatsSpec{A1,T}, y::StatsSpec{A2,T}) where {A1,A2,T} =
-    x.args ≊ y.args
+≊(x::StatsSpec{A1,T}, y::StatsSpec{A2,T}) where {A1,A2,T} = x.args ≊ y.args
 
 _procedure(::StatsSpec{A,T}) where {A,T} = T
 
@@ -331,16 +333,18 @@ function (sp::StatsSpec{A,T})(;
     if keepall
         return ntall
     elseif !isempty(ntall)
-        res = haskey(ntall, :result) ? ntall.result : ntall[end]
         if keep === nothing
-            return res
+            return haskey(ntall, :result) ? ntall.result : ntall[end]
         else
+            # Cannot iterate Symbol
             if keep isa Symbol
-                keep = [keep]
-            elseif eltype(keep) != Symbol
-                throw(ArgumentError("expect Symbol or collections of Symbols for the value of option `keep`"))
+                keep = (keep,)
+            else
+                eltype(keep)==Symbol ||
+                    throw(ArgumentError("expect Symbol or collections of Symbols for the value of option `keep`"))
             end
-            return ((kv for kv in pairs(ntall) if kv[1] in keep)..., result=res)
+            !in(:result, keep) && haskey(ntall, :result) && (keep = (keep..., :result))
+            return NamedTuple{keep}(ntall)
         end
     else
         return nothing
@@ -357,31 +361,121 @@ function show(io::IO, ::MIME"text/plain", sp::StatsSpec{A,T}) where {A,T}
     _show_args(io, sp)
 end
 
-function run_specset(sps::AbstractVector{<:StatsSpec};
+function _spec_walker(x, parsers, formatters, ntargs_set)
+    @capture(x, StatsSpec(formatter_(parser_(rawargs__))...)(;o__)) || return x
+    push!(parsers, parser)
+    push!(formatters, formatter)
+    length(o) > 0 &&
+        @warn "[options] specified for individual StatsSpec are ignored inside @specset"
+    return :(push!($ntargs_set, $parser($(rawargs...))))
+end
+
+"""
+    @specset default_args... begin ... end
+    @specset default_args... for v in (...) ... end
+    @specset default_args... for v in (...), w in (...) ... end
+
+Return a vector of [`StatsSpec`](@ref) with shared default values for arguments.
+See also [`proceed`](@ref).
+
+# Arguments
+- `default_args...`: optional default values for arguments shared by all [`StatsSpec`](@ref)s.
+- `code block`: a `begin/end` block or a `for` loop containing arguments for constructing [`StatsSpec`](@ref)s.
+
+# Notes
+`@specset` transforms `Expr`s that construct [`StatsSpec`](@ref)
+to collect the sets of arguments from the code block
+and infers how the arguments entered by users need to be processed
+based on the names of functions called within [`StatsSpec`](@ref).
+For end users, `Macro`s that generate `Expr`s for these function calls should be provided.
+
+Optional default arguments are merged
+with the arguments provided for each individual specification
+and replace the default values specified for each procedure.
+These default arguments should be specified in the same pattern as
+how arguments are specified for each specification inside the code block,
+as `@specset` processes these arguments by calling
+the same functions found in the code block.
+"""
+macro specset(args...)
+    nargs = length(args)
+    nargs == 0 && throw(ArgumentError("no argument is found for @specset"))
+    default_args = nargs > 1 ? _args_kwargs(args[1:end-1]) : nothing
+    specs = args[end]
+    isexpr(specs, :block, :for) ||
+        throw(ArgumentError("last argument to @specset must be begin/end block or for loop"))
+
+    parsers, formatters, ntargs_set = Symbol[], Symbol[], NamedTuple[]
+    blk = postwalk(x->_spec_walker(x, parsers, formatters, ntargs_set), specs)
+    nparser = length(unique!(parsers))
+    nparser == 1 ||
+        throw(ArgumentError("found $nparser parsers from arguments while expecting one"))
+    nformatter = length(unique!(formatters))
+    nformatter == 1 ||
+        throw(ArgumentError("found $nformatter formatters from arguments while expecting one"))
+    
+    parser, formatter = parsers[1], formatters[1]
+    if default_args === nothing
+        defaults = :(NamedTuple())
+    else
+        defaults = esc(:($parser($(default_args[1]...); $(default_args[2]...))))
+    end
+
+    return quote
+        $(esc(blk))
+        local nspec = length($ntargs_set)
+        local sps = Vector{StatsSpec}(undef, nspec)
+        for i in 1:nspec
+            sps[i] = StatsSpec($(esc(formatter))(merge($defaults, $ntargs_set[i]))...)
+        end
+        sps
+    end
+end
+
+"""
+    proceed(sps::AbstractVector{<:StatsSpec}; kwargs...)
+
+Carry out the procedures for the [`StatsSpec`](@ref)s in `sps`
+while trying to avoid repeating identical steps for the [`StatsSpec`](@ref)s.
+See also [`@specset`](@ref).
+
+# Keywords
+- `verbose::Bool=false`: print the name of each step when it is called.
+- `keep=nothing`: names (of type `Symbol`) of additional objects to be returned.
+- `keepall::Bool=false`: return all objects generated by procedures along with arguments from the [`StatsSpec`](@ref)s.
+
+# Returns
+- `Vector{NamedTuple}`: results for each specification in the same order of `sps`.
+
+By default, either the object with a key `result`
+or the last value returned by the last [`StatsStep`](@ref)
+is contained in each `NamedTuple`.
+When either `keep` or `keepall` is specified,
+additional objects are included.
+"""
+function proceed(sps::AbstractVector{<:StatsSpec};
         verbose::Bool=false, keep=nothing, keepall::Bool=false)
     nsps = length(sps)
     nsps == 0 && throw(ArgumentError("expect a nonempty vector"))
     traces = Vector{NamedTuple}(undef, nsps)
-    fill!(traces, NamedTuple())
-    tb = Table(spec=sps, trace=traces)
-    gids = groupfind(r->_procedure(r.spec)(), tb)
+    for i in 1:nsps
+        traces[i] = sps[i].args
+    end
+    gids = groupfind(r->_procedure(r)(), sps)
     steps = pool((p for p in keys(gids))...)
     ntask_total = 0
     for step in steps
         ntask = 0
         verbose && printstyled("Running ", step, "...")
-        specn = _specnames(step)
-        tracn = _tracenames(step)
-        byf = r->merge(NamedTuple{specn}(r.spec.args), NamedTuple{tracn}(r.trace))
         taskids = vcat((gids[steps.procs[i]] for i in _sharedby(step))...)
-        tasks = groupview(byf, view(tb, taskids))
+        tasks = groupview(r->_getargs(r, step), view(traces, taskids))
         for (ins, subtb) in pairs(tasks)
             ret = _f(step)(ins...)
             ntask += 1
             ntask_total += 1
             if ret !== nothing
-                for i in eachindex(subtb.trace)
-                    subtb.trace[i] = merge(subtb.trace[i], deepcopy(ret))
+                for i in eachindex(subtb)
+                    subtb[i] = merge(subtb[i], deepcopy(ret))
                 end
             end
         end
@@ -394,123 +488,22 @@ function run_specset(sps::AbstractVector{<:StatsSpec};
         ntask_total > 1 ? " tasks" : " task", " for ", nprocs,
         nprocs > 1 ? " procedures)\n" : " procedure)\n", bold=true, color=:green)
     if keepall
-        return tb
+        return traces
     elseif keep===nothing
-        return [r[end] for r in tb.trace]
+        return [haskey(r, :result) ? r.result : r[end] for r in traces]
     else
+        # Cannot iterate Symbol
         if keep isa Symbol
-            keep = [keep]
-        elseif eltype(keep) != Symbol
-            throw(ArgumentError("expect Symbol or collections of Symbols for the value of option `keep`"))
-        end
-        return [(; (kv for kv in pairs(r.spec.args) if kv[1] in keep)...,
-            (kv for (i,kv) in enumerate(pairs(r.trace)) if
-            kv[1] in keep || i==length(r.trace))...,) for r in tb]
-    end
-end
-
-function _parse_kwargs!(options::Expr, args)
-    for arg in args
-        # Assume a symbol means the kwarg takes value true
-        if isa(arg, Symbol)
-            key = Expr(:quote, arg)
-            push!(options.args, Expr(:call, :(=>), key, true))
-        elseif isexpr(arg, :(=))
-            key = Expr(:quote, arg.args[1])
-            push!(options.args, Expr(:call, :(=>), key, arg.args[2]))
+            keep = (keep,)
         else
-            throw(ArgumentError("unexpected argument $arg"))
+            eltype(keep)==Symbol ||
+                throw(ArgumentError("expect Symbol or collections of Symbols for the value of option `keep`"))
         end
-    end
-end
-
-function _spec_walker(x, parsers, formatters, ntargs_set)
-    @capture(x, StatsSpec(formatter_(parser_(rawargs__))...)(;o__)) || return x
-    push!(parsers, parser)
-    push!(formatters, formatter)
-    push!(ntargs_set, esc(:($parser($(rawargs...)))))
-    length(o) > 0 &&
-        @warn "[options] specified for individual StatsSpec are ignored inside @specset"
-    return :()
-end
-
-"""
-    @specset [option option=val ...] default_args... begin ... end
-    @specset [option option=val ...] default_args... for v in (...) ... end
-    @specset [option option=val ...] default_args... for v in (...), w in (...) ... end
-
-Collect multiple [`StatsSpec`](@ref) and exucte the procedure,
-possibly avoiding repeating identical steps from different specifications.
-
-The specifications must be contained in either a `begin/end` block or a `for` loop.
-`@specset` collects arguments passed to each call of [`StatsSpec`](@ref)
-in such a code block and infers how the arguments need to be processed
-for constructing a valid [`StatsSpec`](@ref) based on the names of functions
-called within [`StatsSpec`](@ref).
-Any function that wraps the call of [`StatsSpec`](@ref) is ignored.
-
-Optional default arguments are accepted and need to be specified before the code block.
-They are merged with the arguments provided for each individual specification
-and replace the default values specified for each procedure.
-These default arguments should be specified in the same pattern as
-how arguments are specified for each specification inside the code block.
-
-Options for the behavior of `@specset` can be provided in a bracket `[...]`
-as the first argument with each option separated by white space.
-For options that take a Boolean value,
-specifying the name of the option is enough for setting the value to be true.
-By default, `@specset` returns a `Vector`
-that contains one object for each specification provided in the original order.
-This object is either the one with a key `result` assigned by a [`StatsStep`](@ref)
-or the last value returned by the last [`StatsStep`](@ref).
-
-The following options are available for altering the behavior of `@specset`:
-
-- `verbose::Bool=false`: print the name of each step when it is called.
-- `keep=nothing`: names (of type `Symbol`) of additional objects to be returned.
-- `keepall::Bool=false`: return all objects returned by each step.
-
-When `keep` is specified, the returned object is a `Vector{NamedTuple}`
-where the objects with keys specified in `keep` are combined with the default returned object
-to form a `NamedTuple` for each specification.
-When `keepall` is specified, a `TypedTables.Table` is returned
-with the first column named `spec` being the collection of all [`StatsSpec`](@ref) constructed
-and the second column named `trace` being a `Vector{NamedTuple}`
-collecting objects returned by the steps in each procedure.
-"""
-macro specset(args...)
-    nargs = length(args)
-    nargs == 0 && throw(ArgumentError("no argument is found for @specset"))
-
-    options = :(Dict{Symbol, Any}())
-    if nargs > 1
-        if isexpr(args[1], :vect, :hcat, :vcat)
-            _parse_kwargs!(options, args[1].args)
-            nargs > 2 && (default_args = _args_kwargs(args[2:end-1]))
-        else
-            default_args = _args_kwargs(args[1:end-1])
+        in(:result, keep) || (keep = (keep..., :result))
+        for i in 1:nsps
+            names = ((n for n in keep if haskey(traces[i], n))...,)
+            traces[i] = NamedTuple{names}(traces[i])
         end
-    else
-        default_args = nothing
+        return traces
     end
-    specs = args[end]
-    isexpr(specs, :block, :for) ||
-        throw(ArgumentError("last argument to @specset must be begin/end block or for loop"))
-
-    parsers, formatters, ntargs_set = [], [], []
-    postwalk(x->_spec_walker(x, parsers, formatters, ntargs_set), specs)
-    length(unique!(parsers))==1 && length(unique!(formatters))==1 ||
-        throw(ArgumentError("exactly one parser and one formatter are allowed for the inner @specset"))
-    
-    parser, formatter = parsers[1], formatters[1]
-    if default_args === nothing
-        defaults = :(NamedTuple())
-    else
-        defaults = esc(:($parser($(default_args[1]...); $(default_args[2]...))))
-    end
-    sps = :([])
-    for ntargs in ntargs_set
-        push!(sps.args, :(StatsSpec($(esc(formatter))($(esc(merge))($defaults, $ntargs))...)))
-    end
-    return :(run_specset($sps; $options...))
 end

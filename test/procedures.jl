@@ -1,16 +1,12 @@
-using DiffinDiffsBase: _f, _specnames, _tracenames, checkdata
+using DiffinDiffsBase: _f, checkdata
 
 @testset "CheckData" begin
     @testset "StatsStep" begin
         @test sprint(show, CheckData()) == "CheckData"
-        @test sprint(show, MIME("text/plain"), CheckData()) == """
-        CheckData (StatsStep that calls DiffinDiffsBase.checkdata):
-          arguments from StatsSpec: (:data, :tr, :pr, :yterm, :treatname, :xterms, :weights, :subset)
-          arguments from trace: ()"""
+        @test sprint(show, MIME("text/plain"), CheckData()) ==
+            "CheckData (StatsStep that calls DiffinDiffsBase.checkdata)"
 
         @test _f(CheckData()) == checkdata
-        @test _specnames(CheckData()) == (:data, :tr, :pr, :yterm, :treatname, :xterms, :weights, :subset)
-        @test _tracenames(CheckData()) == ()
     end
 
     @testset "checkdata" begin

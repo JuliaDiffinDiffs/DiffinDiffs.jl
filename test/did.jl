@@ -61,9 +61,16 @@ end
 end
 
 @testset "valid_didargs" begin
-    @testset "DefaultDID" begin
-        @test_throws ErrorException did(TR, PR)
-    end
+    nt = (d=TestDID, tr=TR, pr=PR)
+    @test valid_didargs(nt) == ("", TestDID, (tr=TR, pr=PR))
+    nt = (d=TestDID, tr=TR, pr=PR, name="name")
+    @test valid_didargs(nt) == ("name", TestDID, (tr=TR, pr=PR))
+    nt = (d=TestDID, tr=TR, a=1)
+    @test_throws ArgumentError valid_didargs(nt)
+    nt = (tr=TR, pr=PR)
+    @test_throws ErrorException valid_didargs(nt)
+    nt = (d=NotImplemented, tr=TR, pr=PR)
+    @test_throws ErrorException valid_didargs(nt)
 end
 
 @testset "StatsSpec" begin
@@ -149,35 +156,61 @@ end
     @test sp6 === @didspec TestDID @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) & z + x)
 end
 
-@testset "@did" begin
+@testset "_parse_kwargs!" begin
+    options = :(Dict{Symbol, Any}())
+    _parse_kwargs!(options, [:(a), :(b=1)])
+    @test eval(options) == Dict{Symbol, Any}(:a => true, :b => 1)
+    @test_throws ArgumentError _parse_kwargs!(options, [1])
+end
+
+@testset "did @did" begin
     d0 = @did TestDID TR PR
     d1 = @did PR TR TestDID
     @test d0 == "testresult"
     @test d1 == d0
+    @test did(TestDID, TR, PR) == d0
+    @test did(PR, TR, TestDID) == d0
 
     d = @did [keepall] TestDID testterm
-    @test d ≊ (tr=TR, pr=PR, treatname=:g, str=sprint(show, TR), spr=sprint(show, PR), result="testresult") 
+    @test d ≊ (tr=TR, pr=PR, treatname=:g, str=sprint(show, TR), spr=sprint(show, PR), result="testresult")
+    @test did(TestDID, testterm; keepall=true) == d
+
     d0 = @did [keepall] TestDID term(:y) ~ testterm
     @test d0 ≊ merge(d, (yterm=term(:y),))
+    @test did(TestDID, term(:y) ~ testterm; keepall=true) == d0
     d1 = @did [keepall] TestDID @formula(y ~ treat(g, ttreat(t, 0), tpara(0))) "test"
     @test d1 ≊ d0
+    @test did(TestDID, @formula(y ~ treat(g, ttreat(t, 0), tpara(0))); keepall=true) == d1
+
     d0 = @did [keepall] TestDID term(:y) ~ testterm & term(:z) + term(:x)
     @test d0 ≊ merge(d, (yterm=term(:y), treatintterms=(term(:z),), xterms=(term(:x),)))
+    @test did(TestDID, term(:y) ~ testterm & term(:z) + term(:x); keepall=true) == d0
     d1 = @did [keepall] "test" TestDID @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) & z + x)
     @test d1 ≊ d0
+    @test did(TestDID, @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) & z + x); keepall=true) == d1
 
     d = @did [keep=:treatname] TestDID testterm
     @test d ≊ (treatname=:g, result="testresult")
+    @test did(TestDID, testterm; keep=:treatname) == d
     d = @did [keep=[:treatname,:tr]] TestDID testterm
     @test d ≊ (treatname=:g, tr=TR, result="testresult")
+    @test did(TestDID, testterm; keep=[:treatname,:tr]) == d
 
     @test_throws ArgumentError @did TestDID
+    @test_throws ArgumentError did(TestDID)
     @test_throws ArgumentError @did TestDID TR
+    @test_throws ArgumentError did(TestDID, TR)
     @test_throws ArgumentError @did TestDID TR PR PR
+    @test_throws ArgumentError did(TestDID, TR, PR, PR)
     @test_throws ArgumentError @did TestDID TR PR 1
+    @test_throws ArgumentError did(TestDID, TR, PR, 1)
     @test_throws ErrorException @did NotImplemented TR PR
+    @test_throws ErrorException did(NotImplemented, TR, PR)
 
     @test_throws ArgumentError @did [keep] TestDID testterm
+    @test_throws ArgumentError did(TestDID, testterm, keep=true)
     @test_throws ArgumentError @did [keep=1] TestDID testterm
+    @test_throws ArgumentError did(TestDID, testterm, keep=1)
     @test_throws ArgumentError @did [keep="treatname"] TestDID testterm
+    @test_throws ArgumentError did(TestDID, testterm, keep="treatname")
 end

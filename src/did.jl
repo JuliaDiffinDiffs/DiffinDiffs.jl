@@ -58,18 +58,18 @@ end
 
 Return a tuple of objects that can be accepted by
 the constructor of [`StatsSpec`](@ref).
-All unspecified arguments are filled with the default values.
-Throw error if any required argument without default value is unspecified.
+If no [`DiffinDiffsEstimator`](@ref) is found in `ntargs`,
+try to select one based on other information.
 
-This function is required for `@specset` to work properly
-and also replaces [`did`](@ref) for the purpose of multiple dispatch.
+This function is required for `@specset` to work properly.
 """
 function valid_didargs(ntargs::NamedTuple)
     if haskey(ntargs, :tr) && haskey(ntargs, :pr)
-        if haskey(ntargs, :d)
-            return valid_didargs(ntargs[:d], ntargs[:tr], ntargs[:pr], ntargs)
+        args = (; (kv for kv in pairs(ntargs) if kv[1]!=:name && kv[1]!=:d)...)
+        if haskey(ntargs, :d) && length(ntargs.d()) > 0
+            return haskey(ntargs, :name) ? ntargs.name : "", ntargs.d, args
         else
-            return valid_didargs(DefaultDID, ntargs[:tr], ntargs[:pr], ntargs)
+            return valid_didargs(DefaultDID, ntargs.tr, ntargs.pr, args)
         end
     else
         throw(ArgumentError("not all required arguments are specified"))
@@ -77,8 +77,8 @@ function valid_didargs(ntargs::NamedTuple)
 end
 
 valid_didargs(d::Type{<:DiffinDiffsEstimator},
-    tr::AbstractTreatment, pr::AbstractParallel, ntargs::NamedTuple) =
-        error("$(typeof(d)) is not implemented for $(typeof(tr)) and $(typeof(pr))")
+    tr::AbstractTreatment, pr::AbstractParallel, ::NamedTuple) =
+        error("$d is not implemented for $(typeof(tr)) and $(typeof(pr))")
 
 didargs(args...; kwargs...) = valid_didargs(parse_didargs(args...; kwargs...))
 didspec(args...; kwargs...) = StatsSpec(didargs(args...; kwargs...)...)
@@ -109,6 +109,21 @@ end
 function did(args...; verbose::Bool=false, keep=nothing, keepall::Bool=false, kwargs...)
     sp = didspec(args...; kwargs...)
     return sp(verbose=verbose, keep=keep, keepall=keepall)
+end
+
+function _parse_kwargs!(options::Expr, args)
+    for arg in args
+        # Assume a symbol means the kwarg takes value true
+        if isa(arg, Symbol)
+            key = Expr(:quote, arg)
+            push!(options.args, Expr(:call, :(=>), key, true))
+        elseif isexpr(arg, :(=))
+            key = Expr(:quote, arg.args[1])
+            push!(options.args, Expr(:call, :(=>), key, arg.args[2]))
+        else
+            throw(ArgumentError("unexpected argument $arg"))
+        end
+    end
 end
 
 """

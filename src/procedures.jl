@@ -13,7 +13,7 @@ function checkdata(data, tr::AbstractTreatment, pr::AbstractParallel,
     weights::Union{Symbol, Nothing}, subset::Union{AbstractVector, Nothing})
 
     istable(data) ||
-        throw(ArgumentError("expected data in a Table, got $(typeof(data))"))
+        throw(ArgumentError("expect `data` being a `Table` while receiving a $(typeof(data))"))
     
     vars = union([treatname], (termvars(t) for t in (tr, pr, yterm, xterms))...)
     esample = BitArray(all(v->!ismissing(getproperty(row, v)), vars) for row in rows(data))
@@ -40,6 +40,8 @@ end
 A [`StatsStep`](@ref) that calls [`DiffinDiffsBase.checkdata`](@ref)
 for some preliminary checks of the input data.
 """
-const CheckData = StatsStep{:CheckData, typeof(checkdata), (:data, :tr, :pr, :yterm, :treatname, :xterms, :weights, :subset), ()}
+const CheckData = StatsStep{:CheckData, typeof(checkdata)}
 
+namedargs(::CheckData) = (data=nothing, tr=nothing, pr=nothing, yterm=nothing,
+    treatname=nothing, xterms=nothing, weights=nothing, subset=nothing)
 
