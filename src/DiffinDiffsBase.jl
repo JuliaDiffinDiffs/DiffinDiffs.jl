@@ -48,6 +48,7 @@ export @fieldequal,
        nevertreated,
        NotYetTreatedParallel,
        notyettreated,
+       treated,
 
        TreatmentTerm,
        treat,
@@ -65,6 +66,7 @@ export @fieldequal,
        proceed,
 
        CheckData,
+       CheckVars,
 
        DiffinDiffsEstimator,
        DefaultDID,

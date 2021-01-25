@@ -1,5 +1,5 @@
 """
-    StatsStep{Alias,F<:Function}
+    StatsStep{Alias, F<:Function}
 
 Specify the function for moving a step in an [`AbstractStatsProcedure`](@ref).
 An instance of `StatsStep` is callable.
@@ -12,7 +12,7 @@ An instance of `StatsStep` is callable.
     (step::StatsStep{A,F})(ntargs::NamedTuple; verbose::Bool=false)
 
 Call an instance of function of type `F` with arguments
-formed by updating `NamedArgs` with `ntargs`.
+formed by updating `NamedTuple` returned by `[`namedargs(step)`](@ref)` with `ntargs`.
 
 A message with the name of the `StatsStep` is printed to `stdout`
 if a keyword `verbose` takes the value `true`
@@ -21,20 +21,30 @@ The value from `ntargs` supersedes the keyword argument
 in case both are specified.
 
 ## Returns
-- `NamedTuple`: named intermidiate results.
+- `NamedTuple`: named intermediate results.
 """
-struct StatsStep{Alias,F<:Function} end
+struct StatsStep{Alias, F<:Function} end
 
 _f(::StatsStep{A,F}) where {A,F} = F.instance
+
+"""
+    namedargs(s::StatsStep)
+
+Return a `NamedTuple` with keys showing the names of arguments
+accepted by `s` and values representing the defaults.
+"""
+namedargs(s::StatsStep) = error("method for $(typeof(s)) is not defined")
 
 _getargs(ntargs::NamedTuple, s::StatsStep) = _update(ntargs, namedargs(s))
 _update(a::NamedTuple{N1}, b::NamedTuple{N2}) where {N1,N2} =
     NamedTuple{N2}(map(n->getfield(sym_in(n, N1) ? a : b, n), N2))
 
+_combinedargs(::StatsStep, ::Any) = ()
+
 function (step::StatsStep{A,F})(ntargs::NamedTuple; verbose::Bool=false) where {A,F}
     haskey(ntargs, :verbose) && (verbose = ntargs.verbose)
     verbose && printstyled("Running ", step, "\n", color=:green)
-    ret = F.instance(_getargs(ntargs, step)...)
+    ret, share = F.instance(_getargs(ntargs, step)..., _combinedargs(step, (ntargs,))...)
     if ret isa NamedTuple
         return merge(ntargs, ret)
     elseif ret === nothing
@@ -56,15 +66,7 @@ function show(io::IO, ::MIME"text/plain", s::StatsStep{A,F}) where {A,F}
 end
 
 """
-    namedargs(s::StatsStep)
-
-Return a `NamedTuple` with keys showing the names of arguments
-accepted by `s` and values representing the defaults.
-"""
-namedargs(s::StatsStep) = error("method for $(typeof(s)) is not defined")
-
-"""
-    AbstractStatsProcedure{Alias,T<:NTuple{N,StatsStep} where N}
+    AbstractStatsProcedure{Alias, T<:NTuple{N,StatsStep} where N}
 
 Supertype for all types specifying the procedure for statistical estimation or inference.
 
@@ -75,7 +77,7 @@ all subtypes of `AbstractStatsProcedure`.
 - `Alias::Symbol`: alias of the type for pretty-printing.
 - `T<:NTuple{N,StatsStep}`: steps involved in the procedure.
 """
-abstract type AbstractStatsProcedure{A,T<:NTuple{N,StatsStep} where N} end
+abstract type AbstractStatsProcedure{Alias, T<:NTuple{N,StatsStep} where N} end
 
 length(::AbstractStatsProcedure{A,T}) where {A,T} = length(T.parameters)
 eltype(::Type{<:AbstractStatsProcedure}) = StatsStep
@@ -109,7 +111,7 @@ function show(io::IO, ::MIME"text/plain", p::AbstractStatsProcedure{A,T}) where 
 end
 
 """
-    SharedStatsStep{T<:StatsStep,I}
+    SharedStatsStep{T<:StatsStep, I}
 
 A [`StatsStep`](@ref) that is possibly shared by
 multiple instances of procedures that are subtypes of [`AbstractStatsProcedure`](@ref).
@@ -119,7 +121,7 @@ See also [`PooledStatsProcedure`](@ref).
 - `T<:StatsStep`: type of the only field `step`.
 - `I`: indices of the procedures that share this step.
 """
-struct SharedStatsStep{T<:StatsStep,I}
+struct SharedStatsStep{T<:StatsStep, I}
     step::T
     function SharedStatsStep(s::StatsStep, pid)
         pid = (unique!(sort!([pid...]))...,)
@@ -130,6 +132,7 @@ end
 _sharedby(::SharedStatsStep{T,I}) where {T,I} = I
 _f(s::SharedStatsStep) = _f(s.step)
 _getargs(ntargs::NamedTuple, s::SharedStatsStep) = _getargs(ntargs, s.step)
+_combinedargs(s::SharedStatsStep, v::AbstractArray) = _combinedargs(s.step, v)
 
 show(io::IO, s::SharedStatsStep) = print(io, s.step)
 
@@ -143,7 +146,7 @@ const SharedStatsSteps = NTuple{N, SharedStatsStep} where N
 const StatsProcedures = NTuple{N, AbstractStatsProcedure} where N
 
 """
-    PooledStatsProcedure{P<:StatsProcedures,S<:SharedStatsSteps}
+    PooledStatsProcedure{P<:StatsProcedures, S<:SharedStatsSteps}
 
 A collection of procedures and shared steps.
 
@@ -155,7 +158,7 @@ See also [`pool`](@ref).
 - `procs::P`: a tuple of instances of subtypes of [`AbstractStatsProcedure`](@ref).
 - `steps::S`: a tuple of [`SharedStatsStep`](@ref) for the procedures in `procs`.
 """
-struct PooledStatsProcedure{P<:StatsProcedures,S<:SharedStatsSteps}
+struct PooledStatsProcedure{P<:StatsProcedures, S<:SharedStatsSteps}
     procs::P
     steps::S
 end
@@ -274,7 +277,7 @@ function show(io::IO, ::MIME"text/plain", ps::PooledStatsProcedure{P,S}) where {
 end
 
 """
-    StatsSpec{Alias,T<:AbstractStatsProcedure}
+    StatsSpec{Alias, T<:AbstractStatsProcedure}
 
 Record the specification for a statistical procedure of type `T`.
 
@@ -297,7 +300,7 @@ or the last value returned by the last [`StatsStep`](@ref) is returned.
 - `keep=nothing`: names (of type `Symbol`) of additional objects to be returned.
 - `keepall::Bool=false`: return all objects returned by each step.
 """
-struct StatsSpec{Alias,T<:AbstractStatsProcedure}
+struct StatsSpec{Alias, T<:AbstractStatsProcedure}
     args::NamedTuple
     StatsSpec(name::Union{Symbol,String},
         T::Type{<:AbstractStatsProcedure}, args::NamedTuple) =
@@ -391,7 +394,7 @@ For end users, `Macro`s that generate `Expr`s for these function calls should be
 
 Optional default arguments are merged
 with the arguments provided for each individual specification
-and replace the default values specified for each procedure.
+and supersede the default values specified for each procedure through [`namedargs`](@ref).
 These default arguments should be specified in the same pattern as
 how arguments are specified for each specification inside the code block,
 as `@specset` processes these arguments by calling
@@ -470,12 +473,18 @@ function proceed(sps::AbstractVector{<:StatsSpec};
         taskids = vcat((gids[steps.procs[i]] for i in _sharedby(step))...)
         tasks = groupview(r->_getargs(r, step), view(traces, taskids))
         for (ins, subtb) in pairs(tasks)
-            ret = _f(step)(ins...)
+            ret, share = _f(step)(ins..., _combinedargs(step, subtb)...)
             ntask += 1
             ntask_total += 1
             if ret !== nothing
-                for i in eachindex(subtb)
-                    subtb[i] = merge(subtb[i], deepcopy(ret))
+                if share
+                    for i in eachindex(subtb)
+                        subtb[i] = merge(subtb[i], ret)
+                    end
+                else
+                    for i in eachindex(subtb)
+                        subtb[i] = merge(subtb[i], deepcopy(ret))
+                    end
                 end
             end
         end

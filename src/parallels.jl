@@ -85,7 +85,7 @@ assume a parallel trends assumption holds over all the relevant time periods.
 abstract type TrendParallel{C,S} <: AbstractParallel{C,S} end
 
 """
-    NeverTreatedParallel{T<:Integer,C,S} <: TrendParallel{C,S}
+    NeverTreatedParallel{C,S,T<:Integer} <: TrendParallel{C,S}
 
 Assume a parallel trends assumption holds between any group
 that received the treatment during the sample periods
@@ -97,14 +97,16 @@ See also [`nevertreated`](@ref).
 - `c::C`: a [`ParallelCondition`](@ref).
 - `s::S`: a [`ParallelStrength`](@ref).
 """
-struct NeverTreatedParallel{T<:Integer,C,S} <: TrendParallel{C,S}
+struct NeverTreatedParallel{C,S,T<:Integer} <: TrendParallel{C,S}
     e::Vector{T}
     c::C
     s::S
     NeverTreatedParallel(e::Vector{T}, c::C, s::S) where
-        {T<:Integer,C<:ParallelCondition,S<:ParallelStrength} =
-            new{T,C,S}(unique!(sort!(e)), c, s)
+        {C<:ParallelCondition,S<:ParallelStrength,T<:Integer} =
+            new{C,S,T}(unique!(sort!(e)), c, s)
 end
+
+treated(pr::NeverTreatedParallel, x) = !(x in pr.e)
 
 show(io::IO, pr::NeverTreatedParallel) =
     print(IOContext(io, :compact=>true), "NeverTreated{", pr.c, ",", pr.s, "}(", pr.e,")")
@@ -156,7 +158,7 @@ A wrapper method of `nevertreated` for working with `@formula`.
 @unpack nevertreated
 
 """
-    NotYetTreatedParallel{T<:Integer,C,S} <: TrendParallel{C,S}
+    NotYetTreatedParallel{C,S,T<:Integer} <: TrendParallel{C,S}
 
 Assume a parallel trends assumption holds between any group
 that received the treatment relatively early
@@ -174,16 +176,18 @@ See also [`notyettreated`](@ref).
     - never-treated groups are included and use indices with smaller values;
     - the sample has a rotating panel structure with periods overlapping with some others.
 """
-struct NotYetTreatedParallel{T<:Integer,C,S} <: TrendParallel{C,S}
+struct NotYetTreatedParallel{C,S,T<:Integer} <: TrendParallel{C,S}
     e::Vector{T}
     emin::Union{Vector{T},Nothing}
     c::C
     s::S
     NotYetTreatedParallel(e::Vector{T}, emin::Union{Vector{T},Nothing}, c::C, s::S) where
-        {T<:Integer,C<:ParallelCondition,S<:ParallelStrength} =
-            new{T,C,S}(unique!(sort!(e)),
+        {C<:ParallelCondition,S<:ParallelStrength,T<:Integer} =
+            new{C,S,T}(unique!(sort!(e)),
                 emin isa Nothing ? emin : unique!(sort!(emin)), c, s)
 end
+
+treated(pr::NotYetTreatedParallel, x) = !(x in pr.e)
 
 function show(io::IO, pr::NotYetTreatedParallel)
     print(IOContext(io, :compact=>true), "NotYetTreated{", pr.c, ",", pr.s, "}(", pr.e, ", ")

@@ -1,55 +1,58 @@
 using DiffinDiffsBase: _f, _getargs, _update,
     _sharedby, _show_args, _args_kwargs, _parse_kwargs!, _spec_walker, proceed
+import DiffinDiffsBase: _getargs, _combinedargs
 
-testvoidstep(a::String) = nothing
+testvoidstep(a::String) = nothing, false
 const TestVoidStep = StatsStep{:TestVoidStep, typeof(testvoidstep)}
 namedargs(::TestVoidStep) = (a="a",)
 
-testregstep(a::String, b::String) = (c=a*b,)
+testregstep(a::String, b::String) = (c=a*b,), false
 const TestRegStep = StatsStep{:TestRegStep, typeof(testregstep)}
 namedargs(::TestRegStep) = (a="a", b="b")
 
-testlaststep(a::String, c::String) = (result=a*c,)
+testlaststep(a::String, c::String) = (result=a*c,), false
 const TestLastStep = StatsStep{:TestLastStep, typeof(testlaststep)}
 namedargs(::TestLastStep) = (a="a", c="b")
 
-testinvalidstep(a::String, b::String) = b
+testarraystep(a::String) = (result=[a],), false
+const TestArrayStep = StatsStep{:TestArrayStep, typeof(testarraystep)}
+namedargs(::TestArrayStep) = (a="a",)
+
+testcombinestep(a::String, bs::String...) = (c=collect(bs),), true
+const TestCombineStep = StatsStep{:TestCombineStep, typeof(testcombinestep)}
+namedargs(::TestCombineStep) = (a="a", b=nothing)
+_getargs(ntargs::NamedTuple, s::TestCombineStep) = _update((a=ntargs.a,), (a="a",))
+_combinedargs(::TestCombineStep, ntargs) = [nt.b for nt in ntargs]
+
+testinvalidstep(a::String, b::String) = b, false
 const TestInvalidStep = StatsStep{:TestInvalidStep, typeof(testinvalidstep)}
-namedargs(::TestInvalidStep) = (a=nothing, b=nothing)
 
 @testset "StatsStep" begin
-    @testset "TestVoidStep" begin
+    @testset "args" begin
+        @test _getargs(NamedTuple(), TestRegStep()) == (a="a", b="b")
+        @test _getargs((a="a1",), TestRegStep()) == (a="a1", b="b")
+        @test _getargs((c="c",), TestRegStep()) == (a="a", b="b")
+
+        @test_throws ErrorException namedargs(TestInvalidStep())
+        @test _combinedargs(TestRegStep(), (a="a",)) == ()
+    end
+
+    @testset "teststeps" begin
+        @test _f(TestVoidStep()) == testvoidstep
+        @test TestVoidStep()((a="a", b="b")) == (a="a", b="b")
+
+        @test TestRegStep()() == (c="ab",)
+        @test TestRegStep()((a="c", b="d")) == (a="c", b="d", c="cd")
+
+        @test TestLastStep()((a="a", b="a", c="ab")) ==
+            (a="a", b="a", c="ab", result="aab")
+        
+        @test TestArrayStep()((a="a",)) == (a="a", result=["a"])
+        @test TestCombineStep()((a="a", b="b")) == (a="a", b="b", c=["b"])
+
         @test sprint(show, TestVoidStep()) == "TestVoidStep"
         @test sprint(show, MIME("text/plain"), TestVoidStep()) ==
             "TestVoidStep (StatsStep that calls testvoidstep)"
-
-        @test _f(TestVoidStep()) == testvoidstep
-        @test TestVoidStep()((a="a", b="b")) == (a="a", b="b")
-    end
-
-    @testset "TestRegStep" begin
-        @test sprint(show, TestRegStep()) == "TestRegStep"
-        @test sprint(show, MIME("text/plain"), TestRegStep()) ==
-            "TestRegStep (StatsStep that calls testregstep)"
-
-        @test _f(TestRegStep()) == testregstep
-        @test TestRegStep()() == (c="ab",)
-        @test TestRegStep()((a="c", b="d")) == (a="c", b="d", c="cd")
-    end
-
-    @testset "TestLastStep" begin
-        @test sprint(show, TestLastStep()) == "TestLastStep"
-        @test sprint(show, MIME("text/plain"), TestLastStep()) ==
-            "TestLastStep (StatsStep that calls testlaststep)"
-        
-        @test _f(TestLastStep()) == testlaststep
-        @test TestLastStep()((a="a", b="a", c="ab")) ==
-            (a="a", b="a", c="ab", result="aab")
-    end
-
-    @testset "TestInvalidStep" begin
-        @test_throws ErrorException TestInvalidStep()((a="a", b="a", c="ab"))
-        @test_throws MethodError TestInvalidStep()((a="a",))
     end
 end
 
@@ -62,6 +65,8 @@ const UP = TestProcedure{:UnitProcedure,Tuple{TestRegStep}}
 const up = UP()
 const NP = TestProcedure{:NullProcedure,Tuple{}}
 const np = NP()
+const CP = TestProcedure{:CombineProcedure,Tuple{TestCombineStep,TestArrayStep}}
+const cp = CP()
 
 @testset "AbstractStatsProcedure" begin
     @test length(rp) == 3
@@ -106,6 +111,7 @@ end
     @test _sharedby(s1) == (1,)
     @test _sharedby(s2) == (2,3)
     @test _f(s1) == testregstep
+    @test _getargs(NamedTuple(), s1) == (a="a", b="b")
 
     @test sprint(show, s1) == "TestRegStep"
     @test sprint(show, MIME("text/plain"), s1) ==
@@ -182,9 +188,9 @@ end
 end
 
 @testset "StatsSpec" begin
-    s1 = StatsSpec("name", RP, (a="a",b="b"))
-    s2 = StatsSpec("", RP, (a="a",b="b"))
-    s3 = StatsSpec("", UP, (a="a",b="b"))
+    s1 = StatsSpec("name", RP, (a="a", b="b"))
+    s2 = StatsSpec("", RP, (a="a", b="b"))
+    s3 = StatsSpec("", UP, (a="a", b="b"))
     s4 = StatsSpec("name", RP, (b="b", a="a"))
     s5 = StatsSpec("name", RP, (b="b", a="a", d="d"))
     @test s1 == s2
@@ -224,11 +230,13 @@ end
 testformatter(nt::NamedTuple) = (haskey(nt, :name) ? nt.name : "", nt.p, (a=nt.a, b=nt.b))
 
 @testset "proceed" begin
-    s1 = StatsSpec("s1", RP, (a="a",b="b"))
+    s1 = StatsSpec("s1", RP, (a="a", b="b"))
     s2 = StatsSpec("s2", RP, NamedTuple())
-    s3 = StatsSpec("s3", RP, (a="a",b="b1"))
-    s4 = StatsSpec("s4", UP, (a="a",b="b"))
-    s5 = StatsSpec("s5", IP, (a="a",b="b"))
+    s3 = StatsSpec("s3", RP, (a="a", b="b1"))
+    s4 = StatsSpec("s4", UP, (a="a", b="b"))
+    s5 = StatsSpec("s5", IP, (a="a", b="b"))
+    s6 = StatsSpec("s6", CP, (a="a", b="b1"))
+    s7 = StatsSpec("s7", CP, (a="a", b="b2"))
 
     @test proceed([s1]) == ["aab"]
     @test proceed([s1,s2], verbose=true) == ["aab", "aab"]
@@ -251,6 +259,13 @@ testformatter(nt::NamedTuple) = (haskey(nt, :name) ? nt.name : "", nt.p, (a=nt.a
             [(a="a", result="aab"), (a="a",)]
     @test proceed([s1,s4], keepall=true) ==
         [(a="a", b="b", c="ab", result="aab"), (a="a", b="b", c="ab")]
+
+    @test proceed([s6], keepall=true) == [(a="a", b="b1", c=["b1"], result=["a"])]
+    ret = proceed([s6,s7], keepall=true)
+    @test ret == [(a="a", b="b1", c=["b1", "b2"], result=["a"]),
+        (a="a", b="b2", c=["b1", "b2"], result=["a"])]
+    @test ret[1].c === ret[2].c
+    @test ret[1].result !== ret[2].result
 end
 
 @testset "@specset" begin
