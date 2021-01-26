@@ -22,13 +22,21 @@ eachterm(@nospecialize(t::AbstractTerm)) = (t,)
 eachterm(@nospecialize(t::NTuple{N, AbstractTerm})) where {N} = t
 
 """
-    c(args...)
+    cb(args...)
 
 Construct a vector from `ConstantTerm`s provided as arguments.
 This method is useful for working with `@formula`.
+
+Note that `@formula` does not accept function calls with empty argument.
+Hence, `cb()` cannot be used to create an empty vector `[]`
+in the expression passed to `@formula`.
+However, passing `cb` (without the parenthesis) to `@formula` will return `[]`
+due to [`unpack`](@ref).
 """
-c(args...) = [arg isa ConstantTerm ? arg.n :
+cb(args...) = [arg isa ConstantTerm ? arg.n :
     throw(ArgumentError("only `ConstantTerm`s are accepted.")) for arg in args]
+
+cb() = []
 
 """
     unpack(t::ConstantTerm)
@@ -40,15 +48,15 @@ unpack(t::ConstantTerm) = t.n
 """
     unpack(t::Term)
 
-Call the method of function named `t.sym` with no argument if it exists in `Main`;
-return `t.sym` otherwise.
-
-This method allows specifying functions with no argument in `@formula`.
+If `t.sym` is the name of an object defined in `Main`,
+either call its method with no argument if it exists
+or return the object itself.
+Otherwise, return `t.sym`.
 """
 function unpack(t::Term)
     if isdefined(Main, t.sym)
         f = getfield(Main,  t.sym)
-        hasmethod(f, Tuple{}) ? f() : t
+        hasmethod(f, Tuple{}) ? f() : f
     else
         return t.sym
     end

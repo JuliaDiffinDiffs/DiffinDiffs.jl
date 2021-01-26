@@ -16,6 +16,11 @@ end
 @testset "nevertreated" begin
     nt0 = NeverTreatedParallel([0], Unconditional(), Exact())
     nt1 = NeverTreatedParallel([0,1], Unconditional(), Exact())
+    
+    @testset "inner constructor" begin
+        @test NeverTreatedParallel([1,1,0], Unconditional(), Exact()) == nt1
+        @test_throws ErrorException NeverTreatedParallel([], Unconditional(), Exact())
+    end
 
     @testset "without @formula" begin
         @test nevertreated(0) == nt0
@@ -33,14 +38,14 @@ end
     @testset "with @formula" begin
         @test nevertreated(term(0)) == nt0
 
-        f = @formula(y ~ nevertreated(c(0,1)))
+        f = @formula(y ~ nevertreated(cb(0,1)))
         @test nevertreated(f.rhs.args_parsed[1]) == nt1
 
         f = @formula(y ~ treat(g, ttreat(t, 0), nevertreated(0)))
         t = parse_treat(f)[1]
         @test t.pr == nt0
 
-        f = @formula(y ~ treat(g, ttreat(t, 0), nevertreated(c(0,1))))
+        f = @formula(y ~ treat(g, ttreat(t, 0), nevertreated(cb(0,1))))
         t = parse_treat(f)[1]
         @test t.pr == nt1
 
@@ -66,23 +71,29 @@ end
     end
 
     @testset "show" begin
-        @test sprint(show, nt0) == "NeverTreated{U,P}([0])"
+        @test sprint(show, nt0) == "NeverTreated{U,P}(0,)"
         @test sprint(show, MIME("text/plain"), nt0) == """
             Parallel trends with any never-treated group:
-              Never-treated groups: [0]"""
+              Never-treated groups: (0,)"""
 
-        @test sprint(show, nt1) == "NeverTreated{U,P}([0, 1])"
+        @test sprint(show, nt1) == "NeverTreated{U,P}(0, 1)"
         @test sprint(show, MIME("text/plain"), nt1) == """
             Parallel trends with any never-treated group:
-              Never-treated groups: [0, 1]"""
+              Never-treated groups: (0, 1)"""
     end
 end
 
 @testset "notyettreated" begin
-    ny0 = NotYetTreatedParallel([0], nothing, Unconditional(), Exact())
-    ny1 = NotYetTreatedParallel([0,1], nothing, Unconditional(), Exact())
+    ny0 = NotYetTreatedParallel([0], [0], Unconditional(), Exact())
+    ny1 = NotYetTreatedParallel([0,1], [0], Unconditional(), Exact())
     ny2 = NotYetTreatedParallel([0,1], [0], Unconditional(), Exact())
     ny3 = NotYetTreatedParallel([0,1], [0,1], Unconditional(), Exact())
+
+    @testset "inner constructor" begin
+        @test NotYetTreatedParallel([1,1,0], [1,0,0], Unconditional(), Exact()) == ny3
+        @test_throws ErrorException NotYetTreatedParallel([0], [], Unconditional(), Exact())
+        @test_throws ErrorException NotYetTreatedParallel([], [0], Unconditional(), Exact())
+    end
 
     @testset "without @formula" begin
         @test notyettreated(0) == ny0
@@ -91,27 +102,27 @@ end
         @test notyettreated(Set([0,1]), 0:1) == ny3
         @test notyettreated([0,1,1], [0,1,1]) == ny3
 
-        @test notyettreated(0, nothing, Unconditional(), Exact()) == ny0
-        @test notyettreated(0, nothing, c=Unconditional(), s=Exact()) == ny0
-        @test notyettreated([0,1], nothing, Unconditional(), Exact()) == ny1
-        @test notyettreated([0,1], nothing, c=Unconditional(), s=Exact()) == ny1
+        @test notyettreated(0, 0, Unconditional(), Exact()) == ny0
+        @test notyettreated(0, c=Unconditional(), s=Exact()) == ny0
+        @test notyettreated([0,1], [0], Unconditional(), Exact()) == ny1
+        @test notyettreated([0,1], c=Unconditional(), s=Exact()) == ny1
     end
 
     @testset "with @formula" begin
         @test notyettreated(term(0)) == ny0
         
-        f = @formula(y ~ notyettreated(c(0,1)))
+        f = @formula(y ~ notyettreated(cb(0,1)))
         @test notyettreated(f.rhs.args_parsed[1]) == ny1
 
         f = @formula(y ~ treat(g, ttreat(t, 0), notyettreated(0)))
         t = parse_treat(f)[1]
         @test t.pr == ny0
 
-        f = @formula(y ~ treat(g, ttreat(t, 0), notyettreated(c(0,1), 0)))
+        f = @formula(y ~ treat(g, ttreat(t, 0), notyettreated(cb(0,1), 0)))
         t = parse_treat(f)[1]
         @test t.pr == ny2
 
-        f = @formula(y ~ treat(g, ttreat(t, 0), notyettreated(c(0,1), c(0,1))))
+        f = @formula(y ~ treat(g, ttreat(t, 0), notyettreated(cb(0,1), cb(0,1))))
         t = parse_treat(f)[1]
         @test t.pr == ny3
 
@@ -135,39 +146,39 @@ end
         t = parse_treat(f)[1]
         @test t.pr == ny0
 
-        f = @formula(y ~ treat(g, ttreat(t, 0), notyettreated(c(0,1), 0, Unconditional, Exact)))
+        f = @formula(y ~ treat(g, ttreat(t, 0), notyettreated(cb(0,1), 0, Unconditional, Exact)))
         t = parse_treat(f)[1]
         @test t.pr == ny2
 
-        f = @formula(y ~ treat(g, ttreat(t, 0), notyettreated(exact, unconditional, c(0,1), c(0,1))))
+        f = @formula(y ~ treat(g, ttreat(t, 0), notyettreated(exact, unconditional, cb(0,1), cb(0,1))))
         t = parse_treat(f)[1]
         @test t.pr == ny3
     end
 
     @testset "show" begin
-        @test sprint(show, ny0) == "NotYetTreated{U,P}([0], NA)"
+        @test sprint(show, ny0) == "NotYetTreated{U,P}(0,)"
         @test sprint(show, MIME("text/plain"), ny0) == """
             Parallel trends with any not-yet-treated group:
-              Not-yet-treated groups: [0]
-              Treated since: not specified"""
+              Not-yet-treated groups: (0,)
+              Treated since: (0,)"""
 
-        @test sprint(show, ny1) == "NotYetTreated{U,P}([0, 1], NA)"
+        @test sprint(show, ny1) == "NotYetTreated{U,P}(0, 1)"
         @test sprint(show, MIME("text/plain"), ny1) == """
             Parallel trends with any not-yet-treated group:
-              Not-yet-treated groups: [0, 1]
-              Treated since: not specified"""
+              Not-yet-treated groups: (0, 1)
+              Treated since: (0,)"""
 
-        @test sprint(show, ny2) == "NotYetTreated{U,P}([0, 1], [0])"
+        @test sprint(show, ny2) == "NotYetTreated{U,P}(0, 1)"
         @test sprint(show, MIME("text/plain"), ny2) == """
             Parallel trends with any not-yet-treated group:
-              Not-yet-treated groups: [0, 1]
-              Treated since: [0]"""
+              Not-yet-treated groups: (0, 1)
+              Treated since: (0,)"""
 
-        @test sprint(show, ny3) == "NotYetTreated{U,P}([0, 1], [0, 1])"
+        @test sprint(show, ny3) == "NotYetTreated{U,P}(0, 1)"
         @test sprint(show, MIME("text/plain"), ny3) == """
             Parallel trends with any not-yet-treated group:
-              Not-yet-treated groups: [0, 1]
-              Treated since: [0, 1]"""
+              Not-yet-treated groups: (0, 1)
+              Treated since: (0, 1)"""
     end
 end
 

@@ -1,11 +1,4 @@
 """
-    EleOrVec{T}
-
-Union type of type `T` and `Vector{T}`.
-"""
-const EleOrVec{T} = Union{T,Vector{T}}
-
-"""
     TreatmentSharpness
 
 Supertype for all types specifying the sharpness of treatment.
@@ -21,7 +14,7 @@ Assume identical treatment within each treatment group.
 """
 struct SharpDesign <: TreatmentSharpness end
 
-show(io::IO, S::SharpDesign) =
+show(io::IO, ::SharpDesign) =
     get(io, :compact, false) ? print(io, "S") : print(io, "Sharp")
 
 """
@@ -41,38 +34,37 @@ abstract type AbstractTreatment end
 @fieldequal AbstractTreatment
 
 """
-    DynamicTreatment{E<:EleOrVec{<:Integer}, S<:TreatmentSharpness} <: AbstractTreatment
+    DynamicTreatment{S<:TreatmentSharpness, E<:Tuple} <: AbstractTreatment
 
 Specify an absorbing binary treatment with effects allowed to evolve over time.
 See also [`dynamic`](@ref).
 
 # Fields
 - `time::Symbol`: column name of data representing calendar time.
-- `exc::E`: excluded relative time (either an integer or vector of integers).
-- `s::S`: a [`TreatmentSharpness`](@ref).
+- `exc::E`: excluded relative time.
+- `s::S`: an instance of [`TreatmentSharpness`](@ref).
 """
-struct DynamicTreatment{E<:EleOrVec{<:Integer}, S<:TreatmentSharpness} <: AbstractTreatment
+struct DynamicTreatment{S<:TreatmentSharpness, E<:Tuple} <: AbstractTreatment
     time::Symbol
     exc::E
     s::S
     function DynamicTreatment(time::Symbol, exc, s::TreatmentSharpness)
-        exc = unique!(sort!([exc...]))
-        length(exc)==1 && (exc = exc[1])
-        return new{typeof(exc),typeof(s)}(time, exc, s)
+        exc = exc !== nothing ? (unique!(sort!([exc...]))...,) : ()
+        return new{typeof(s),typeof(exc)}(time, exc, s)
     end
 end
 
 show(io::IO, tr::DynamicTreatment) =
-    print(IOContext(io, :compact=>true), "Dynamic{", tr.s, "}(", tr.exc, ")")
+    print(IOContext(io, :compact=>true), "Dynamic{", tr.s, "}", tr.exc)
 
 function show(io::IO, ::MIME"text/plain", tr::DynamicTreatment)
     println(io, tr.s, " dynamic treatment:")
     println(io, "  column name of time variable: ", tr.time)
-    print(io, "  excluded relative time: ", tr.exc)
+    print(io, "  excluded relative time: ", tr.exc===() ? "none" : tr.exc)
 end
 
 """
-    dynamic(time::Symbol, exc::iter{<:Integer}, s::TreatmentSharpness=sharp())
+    dynamic(time::Symbol, exc, s::TreatmentSharpness=sharp())
 
 Construct a [`DynamicTreatment`](@ref) with fields set by the arguments.
 By default, `s` is set as [`SharpDesign`](@ref).
@@ -84,20 +76,20 @@ a wrapper method of `dynamic` calls this method.
 julia> dynamic(:month, -1)
 Sharp dynamic treatment:
   column name of time variable: month
-  excluded relative time: -1
+  excluded relative time: (-1,)
 
 julia> typeof(dynamic(:month, -1))
-DynamicTreatment{Int64,SharpDesign}
+DynamicTreatment{SharpDesign,Tuple{Int64}}
 
 julia> dynamic(:month, -3:-1)
 Sharp dynamic treatment:
   column name of time variable: month
-  excluded relative time: [-3, -2, -1]
+  excluded relative time: (-3, -2, -1)
 
 julia> dynamic(:month, [-2,-1], sharp())
 Sharp dynamic treatment:
   column name of time variable: month
-  excluded relative time: [-2, -1]
+  excluded relative time: (-2, -1)
 ```
 """
 dynamic(time::Symbol, exc, s::TreatmentSharpness=sharp()) =

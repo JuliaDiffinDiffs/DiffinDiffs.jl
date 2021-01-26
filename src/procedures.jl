@@ -19,7 +19,7 @@ function checkdata(data, subset::Union{AbstractVector, Nothing},
     end
 
     if weights !== nothing
-        colweights = getcolumn(columns(data), weights)
+        colweights = getcolumn(data, weights)
         esample .&= .!ismissing.(colweights) .& (colweights .> 0)
     end
     
@@ -56,9 +56,9 @@ function overlap!(esample::BitArray, tr_rows::BitArray, tr::DynamicTreatment,
     overlap_time, _c, _t = _overlaptime(tr, tr_rows, data)
     timetype = eltype(overlap_time)
     if timetype <: Integer
-        emin = pr.emin === nothing ? minimum(pr.e) : pr.emin[1]
-        valid_cohort = filter(x -> x < emin || x in pr.e, overlap_time)
-        filter!(x -> x < emin, overlap_time)
+        ecut = pr.ecut === nothing ? minimum(pr.e) : pr.ecut[1]
+        valid_cohort = filter(x -> x < ecut || x in pr.e, overlap_time)
+        filter!(x -> x < ecut, overlap_time)
         esample .&= (getcolumn(data, tr.time).∈(overlap_time,)) .&
             (getcolumn(data, treatname).∈(valid_cohort,))
     end
@@ -66,13 +66,13 @@ function overlap!(esample::BitArray, tr_rows::BitArray, tr::DynamicTreatment,
 end
 
 """
-    checkvars(args...)
+    checkvars!(args...)
 
-Return rows with observations that are nonmissing and satisfy the overlap condition
-and rows for observations from treated units.
+Exclude rows with missing data or violate the overlap condition
+and find rows with data from treated units.
 See also [`CheckVars`](@ref).
 """
-function checkvars(data, tr::AbstractTreatment, pr::AbstractParallel,
+function checkvars!(data, tr::AbstractTreatment, pr::AbstractParallel,
         yterm::AbstractTerm, treatname::Symbol, treatintterms::TupleTerm,
         xterms::TupleTerm, esample::BitArray)
 
@@ -87,7 +87,7 @@ function checkvars(data, tr::AbstractTreatment, pr::AbstractParallel,
     tr_rows = falses(length(esample))
     @inbounds for i in eachindex(esample)
         if esample[i]
-            if treated(pr, getcolumn(data, treatname)[i])
+            if istreated(pr, getcolumn(data, treatname)[i])
                 esample[i] = all(v->!ismissing(getcolumn(data, v)[i]), treatedvars)
                 esample[i] && (tr_rows[i] = true)
             else
@@ -104,9 +104,9 @@ end
 """
     CheckVars <: StatsStep
 
-Call [`DiffinDiffsBase.checkvars`](@ref) for obtaining valid rows from relevant columns.
+Call [`DiffinDiffsBase.checkvars!`](@ref) to exclude invalid rows for relevant variables.
 """
-const CheckVars = StatsStep{:CheckVars, typeof(checkvars)}
+const CheckVars = StatsStep{:CheckVars, typeof(checkvars!)}
 
 namedargs(::CheckVars) = (data=nothing, tr=nothing, pr=nothing,
     yterm=nothing, treatname=nothing, treatintterms=(), xterms=(), esample=nothing)

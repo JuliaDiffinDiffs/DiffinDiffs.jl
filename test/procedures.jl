@@ -1,4 +1,4 @@
-using DiffinDiffsBase: _f, checkdata, checkvars
+using DiffinDiffsBase: _f, checkdata, checkvars!
 
 @testset "CheckData" begin
     @testset "checkdata" begin
@@ -36,20 +36,20 @@ using DiffinDiffsBase: _f, checkdata, checkvars
 end 
 
 @testset "CheckVars" begin
-    @testset "checkvars" begin
+    @testset "checkvars!" begin
         hrs = exampledata("hrs")
         nt = (data=hrs, tr=dynamic(:wave, -1), pr=nevertreated(11), yterm=term(:oop_spend),
             treatname=:wave_hosp, treatintterms=(), xterms=(), esample=trues(size(hrs,1)))
-        @test checkvars(nt...) == ((esample=trues(size(hrs,1)),
+        @test checkvars!(nt...) == ((esample=trues(size(hrs,1)),
             tr_rows=hrs.wave_hosp.!=11), false)
         nt = (data=hrs, tr=dynamic(:wave, -1), pr=notyettreated(11), yterm=term(:oop_spend),
             treatname=:wave_hosp, treatintterms=(), xterms=(), esample=trues(size(hrs,1)))
-        @test checkvars(nt...) == ((esample=hrs.wave.!=11,
+        @test checkvars!(nt...) == ((esample=hrs.wave.!=11,
             tr_rows=(hrs.wave_hosp.!=11).&(hrs.wave.!=11)), false)
         nt = (data=hrs, tr=dynamic(:wave, -1), pr=notyettreated(11, 10),
             yterm=term(:oop_spend), treatname=:wave_hosp, treatintterms=(), xterms=(),
             esample=trues(size(hrs,1)))
-        @test checkvars(nt...) ==
+        @test checkvars!(nt...) ==
             ((esample=.!(hrs.wave_hosp.∈(10,)).& .!(hrs.wave.∈((10,11),)),
             tr_rows=(.!(hrs.wave_hosp.∈((10,11),)).& .!(hrs.wave.∈((10,11),)))), false)
     end
@@ -57,9 +57,9 @@ end
     @testset "StatsStep" begin
         @test sprint(show, CheckVars()) == "CheckVars"
         @test sprint(show, MIME("text/plain"), CheckVars()) ==
-            "CheckVars (StatsStep that calls DiffinDiffsBase.checkvars)"
+            "CheckVars (StatsStep that calls DiffinDiffsBase.checkvars!)"
 
-        @test _f(CheckVars()) == checkvars
+        @test _f(CheckVars()) == checkvars!
         @test namedargs(CheckVars()) == (data=nothing, tr=nothing, pr=nothing,
             yterm=nothing, treatname=nothing, treatintterms=(), xterms=(), esample=nothing)
 

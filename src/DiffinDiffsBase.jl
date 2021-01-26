@@ -4,11 +4,10 @@ using Combinatorics: combinations
 using CSV: File
 using MacroTools: @capture, isexpr, postwalk
 using Reexport
-using StatsBase
 @reexport using StatsModels
 using StatsModels: TupleTerm
 using SplitApplyCombine: groupfind, groupview
-using Tables: columntable, istable, rows, columns, getcolumn
+using Tables: istable, getcolumn
 
 import Base: ==, show, union
 import Base: eltype, firstindex, lastindex, getindex, iterate, length, sym_in
@@ -19,14 +18,11 @@ export TupleTerm
 
 export @fieldequal,
        eachterm,
-       c,
-       unpack,
-       kwarg,
+       cb,
        @unpack,
        ≊,
        exampledata,
 
-       EleOrVec,
        TreatmentSharpness,
        SharpDesign,
        sharp,
@@ -48,7 +44,7 @@ export @fieldequal,
        nevertreated,
        NotYetTreatedParallel,
        notyettreated,
-       treated,
+       istreated,
 
        TreatmentTerm,
        treat,

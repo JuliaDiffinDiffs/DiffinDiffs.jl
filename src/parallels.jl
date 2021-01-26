@@ -16,7 +16,7 @@ Assume some notion of parallel holds without conditions.
 """
 struct Unconditional <: ParallelCondition end
 
-show(io::IO, C::Unconditional) =
+show(io::IO, ::Unconditional) =
     get(io, :compact, false) ? print(io, "U") : print(io, "Unconditional")
 
 """
@@ -50,7 +50,7 @@ Assume some notion of parallel holds exactly.
 """
 struct Exact <: ParallelStrength end
 
-show(io::IO, S::Exact) =
+show(io::IO, ::Exact) =
     get(io, :compact, false) ? print(io, "P") : print(io, "Parallel")
 
 """
@@ -68,11 +68,11 @@ Supertype for all types assuming some notion of parallel holds approximately.
 abstract type Approximate <: ParallelStrength end
 
 """
-    AbstractParallel{C<:ParallelCondition,S<:ParallelStrength}
+    AbstractParallel{C<:ParallelCondition, S<:ParallelStrength}
 
 Supertype for all parallel types.
 """
-abstract type AbstractParallel{C<:ParallelCondition,S<:ParallelStrength} end
+abstract type AbstractParallel{C<:ParallelCondition, S<:ParallelStrength} end
 
 @fieldequal AbstractParallel
 
@@ -85,7 +85,7 @@ assume a parallel trends assumption holds over all the relevant time periods.
 abstract type TrendParallel{C,S} <: AbstractParallel{C,S} end
 
 """
-    NeverTreatedParallel{C,S,T<:Integer} <: TrendParallel{C,S}
+    NeverTreatedParallel{C,S,T<:Tuple} <: TrendParallel{C,S}
 
 Assume a parallel trends assumption holds between any group
 that received the treatment during the sample periods
@@ -93,23 +93,25 @@ and a group that did not receive any treatment in any sample period.
 See also [`nevertreated`](@ref).
 
 # Fields
-- `e::Vector{T}`: group indices for units that did not receive any treatment.
-- `c::C`: a [`ParallelCondition`](@ref).
-- `s::S`: a [`ParallelStrength`](@ref).
+- `e::T`: group indices for units that did not receive any treatment.
+- `c::C`: an instance of [`ParallelCondition`](@ref).
+- `s::S`: an instance of [`ParallelStrength`](@ref).
 """
-struct NeverTreatedParallel{C,S,T<:Integer} <: TrendParallel{C,S}
-    e::Vector{T}
+struct NeverTreatedParallel{C,S,T<:Tuple} <: TrendParallel{C,S}
+    e::T
     c::C
     s::S
-    NeverTreatedParallel(e::Vector{T}, c::C, s::S) where
-        {C<:ParallelCondition,S<:ParallelStrength,T<:Integer} =
-            new{C,S,T}(unique!(sort!(e)), c, s)
+    function NeverTreatedParallel(e, c::ParallelCondition, s::ParallelStrength)
+        e = (unique!(sort!([e...]))...,)
+        isempty(e) && error("field `e` cannot be empty") 
+        return new{typeof(c),typeof(s),typeof(e)}(e, c, s)
+    end
 end
 
-treated(pr::NeverTreatedParallel, x) = !(x in pr.e)
+istreated(pr::NeverTreatedParallel, x) = !(x in pr.e)
 
 show(io::IO, pr::NeverTreatedParallel) =
-    print(IOContext(io, :compact=>true), "NeverTreated{", pr.c, ",", pr.s, "}(", pr.e,")")
+    print(IOContext(io, :compact=>true), "NeverTreated{", pr.c, ",", pr.s, "}", pr.e)
 
 function show(io::IO, ::MIME"text/plain", pr::NeverTreatedParallel)
     println(io, pr.s, " trends with any never-treated group:")
@@ -118,11 +120,10 @@ function show(io::IO, ::MIME"text/plain", pr::NeverTreatedParallel)
 end
 
 """
-    nevertreated(itr, c::ParallelCondition, s::ParallelStrength)
-    nevertreated(itr; c=Unconditional(), s=Exact())
+    nevertreated(e, c::ParallelCondition, s::ParallelStrength)
+    nevertreated(e; c=Unconditional(), s=Exact())
 
-Construct a [`NeverTreatedParallel`](@ref) with field `e`
-set by unique elements in `itr`.
+Construct a [`NeverTreatedParallel`](@ref) with fields set by the arguments.
 By default, `c` is set as [`Unconditional()`](@ref)
 and `s` is set as [`Exact()`](@ref).
 When working with `@formula`,
@@ -132,23 +133,23 @@ a wrapper method of `nevertreated` calls this method.
 ```jldoctest; setup = :(using DiffinDiffsBase)
 julia> nevertreated(-1)
 Parallel trends with any never-treated group:
-  Never-treated groups: [-1]
+  Never-treated groups: (-1,)
 
 julia> typeof(nevertreated(-1))
-NeverTreatedParallel{Int64,Unconditional,Exact}
+NeverTreatedParallel{Unconditional,Exact,Tuple{Int64}}
 
 julia> nevertreated([-1, 0])
 Parallel trends with any never-treated group:
-  Never-treated groups: [-1, 0]
+  Never-treated groups: (-1, 0)
 
 julia> nevertreated([-1, 0]) == nevertreated(-1:0) == nevertreated(Set([-1, 0]))
 true
 ```
 """
-nevertreated(itr, c::ParallelCondition, s::ParallelStrength) =
-    NeverTreatedParallel([itr...], c, s)
-nevertreated(itr; c::ParallelCondition=Unconditional(), s::ParallelStrength=Exact()) =
-    NeverTreatedParallel([itr...], c, s)
+nevertreated(e, c::ParallelCondition, s::ParallelStrength) =
+    NeverTreatedParallel(e, c, s)
+nevertreated(e; c::ParallelCondition=Unconditional(), s::ParallelStrength=Exact()) =
+    NeverTreatedParallel(e, c, s)
 
 """
     nevertreated(ts::AbstractTerm...)
@@ -158,7 +159,7 @@ A wrapper method of `nevertreated` for working with `@formula`.
 @unpack nevertreated
 
 """
-    NotYetTreatedParallel{C,S,T<:Integer} <: TrendParallel{C,S}
+    NotYetTreatedParallel{C,S,T1<:Tuple,T2<:Tuple} <: TrendParallel{C,S}
 
 Assume a parallel trends assumption holds between any group
 that received the treatment relatively early
@@ -166,48 +167,49 @@ and any group that received the treatment relatively late (or never receved).
 See also [`notyettreated`](@ref).
 
 # Fields
-- `e::Vector{T}`: group indices for units that received the treatment relatively late.
-- `emin::Union{Vector{T},Nothing}`: user-specified period(s) when units in a group in `e` started to receive treatment.
-- `c::C`: a [`ParallelCondition`](@ref).
-- `s::S`: a [`ParallelStrength`](@ref).
+- `e::T1`: group indices for units that received the treatment relatively late.
+- `ecut::T2`: user-specified period(s) when units in a group in `e` started to receive treatment.
+- `c::C`: an instance of [`ParallelCondition`](@ref).
+- `s::S`: an instance of [`ParallelStrength`](@ref).
 
 !!! note
-    `emin` could be different from `minimum(e)` if
+    `ecut` could be different from `minimum(e)` if
     - never-treated groups are included and use indices with smaller values;
     - the sample has a rotating panel structure with periods overlapping with some others.
 """
-struct NotYetTreatedParallel{C,S,T<:Integer} <: TrendParallel{C,S}
-    e::Vector{T}
-    emin::Union{Vector{T},Nothing}
+struct NotYetTreatedParallel{C,S,T1<:Tuple,T2<:Tuple} <: TrendParallel{C,S}
+    e::T1
+    ecut::T2
     c::C
     s::S
-    NotYetTreatedParallel(e::Vector{T}, emin::Union{Vector{T},Nothing}, c::C, s::S) where
-        {C<:ParallelCondition,S<:ParallelStrength,T<:Integer} =
-            new{C,S,T}(unique!(sort!(e)),
-                emin isa Nothing ? emin : unique!(sort!(emin)), c, s)
+    function NotYetTreatedParallel(e, ecut, c::ParallelCondition, s::ParallelStrength)
+        e = (unique!(sort!([e...]))...,)
+        isempty(e) && error("field `e` cannot be empty")
+        ecut = (unique!(sort!([ecut...]))...,)
+        isempty(ecut) && error("field `ecut` cannot be empty")
+        return new{typeof(c),typeof(s),typeof(e),typeof(ecut)}(e, ecut, c, s)
+    end
 end
 
-treated(pr::NotYetTreatedParallel, x) = !(x in pr.e)
+istreated(pr::NotYetTreatedParallel, x) = !(x in pr.e)
 
 function show(io::IO, pr::NotYetTreatedParallel)
-    print(IOContext(io, :compact=>true), "NotYetTreated{", pr.c, ",", pr.s, "}(", pr.e, ", ")
-    print(IOContext(io, :compact=>true), pr.emin isa Nothing ? "NA" : pr.emin, ")")
+    print(IOContext(io, :compact=>true), "NotYetTreated{", pr.c, ",", pr.s, "}", pr.e)
 end
 
 function show(io::IO, ::MIME"text/plain", pr::NotYetTreatedParallel)
     println(io, pr.s, " trends with any not-yet-treated group:")
     println(io, "  Not-yet-treated groups: ", pr.e)
-    print(io, "  Treated since: ", pr.emin isa Nothing ? "not specified" : pr.emin)
+    print(io, "  Treated since: ", pr.ecut)
     pr.c isa Unconditional || print(io, "\n  ", pr.c)
 end
 
 """
-    notyettreated(itr, emin, c::ParallelCondition, s::ParallelStrength)
-    notyettreated(itr, emin=nothing; c=Unconditional(), s=Exact())
+    notyettreated(e, ecut, c::ParallelCondition, s::ParallelStrength)
+    notyettreated(e, ecut=minimum(e); c=Unconditional(), s=Exact())
 
 Construct a [`NotYetTreatedParallel`](@ref) with
-elements in `itr` for field `e` and optional `emin`
-if `emin` is not `minimum(e)`.
+fields set by the arguments.
 By default, `c` is set as [`Unconditional()`](@ref)
 and `s` is set as [`Exact()`](@ref).
 When working with `@formula`,
@@ -217,28 +219,28 @@ a wrapper method of `notyettreated` calls this method.
 ```jldoctest; setup = :(using DiffinDiffsBase) 
 julia> notyettreated(5)
 Parallel trends with any not-yet-treated group:
-  Not-yet-treated groups: [5]
-  Treated since: not specified
+  Not-yet-treated groups: (5,)
+  Treated since: (5,)
 
 julia> typeof(notyettreated(5))
-NotYetTreatedParallel{Int64,Unconditional,Exact}
+NotYetTreatedParallel{Unconditional,Exact,Tuple{Int64},Tuple{Int64}}
 
 julia> notyettreated([-1, 5, 6], 5)
 Parallel trends with any not-yet-treated group:
-  Not-yet-treated groups: [-1, 5, 6]
-  Treated since: [5]
+  Not-yet-treated groups: (-1, 5, 6)
+  Treated since: (5,)
 
 julia> notyettreated([4, 5, 6], [4, 5, 6])
 Parallel trends with any not-yet-treated group:
-  Not-yet-treated groups: [4, 5, 6]
-  Treated since: [4, 5, 6]
+  Not-yet-treated groups: (4, 5, 6)
+  Treated since: (4, 5, 6)
 ```
 """
-notyettreated(itr, emin, c::ParallelCondition, s::ParallelStrength) =
-    NotYetTreatedParallel([itr...], emin isa Nothing ? emin : [emin...], c, s)
-notyettreated(itr, emin=nothing;
+notyettreated(e, ecut, c::ParallelCondition, s::ParallelStrength) =
+    NotYetTreatedParallel(e, ecut, c, s)
+notyettreated(e, ecut=minimum(e);
     c::ParallelCondition=Unconditional(), s::ParallelStrength=Exact()) =
-        NotYetTreatedParallel([itr...], emin isa Nothing ? emin : [emin...], c, s)
+        NotYetTreatedParallel(e, ecut, c, s)
 
 """
     notyettreated(ts::AbstractTerm...)
