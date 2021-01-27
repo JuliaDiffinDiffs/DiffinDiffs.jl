@@ -31,9 +31,8 @@ testresult(::AbstractTreatment, ::String) = ((result="testresult",), false)
 const TestResult = StatsStep{:TestResult, typeof(testresult)}
 namedargs(::TestResult) = (tr=nothing, str=nothing)
 
-const NotImplemented = DiffinDiffsEstimator{:NotImplemented, Tuple{}}
-
 const TestDID = DiffinDiffsEstimator{:TestDID, Tuple{TestStep,TestResult}}
+const NotImplemented = DiffinDiffsEstimator{:NotImplemented, Tuple{}}
 
 const TR = TestTreatment(:t, 0)
 const PR = TestParallel(0)

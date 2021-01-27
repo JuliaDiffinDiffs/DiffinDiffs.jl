@@ -116,7 +116,7 @@ The order of the arguments is irrelevant.
 - `args... kwargs...`: a list of arguments to be processed by [`parse_didargs`](@ref) and [`valid_didargs`](@ref).
 
 # Notes
-When used outside [`@specset`](@ref),
+When expanded outside [`@specset`](@ref),
 a [`StatsSpec`](@ref) is constructed and then estimated by calling this instance.
 Options for [`StatsSpec`] can be provided in a bracket `[...]`
 as the first argument after `@did` with each option separated by white space.
@@ -124,7 +124,7 @@ For options that take a Boolean value,
 specifying the name of the option is enough for setting the value to be true.
 By default, only a result object that is a subtype of [`DIDResult`](@ref) is returned.
 
-When used inside [`@specset`](@ref),
+When expanded inside [`@specset`](@ref),
 `@did` informs [`@specset`](@ref) the methods for processing the arguments.
 Any option specified in the bracket is ignored.
 

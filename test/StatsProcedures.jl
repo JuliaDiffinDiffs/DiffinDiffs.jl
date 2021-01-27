@@ -215,6 +215,8 @@ end
 
     s6 = StatsSpec("", NP, NamedTuple())
     @test s6() === nothing
+    @test s6(keepall=true) == NamedTuple()
+    @test s6(keep=:result) == NamedTuple()
 
     @test sprint(show, s1) == "name"
     @test sprint(show, s2) == "unnamed"
@@ -244,15 +246,15 @@ testformatter(nt::NamedTuple) = (haskey(nt, :name) ? nt.name : "", nt.p, (a=nt.a
     s5 = StatsSpec("s5", IP, (a="a", b="b"))
     s6 = StatsSpec("s6", CP, (a="a", b="b1"))
     s7 = StatsSpec("s7", CP, (a="a", b="b2"))
-    s8 = StatsSpec("s8", EP, (a="a", b="b"))
-
+    s8 = StatsSpec("s8", NP, NamedTuple())
+    s9 = StatsSpec("s9", EP, (a="a", b="b"))
+    
     @test proceed([s1]) == ["aab"]
     @test proceed([s1,s2], verbose=true) == ["aab", "aab"]
     @test proceed([s1,s3], verbose=true) == ["aab", "aab1"]
     @test proceed([s1,s4], verbose=true) == ["aab", "ab"]
     @test proceed([s1,s5], verbose=true) == ["aab", "aab"]
     @test proceed([s1,s4,s5], verbose=true) == ["aab", "ab", "aab"]
-    @test_throws ArgumentError proceed(StatsSpec[])
 
     @test proceed([s1], keep=:a) == [(a="a",result="aab")]
     @test proceed([s1], keep=[:a,:b]) == [(a="a", b="b", result="aab")]
@@ -275,7 +277,12 @@ testformatter(nt::NamedTuple) = (haskey(nt, :name) ? nt.name : "", nt.p, (a=nt.a
     @test ret[1].c === ret[2].c
     @test ret[1].result !== ret[2].result
 
-    @test_throws ErrorException proceed([s8])
+    @test proceed([s8]) == [nothing]
+    @test proceed([s8], keepall=true) == NamedTuple[NamedTuple()]
+    @test proceed([s8], keep=:result) == NamedTuple[NamedTuple()]
+
+    @test_throws ArgumentError proceed(StatsSpec[])
+    @test_throws ErrorException proceed([s9])
 end
 
 @testset "_parse!" begin
@@ -351,4 +358,12 @@ end
         StatsSpec(testformatter(testparser(RP; a=a, b="b1"))...)(;)
     end
     @test r == ["a1a1b", "a1a1b1", "a2a2b", "a2a2b1", "a3a3b", "a3a3b1"]
+
+    r = @specset RP a="a1" begin
+        StatsSpec(testformatter(testparser(; b="b"))...)(;)
+        for i in 2:3
+            StatsSpec(testformatter(testparser(; a="a"*"$i", b="b"))...)(;)
+        end
+    end
+    @test r == ["a1a1b", "a2a2b", "a3a3b"]
 end

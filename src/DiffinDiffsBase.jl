@@ -1,12 +1,12 @@
 module DiffinDiffsBase
 
-using Combinatorics: combinations
 using CSV: File
+using Combinatorics: combinations
 using MacroTools: @capture, isexpr, postwalk
 using Reexport
+using SplitApplyCombine: groupfind, groupview
 @reexport using StatsModels
 using StatsModels: TupleTerm
-using SplitApplyCombine: groupfind, groupview
 using Tables: istable, getcolumn
 
 import Base: ==, show, union

@@ -331,15 +331,18 @@ _procedure(::StatsSpec{A,T}) where {A,T} = T
 
 function (sp::StatsSpec{A,T})(;
         verbose::Bool=false, keep=nothing, keepall::Bool=false) where {A,T}
-    args = deepcopy(sp.args)
-    args = verbose ? merge(args, (verbose=true,)) : args
+    args = verbose ? merge(sp.args, (verbose=true,)) : sp.args
     ntall = foldl(|>, T(), init=args)
     ntall = _result(T, ntall)
     if keepall
         return ntall
-    elseif !isempty(ntall)
+    else
         if keep === nothing
-            return haskey(ntall, :result) ? ntall.result : ntall[end]
+            if isempty(ntall)
+                return nothing
+            else
+                return haskey(ntall, :result) ? ntall.result : ntall[end]
+            end
         else
             # Cannot iterate Symbol
             if keep isa Symbol
@@ -348,11 +351,10 @@ function (sp::StatsSpec{A,T})(;
                 eltype(keep)==Symbol ||
                     throw(ArgumentError("expect Symbol or collections of Symbols for the value of option `keep`"))
             end
-            !in(:result, keep) && haskey(ntall, :result) && (keep = (keep..., :result))
-            return NamedTuple{keep}(ntall)
+            in(:result, keep) || (keep = (keep..., :result))
+            names = ((n for n in keep if haskey(ntall, n))...,)
+            return NamedTuple{names}(ntall)
         end
-    else
-        return nothing
     end
 end
 
@@ -393,7 +395,7 @@ function proceed(sps::AbstractVector{<:StatsSpec};
     nsps == 0 && throw(ArgumentError("expect a nonempty vector"))
     traces = Vector{NamedTuple}(undef, nsps)
     for i in 1:nsps
-        traces[i] = deepcopy(sps[i].args)
+        traces[i] = sps[i].args
     end
     gids = groupfind(r->_procedure(r)(), sps)
     steps = pool((p for p in keys(gids))...)
@@ -438,7 +440,7 @@ function proceed(sps::AbstractVector{<:StatsSpec};
     if keepall
         return traces
     elseif keep===nothing
-        return [haskey(r, :result) ? r.result : r[end] for r in traces]
+        return [haskey(r, :result) ? r.result : isempty(r) ? nothing : r[end] for r in traces]
     else
         # Cannot iterate Symbol
         if keep isa Symbol
