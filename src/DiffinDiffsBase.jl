@@ -11,15 +11,11 @@ using Tables: istable, getcolumn
 
 import Base: ==, show, union
 import Base: eltype, firstindex, lastindex, getindex, iterate, length, sym_in
-
 import StatsModels: termvars
 
 export TupleTerm
 
-export @fieldequal,
-       eachterm,
-       cb,
-       @unpack,
+export cb,
        ≊,
        exampledata,
 
@@ -48,8 +44,6 @@ export @fieldequal,
 
        TreatmentTerm,
        treat,
-       hastreat,
-       parse_treat,
 
        StatsStep,
        namedargs,
@@ -58,8 +52,8 @@ export @fieldequal,
        PooledStatsProcedure,
        pool,
        StatsSpec,
-       @specset,
        proceed,
+       @specset,
 
        CheckData,
        CheckVars,
@@ -68,11 +62,8 @@ export @fieldequal,
        DefaultDID,
        did,
        didspec,
-       @didspec,
        @did,
-       DIDResult,
-       agg,
-       AggregatedDIDResult
+       DIDResult
 
 include("utils.jl")
 include("treatments.jl")

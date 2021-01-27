@@ -1,5 +1,3 @@
-using DiffinDiffsBase: _f, checkdata, checkvars!
-
 @testset "CheckData" begin
     @testset "checkdata" begin
         hrs = exampledata("hrs")

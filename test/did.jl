@@ -1,6 +1,3 @@
-using DiffinDiffsBase: parse_didargs
-import DiffinDiffsBase: valid_didargs
-
 const testterm = treat(:g, TR, PR)
 
 function valid_didargs(d::Type{TestDID}, ::AbstractTreatment, ::AbstractParallel,
@@ -126,25 +123,25 @@ end
     end
 end
 
-@testset "didspec" begin
-    @test_throws ArgumentError @didspec
+@testset "didspec @did" begin
+    @test_throws ArgumentError @did [noproceed]
     @test_throws ArgumentError didspec()
 
     sp0 = StatsSpec("", TestDID, (tr=TR, pr=PR, a=1, b=2))
     sp1 = didspec(TestDID, TR, PR, a=1, b=2)
     @test sp1 ≊ sp0
-    @test sp0 ≊ @didspec TR a=1 b=2 PR TestDID
+    @test sp0 ≊ @did [noproceed] TR a=1 b=2 PR TestDID
 
     sp2 = StatsSpec("name", TestDID, (tr=TR, pr=PR, a=1, b=2))
     sp3 = didspec("name", TR, PR, TestDID, b=2, a=1)
     @test sp2 ≊ sp1
     @test sp3 ≊ sp2
-    @test sp3 ≊ @didspec TR PR TestDID "name" b=2 a=1
+    @test sp3 ≊ @did [noproceed] TR PR TestDID "name" b=2 a=1
 
     sp4 = StatsSpec("name", TestDID, (tr=TR, pr=PR, treatname=:g))
     sp5 = didspec(TestDID, testterm)
     @test sp5 ≊ sp4
-    @test sp4 ≊ @didspec TestDID testterm "name"
+    @test sp4 ≊ @did [noproceed] TestDID testterm "name"
 
     sp6 = StatsSpec("", TestDID, (tr=TR, pr=PR, 
         yterm=term(:y), treatname=:g, treatintterms=(term(:z),), xterms=(term(:x),)))
@@ -152,15 +149,8 @@ end
     sp8 = didspec(TestDID, @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) & z + x))
     @test sp7 ≊ sp6
     @test sp8 === sp7
-    @test sp6 === @didspec TestDID term(:y) ~ testterm & term(:z) + term(:x)
-    @test sp6 === @didspec TestDID @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) & z + x)
-end
-
-@testset "_parse_kwargs!" begin
-    options = :(Dict{Symbol, Any}())
-    _parse_kwargs!(options, [:(a), :(b=1)])
-    @test eval(options) == Dict{Symbol, Any}(:a => true, :b => 1)
-    @test_throws ArgumentError _parse_kwargs!(options, [1])
+    @test sp6 === @did [noproceed] TestDID term(:y) ~ testterm & term(:z) + term(:x)
+    @test sp6 === @did [noproceed] TestDID @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) & z + x)
 end
 
 @testset "did @did" begin
@@ -213,4 +203,48 @@ end
     @test_throws ArgumentError did(TestDID, testterm, keep=1)
     @test_throws ArgumentError @did [keep="treatname"] TestDID testterm
     @test_throws ArgumentError did(TestDID, testterm, keep="treatname")
+end
+
+@testset "@specset @did" begin
+    s = @specset [noproceed] begin
+        @did TestDID TR PR
+    end
+    @test s == [didspec(TestDID, TR, PR)]
+    @test proceed(s) == [@did TestDID TR PR]
+
+    s = @specset [noproceed] begin
+        @did TestDID TR PR
+        @did PR TR TestDID
+    end
+    @test s == StatsSpec[didspec(TestDID, TR, PR), didspec(PR, TR, TestDID)]
+
+    s = @specset [noproceed] DefaultDID PR a=1 begin
+        @did TR PR TestDID a=2
+        @did TR TestDID
+    end
+    @test s[1] ≊ didspec(TestDID, TR, PR; a=2)
+    @test s[2] ≊ didspec(TestDID, TR, PR; a=1)
+
+    s = @specset [noproceed] DefaultDID PR begin
+        @did [keep=:treatname verbose] TestDID testterm
+        @did [noproceed] TestDID @formula(y ~ treat(g, ttreat(t, 0), tpara(0)))
+    end
+    @test s[1] ≊ didspec(TestDID, TR, PR; treatname=:g)
+    @test s[2] ≊ didspec(TestDID, TR, PR; yterm=term(:y), treatname=:g)
+
+    s = @specset [noproceed] for i in 1:2
+        @did "name"*"$i" TestDID TR PR a=i
+    end
+    @test s[1] ≊ didspec("name1", TestDID, TR, PR; a=1)
+    @test s[2] ≊ didspec("name2", TestDID, TR, PR; a=2)
+
+    s = @specset [noproceed] DefaultDID PR a=1 begin
+        @did "name" TR PR TestDID a=0
+        for i in 1:2
+            @did "name"*"$i" TR TestDID a=i
+        end
+    end
+    @test s[1] ≊ didspec("name", TestDID, TR, PR; a=0)
+    @test s[2] ≊ didspec("name1", TestDID, TR, PR; a=1)
+    @test s[3] ≊ didspec("name2", TestDID, TR, PR; a=2)
 end

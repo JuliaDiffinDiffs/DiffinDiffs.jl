@@ -1,5 +1,3 @@
-using DiffinDiffsBase: unpack
-
 @testset "cb" begin
     @test cb() == []
 

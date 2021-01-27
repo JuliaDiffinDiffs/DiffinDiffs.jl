@@ -2,7 +2,9 @@ using Test
 using DiffinDiffsBase
 
 using StatsModels: termvars
-import DiffinDiffsBase: namedargs
+using DiffinDiffsBase: unpack, @unpack, hastreat, parse_treat,
+    _f, checkdata, checkvars!, parse_didargs
+import DiffinDiffsBase: valid_didargs, namedargs
 
 include("testutils.jl")
 
