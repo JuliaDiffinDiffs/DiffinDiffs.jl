@@ -182,6 +182,19 @@ end
     end
 end
 
+@testset "istreated" begin
+    nt = nevertreated(-1)
+    @test istreated(nt, -1) == false
+    @test istreated(nt, 0)
+
+    ny = notyettreated(5)
+    @test istreated(ny, 5) == false
+    @test istreated(ny, 4)
+
+    ny = notyettreated(5, 4)
+    @test istreated(ny, 4)
+end
+
 @testset "termvars" begin
     @test termvars(Unconditional()) == Symbol[]
     @test termvars(Exact()) == Symbol[]

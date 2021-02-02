@@ -5,15 +5,13 @@ using Combinatorics: combinations
 using MacroTools: @capture, isexpr, postwalk
 using Reexport
 using SplitApplyCombine: groupfind, groupview
+using StatsBase: Weights, uweights
 @reexport using StatsModels
-using StatsModels: TupleTerm
 using Tables: istable, getcolumn
 
 import Base: ==, show, union
 import Base: eltype, firstindex, lastindex, getindex, iterate, length, sym_in
 import StatsModels: termvars
-
-export TupleTerm
 
 export cb,
        ≊,
@@ -42,6 +40,8 @@ export cb,
        notyettreated,
        istreated,
 
+       Terms,
+       eachterm,
        TreatmentTerm,
        treat,
 
@@ -57,6 +57,7 @@ export cb,
 
        CheckData,
        CheckVars,
+       MakeWeights,
 
        DiffinDiffsEstimator,
        DefaultDID,

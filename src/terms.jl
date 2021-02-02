@@ -1,5 +1,14 @@
-==(a::NTuple{N, AbstractTerm}, b::NTuple{N, AbstractTerm}) where {N} =
-    all([t in b for t in a])
+const Terms{N} = NTuple{N, AbstractTerm} where N
+
+"""
+    eachterm(t)
+
+Return an iterable collection of terms in `t`.
+"""
+eachterm(@nospecialize(t::AbstractTerm)) = (t,)
+eachterm(@nospecialize(t::Terms)) = t
+
+==(a::Terms{N}, b::Terms{N}) where N = all([t in b for t in a])
 ==(a::InteractionTerm, b::InteractionTerm) = a.terms==b.terms
 ==(a::FormulaTerm, b::FormulaTerm) = a.lhs==b.lhs && a.rhs==b.rhs
 

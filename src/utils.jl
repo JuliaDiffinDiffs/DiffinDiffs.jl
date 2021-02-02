@@ -14,14 +14,6 @@ macro fieldequal(Supertype)
 end
 
 """
-    eachterm(t)
-
-Return an iterable collection of terms in `t`.
-"""
-eachterm(@nospecialize(t::AbstractTerm)) = (t,)
-eachterm(@nospecialize(t::NTuple{N, AbstractTerm})) where {N} = t
-
-"""
     cb(args...)
 
 Construct a vector from `ConstantTerm`s provided as arguments.

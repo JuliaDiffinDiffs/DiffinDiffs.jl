@@ -439,14 +439,14 @@ function proceed(sps::AbstractVector{<:StatsSpec};
     end
     if keepall
         return traces
-    elseif keep===nothing
+    elseif keep === nothing
         return [haskey(r, :result) ? r.result : isempty(r) ? nothing : r[end] for r in traces]
     else
         # Cannot iterate Symbol
         if keep isa Symbol
             keep = (keep,)
         else
-            eltype(keep)==Symbol ||
+            eltype(keep) == Symbol ||
                 throw(ArgumentError("expect Symbol or collections of Symbols for the value of option `keep`"))
         end
         in(:result, keep) || (keep = (keep..., :result))
