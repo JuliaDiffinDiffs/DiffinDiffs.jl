@@ -135,3 +135,9 @@ The returned object named `weights` may be shared across multiple specifications
 const MakeWeights = StatsStep{:MakeWeights, typeof(makeweights)}
 
 namedargs(::MakeWeights) = (data=nothing, weightname=nothing, esample=nothing)
+
+_getsubcolumns(data, name::Symbol, idx=Colon()) =
+    columntable(NamedTuple{(name,)}((disallowmissing(view(getcolumn(data, name), idx)),)))
+
+_getsubcolumns(data, names, idx=Colon()) = columntable(NamedTuple{(names...,)}(
+    map(n->disallowmissing(view(getcolumn(data, n), idx)), names)))
