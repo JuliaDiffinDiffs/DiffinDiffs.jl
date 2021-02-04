@@ -36,7 +36,8 @@ for some preliminary checks of the input data.
 """
 const CheckData = StatsStep{:CheckData, typeof(checkdata)}
 
-namedargs(::CheckData) = (data=nothing, subset=nothing, weightname=nothing)
+required(::CheckData) = (:data,)
+default(::CheckData) = (subset=nothing, weightname=nothing)
 
 function _overlaptime(tr::DynamicTreatment, tr_rows::BitArray, data)
     control_time = Set(view(getcolumn(data, tr.time), .!tr_rows))
@@ -74,8 +75,8 @@ and find rows with data from treated units.
 See also [`CheckVars`](@ref).
 """
 function checkvars!(data, tr::AbstractTreatment, pr::AbstractParallel,
-        yterm::AbstractTerm, treatname::Symbol, treatintterms::Terms,
-        xterms::Terms, esample::BitArray)
+        yterm::AbstractTerm, treatname::Symbol, esample::BitArray,
+        treatintterms::Terms, xterms::Terms)
 
     treatvars = union([treatname], (termvars(t) for t in (tr, pr, treatintterms))...)
     for v in treatvars
@@ -106,8 +107,8 @@ Call [`DiffinDiffsBase.checkvars!`](@ref) to exclude invalid rows for relevant v
 """
 const CheckVars = StatsStep{:CheckVars, typeof(checkvars!)}
 
-namedargs(::CheckVars) = (data=nothing, tr=nothing, pr=nothing,
-    yterm=nothing, treatname=nothing, treatintterms=(), xterms=(), esample=nothing)
+required(::CheckVars) = (:data, :tr, :pr, :yterm, :treatname, :esample)
+default(::CheckVars) = (treatintterms=(), xterms=())
 
 """
     makeweights(args...)
@@ -115,13 +116,13 @@ namedargs(::CheckVars) = (data=nothing, tr=nothing, pr=nothing,
 Construct a generic `Weights` vector.
 See also [`MakeWeights`](@ref).
 """
-function makeweights(data, weightname::Symbol, esample::BitArray)
+function makeweights(data, esample::BitArray, weightname::Symbol)
     weights = Weights(convert(Vector{Float64}, view(getcolumn(data, weightname), esample)))
     all(isfinite, weights) || error("data column $weightname contain not-a-number values")
     (weights=weights,), true
 end
 
-function makeweights(data, weightname::Nothing, esample::BitArray)
+function makeweights(data, esample::BitArray, weightname::Nothing)
     weights = uweights(sum(esample))
     (weights=weights,), true
 end
@@ -134,7 +135,8 @@ The returned object named `weights` may be shared across multiple specifications
 """
 const MakeWeights = StatsStep{:MakeWeights, typeof(makeweights)}
 
-namedargs(::MakeWeights) = (data=nothing, weightname=nothing, esample=nothing)
+required(::MakeWeights) = (:data, :esample)
+default(::MakeWeights) = (weightname=nothing,)
 
 _getsubcolumns(data, name::Symbol, idx=Colon()) =
     columntable(NamedTuple{(name,)}((disallowmissing(view(getcolumn(data, name), idx)),)))

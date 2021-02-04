@@ -23,13 +23,12 @@
             "CheckData (StatsStep that calls DiffinDiffsBase.checkdata)"
 
         @test _f(CheckData()) == checkdata
-        @test namedargs(CheckData()) == (data=nothing, subset=nothing, weightname=nothing)
 
         hrs = exampledata("hrs")
         nt = (data=hrs, subset=nothing, weightname=nothing)
         @test CheckData()(nt) == merge(nt, (esample=trues(size(hrs,1)),))
         @test CheckData()((data=hrs,)) == (data=hrs, esample=trues(size(hrs,1)))
-        @test_throws ArgumentError CheckData()()
+        @test_throws ErrorException CheckData()()
     end
 end 
 
@@ -37,7 +36,7 @@ end
     @testset "checkvars!" begin
         hrs = exampledata("hrs")
         nt = (data=hrs, tr=dynamic(:wave, -1), pr=nevertreated(11), yterm=term(:oop_spend),
-            treatname=:wave_hosp, treatintterms=(), xterms=(), esample=trues(size(hrs,1)))
+            treatname=:wave_hosp, esample=trues(size(hrs,1)), treatintterms=(), xterms=())
         @test checkvars!(nt...) == ((esample=trues(size(hrs,1)),
             tr_rows=hrs.wave_hosp.!=11), false)
         
@@ -78,8 +77,6 @@ end
             "CheckVars (StatsStep that calls DiffinDiffsBase.checkvars!)"
 
         @test _f(CheckVars()) == checkvars!
-        @test namedargs(CheckVars()) == (data=nothing, tr=nothing, pr=nothing,
-            yterm=nothing, treatname=nothing, treatintterms=(), xterms=(), esample=nothing)
 
         hrs = exampledata("hrs")
         nt = (data=hrs, tr=dynamic(:wave, -1), pr=nevertreated(11), yterm=term(:oop_spend),
@@ -90,14 +87,14 @@ end
             treatname=:wave_hosp, esample=trues(size(hrs,1)))
         @test CheckVars()(nt) ==
             merge(nt, (esample=trues(size(hrs,1)), tr_rows=hrs.wave_hosp.!=11))
-        @test_throws MethodError CheckVars()()
+        @test_throws ErrorException CheckVars()()
     end
 end
 
 @testset "MakeWeights" begin
     @testset "makeweights" begin
         hrs = exampledata("hrs")
-        nt = (data=hrs, weightname=nothing, esample=trues(size(hrs,1)))
+        nt = (data=hrs, esample=trues(size(hrs,1)), weightname=nothing)
         r, s = makeweights(nt...)
         @test r.weights isa UnitWeights && sum(r.weights) == size(hrs,1) && s
 
@@ -112,7 +109,6 @@ end
             "MakeWeights (StatsStep that calls DiffinDiffsBase.makeweights)"
 
         @test _f(MakeWeights()) == makeweights
-        @test namedargs(MakeWeights()) == (data=nothing, weightname=nothing, esample=nothing)
 
         hrs = exampledata("hrs")
         nt = (data=hrs, esample=trues(size(hrs,1)))

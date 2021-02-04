@@ -3,11 +3,11 @@ using DiffinDiffsBase
 
 using DataFrames
 using DiffinDiffsBase: unpack, @unpack, hastreat, parse_treat,
-    _f, checkdata, checkvars!, makeweights, _getsubcolumns, parse_didargs
+    _f, groupargs, pool, checkdata, checkvars!, makeweights, _getsubcolumns, parse_didargs
 using StatsBase: Weights, UnitWeights
 using StatsModels: termvars
 
-import DiffinDiffsBase: valid_didargs, namedargs
+import DiffinDiffsBase: required, valid_didargs
 
 include("testutils.jl")
 

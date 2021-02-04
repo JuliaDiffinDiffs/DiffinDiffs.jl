@@ -25,11 +25,11 @@ tpara(c::ConstantTerm) = TestParallel{ParallelCondition,ParallelStrength}(c.n)
 teststep(tr::AbstractTreatment, pr::AbstractParallel) =
     ((str=sprint(show, tr), spr=sprint(show, pr)), false)
 const TestStep = StatsStep{:TestStep, typeof(teststep)}
-namedargs(::TestStep) = (tr=nothing, pr=nothing)
+required(::TestStep) = (:tr, :pr)
 
 testresult(::AbstractTreatment, ::String) = ((result="testresult",), false)
 const TestResult = StatsStep{:TestResult, typeof(testresult)}
-namedargs(::TestResult) = (tr=nothing, str=nothing)
+required(::TestResult) = (:tr, :str)
 
 const TestDID = DiffinDiffsEstimator{:TestDID, Tuple{TestStep,TestResult}}
 const NotImplemented = DiffinDiffsEstimator{:NotImplemented, Tuple{}}

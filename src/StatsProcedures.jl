@@ -11,8 +11,8 @@ An instance of `StatsStep` is callable.
 # Methods
     (step::StatsStep{A,F})(ntargs::NamedTuple; verbose::Bool=false)
 
-Call an instance of function of type `F` with arguments
-formed by updating `NamedTuple` returned by `[`namedargs(step)`](@ref)` with `ntargs`.
+Call an instance of function of type `F` with arguments extracted from `ntargs`
+via [`groupargs`](@ref) and [`combinedargs`](@ref).
 
 A message with the name of the `StatsStep` is printed to `stdout`
 if a keyword `verbose` takes the value `true`
@@ -28,23 +28,75 @@ struct StatsStep{Alias, F<:Function} end
 _f(::StatsStep{A,F}) where {A,F} = F.instance
 
 """
-    namedargs(s::StatsStep)
+    required(s::StatsStep)
 
-Return a `NamedTuple` with keys showing the names of arguments
-accepted by `s` and values representing the defaults.
+Return a tuple of `Symbol`s representing the names of arguments
+used to form [`groupargs`](@ref) that do not have defaults.
+See also [`default`](@ref) and [`transformed`](@ref).
 """
-namedargs(s::StatsStep) = error("method for $(typeof(s)) is not defined")
+required(::StatsStep) = ()
 
-_getargs(ntargs::NamedTuple, s::StatsStep) = _update(ntargs, namedargs(s))
-_update(a::NamedTuple{N1}, b::NamedTuple{N2}) where {N1,N2} =
-    NamedTuple{N2}(map(n->getfield(sym_in(n, N1) ? a : b, n), N2))
+"""
+    default(s::StatsStep)
 
-_combinedargs(::StatsStep, ::Any) = ()
+Return a `NamedTuple` of arguments with keys showing the names
+and values representing the defaults to be used to form [`groupargs`](@ref).
+See also [`required`](@ref) and [`transformed`](@ref).
+"""
+default(::StatsStep) = NamedTuple()
 
-function (step::StatsStep{A,F})(ntargs::NamedTuple; verbose::Bool=false) where {A,F}
+"""
+    transformed(s::StatsStep, ntargs::NamedTuple)
+
+Return a tuple of arguments transformed from fields in `ntargs`
+to be used to form [`groupargs`](@ref).
+See also [`required`](@ref) and [`default`](@ref).
+"""
+transformed(::StatsStep, ::NamedTuple) = ()
+
+_get(a::NTuple{N,Symbol}, @nospecialize(nt::NamedTuple)) where N =
+    map(s->getfield(nt, s), a)
+_get(a::NamedTuple{S1}, nt::NamedTuple{S2}) where {S1,S2} =
+    map(s->getfield(ifelse(sym_in(s, S2), nt, a), s), S1)
+
+"""
+    groupargs(s::StatsStep, ntargs::NamedTuple)
+
+Return a tuple of arguments that allow classifying multiple `ntargs`s into groups.
+Equality (defined by `isequal`) of the returned tuples across `ntargs`s imply that
+it is possible to exectute step `s` for only once
+to obtain results for these `ntargs`s.
+
+This function is important for [`proceed`](@ref) to work properly.
+However, in most cases, there is no need to define new methods
+for concrete [`StatsStep`](@ref)s.
+Instead, one should define methods for
+[`required`](@ref), [`default`](@ref) or [`transformed`](@ref).
+See also [`combinedargs`](@ref).
+"""
+groupargs(s::StatsStep, @nospecialize(ntargs::NamedTuple)) =
+    (_get(required(s), ntargs)..., _get(default(s), ntargs)...,
+    transformed(s, ntargs)...)
+
+"""
+    combinedargs(s::StatsStep, allntargs::Any)
+
+Return a tuple of arguments obtained by combining a collection of arguments
+across multiple specifications.
+
+The element type of `allntargs` can be assumed to be `NamedTuple`.
+This function allows combining arguments that differ
+across specifications in the same group classified based on [`groupargs`](@ref)
+into objects that are accepted by the call of `s`.
+See also [`proceed`](@ref).
+"""
+combinedargs(::StatsStep, ::Any) = ()
+
+function (step::StatsStep{A,F})(@nospecialize(ntargs::NamedTuple);
+        verbose::Bool=false) where {A,F}
     haskey(ntargs, :verbose) && (verbose = ntargs.verbose)
     verbose && printstyled("Running ", step, "\n", color=:green)
-    ret = F.instance(_getargs(ntargs, step)..., _combinedargs(step, (ntargs,))...)
+    ret = F.instance(groupargs(step, ntargs)..., combinedargs(step, (ntargs,))...)
     if ret isa Tuple{<:NamedTuple, Bool}
         return merge(ntargs, ret[1])
     else
@@ -77,7 +129,7 @@ all subtypes of `AbstractStatsProcedure`.
 """
 abstract type AbstractStatsProcedure{Alias, T<:NTuple{N,StatsStep} where N} end
 
-_result(::Type{<:AbstractStatsProcedure}, ntargs::NamedTuple) = ntargs
+result(::Type{<:AbstractStatsProcedure}, @nospecialize(ntargs::NamedTuple)) = ntargs
 
 length(::AbstractStatsProcedure{A,T}) where {A,T} = length(T.parameters)
 eltype(::Type{<:AbstractStatsProcedure}) = StatsStep
@@ -131,8 +183,8 @@ end
 
 _sharedby(::SharedStatsStep{T,I}) where {T,I} = I
 _f(s::SharedStatsStep) = _f(s.step)
-_getargs(ntargs::NamedTuple, s::SharedStatsStep) = _getargs(ntargs, s.step)
-_combinedargs(s::SharedStatsStep, v::AbstractArray) = _combinedargs(s.step, v)
+groupargs(s::SharedStatsStep, @nospecialize(ntargs::NamedTuple)) = groupargs(s.step, ntargs)
+combinedargs(s::SharedStatsStep, v::AbstractArray) = combinedargs(s.step, v)
 
 show(io::IO, s::SharedStatsStep) = print(io, s.step)
 
@@ -303,7 +355,7 @@ Otherwise, the last value returned by the last [`StatsStep`](@ref) is returned.
 struct StatsSpec{Alias, T<:AbstractStatsProcedure}
     args::NamedTuple
     StatsSpec(name::Union{Symbol,String},
-        T::Type{<:AbstractStatsProcedure}, args::NamedTuple) =
+        T::Type{<:AbstractStatsProcedure}, @nospecialize(args::NamedTuple)) =
             new{Symbol(name),T}(args)
 end
 
@@ -332,8 +384,7 @@ _procedure(::StatsSpec{A,T}) where {A,T} = T
 function (sp::StatsSpec{A,T})(;
         verbose::Bool=false, keep=nothing, keepall::Bool=false) where {A,T}
     args = verbose ? merge(sp.args, (verbose=true,)) : sp.args
-    ntall = foldl(|>, T(), init=args)
-    ntall = _result(T, ntall)
+    ntall = result(T, foldl(|>, T(), init=args))
     if keepall
         return ntall
     else
@@ -404,9 +455,9 @@ function proceed(sps::AbstractVector{<:StatsSpec};
         ntask = 0
         verbose && printstyled("Running ", step, "...")
         taskids = vcat((gids[steps.procs[i]] for i in _sharedby(step))...)
-        tasks = groupview(r->_getargs(r, step), view(traces, taskids))
+        tasks = groupview(r->groupargs(step, r), view(traces, taskids))
         for (ins, subtb) in pairs(tasks)
-            ret = _f(step)(ins..., _combinedargs(step, subtb)...)
+            ret = _f(step)(ins..., combinedargs(step, subtb)...)
             if ret isa Tuple{<:NamedTuple, Bool}
                 ret, share = ret
             else
@@ -435,7 +486,7 @@ function proceed(sps::AbstractVector{<:StatsSpec};
         ntask_total > 1 ? " tasks" : " task", " for ", nprocs,
         nprocs > 1 ? " procedures)\n" : " procedure)\n", bold=true, color=:green)
     for i in 1:nsps
-        traces[i] = _result(_procedure(sps[i]), traces[i])
+        traces[i] = result(_procedure(sps[i]), traces[i])
     end
     if keepall
         return traces
@@ -519,7 +570,8 @@ For end users, `Macro`s that generate `Expr`s for these function calls should be
 
 Optional default arguments are merged
 with the arguments provided for each individual specification
-and supersede the default values specified for each procedure through [`namedargs`](@ref).
+and supersede any default value associated with each [`StatsStep`](@ref)
+via [`default`](@ref).
 These default arguments should be specified in the same pattern as
 how arguments are specified for each specification inside the code block,
 as `@specset` processes these arguments by calling
