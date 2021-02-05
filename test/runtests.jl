@@ -1,6 +1,18 @@
 using Test
 using InteractionWeightedDIDs
 
+using DataFrames
+using DiffinDiffsBase: required, default, transformed, combinedargs
+using FixedEffects
+using InteractionWeightedDIDs: checkvcov!, checkfes!, makefesolver,
+    _feresiduals!, makeyxcols, maketreatcols
+using StatsBase: Weights, uweights
+
+import Base: ==
+
+==(x::FixedEffect{R,I}, y::FixedEffect{R,I}) where {R,I} =
+    x.refs == y.refs && x.interaction == y.interaction && x.n == y.n
+
 const tests = [
     "procedures"
 ]

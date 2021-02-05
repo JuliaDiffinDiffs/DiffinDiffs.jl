@@ -4,10 +4,10 @@
 Exclude rows that are invalid for `vcov`.
 See also [`CheckVcov`](@ref).
 """
-checkvcov!(data, vcov::Union{Vcov.SimpleCovariance,Vcov.RobustCovariance}, esample::BitArray) =
+checkvcov!(data, esample::BitArray, vcov::Union{Vcov.SimpleCovariance,Vcov.RobustCovariance}) =
     NamedTuple(), false
 
-function checkvcov!(data, vcov::Vcov.ClusterCovariance, esample::BitArray)
+function checkvcov!(data, esample::BitArray, vcov::Vcov.ClusterCovariance)
     esample .&= Vcov.completecases(data, vcov)
     return (esample=esample,), false
 end
@@ -20,7 +20,8 @@ Call [`InteractionWeightedDIDs.checkvcov!`](@ref) to exclude invalid rows for
 """
 const CheckVcov = StatsStep{:CheckVcov, typeof(checkvcov!)}
 
-namedargs(::CheckVcov) = (data=nothing, vcov=Vcov.simple(), esample=nothing)
+required(::CheckVcov) = (:data, :esample)
+default(::CheckVcov) = (vcov=Vcov.robust(),)
 
 """
     checkfes!(args...)
@@ -30,7 +31,7 @@ drop singleton observations for any fixed effect
 and determine whether intercept term should be omitted.
 See also [`CheckFEs`](@ref).
 """
-function checkfes!(data, xterms::Terms, drop_singletons::Bool, esample::BitArray)
+function checkfes!(data, esample::BitArray, xterms::Terms, drop_singletons::Bool)
     fes, fenames, xterms = parse_fixedeffect(data, xterms)
     has_fe_intercept = false
     nsingle = 0
@@ -56,7 +57,8 @@ and drop singleton observations for any fixed effect.
 """
 const CheckFEs = StatsStep{:CheckFixedEffects, typeof(checkfes!)}
 
-namedargs(::CheckFEs) = (data=nothing, xterms=(), drop_singletons=true, esample=nothing)
+required(::CheckFEs) = (:data, :esample)
+default(::CheckFEs) = (xterms=(), drop_singletons=true)
 
 """
     makefesolver(args...)
@@ -82,14 +84,15 @@ The returned object named `feM` may be shared across multiple specifications.
 """
 const MakeFESolver = StatsStep{:MakeFESolver, typeof(makefesolver)}
 
-_getargs(nt::NamedTuple, ::MakeFESolver) = (nt.fenames, nt.weights)
-_combinedargs(::MakeFESolver, allntargs) = allntargs[1].fes
+required(::MakeFESolver) = (:fenames, :weights, :esample)
+# Determine equality of fes by fenames
+combinedargs(::MakeFESolver, allntargs) = (allntargs[1].fes,)
 
 function _feresiduals!(M::AbstractArray, feM::AbstractFixedEffectSolver,
-    tol::Real, maxiter::Integer)
-_, iters, convs = solve_residuals!(M, feM; tol=tol, maxiter=maxiter, progress_bar=false)
-iter = maximum(iters)
-all(convs) || @warn "fixed effect solver does not reach convergence in $(iter) iterations"
+        tol::Real, maxiter::Integer)
+    _, iters, convs = solve_residuals!(M, feM; tol=tol, maxiter=maxiter, progress_bar=false)
+    iter = maximum(iters)
+    all(convs) || @warn "no convergence of fixed effect solver in $(iter) iterations"
 end
 
 """
@@ -99,62 +102,60 @@ Construct columns for outcome variables and covariates
 and residualize them with fixed effects.
 See also [`MakeYXCols`](@ref).
 """
-function makeyxcols(data, feM::Union{AbstractFixedEffectSolver, Nothing},
-        weights::AbstractWeights, contrasts::Dict, has_fe_intercept::Bool,
-        fetol::Real, femaxiter::Int, esample::BitArray,
-        allyterm::Terms, allxterms::Terms)
+function makeyxcols(data, weights::AbstractWeights, esample::BitArray,
+        feM::Union{AbstractFixedEffectSolver, Nothing}, has_fe_intercept::Bool,
+        contrasts::Dict, fetol::Real, femaxiter::Int, allyterm::Terms, allxterms::Terms)
     
-    allycol = Dict{AbstractTerm, Vector{Float64}}()
-    ynames = termvars(allyterm)
-    ycols = _getsubcolumns(data, ynames, esample)
-    concrete_yterms = apply_schema(allyterm, schema(allyterm, ycols), StatisticalModel)
+    yxcols = Dict{AbstractTerm, VecOrMat{Float64}}()
+    yxnames = union(termvars(allyterm), termvars(allxterms))
+    yxdata = _getsubcolumns(data, yxnames, esample)
+    concrete_yterms = apply_schema(allyterm, schema(allyterm, yxdata), StatisticalModel)
     for (t, ct) in zip(eachterm(allyterm), eachterm(concrete_yterms))
-        allycol[t] = modelcols(ct, ycols)
+        ycol = convert(Vector{Float64}, modelcols(ct, yxdata))
+        all(isfinite, ycol) || error("data for term $ct contain NaN or Inf")
+        yxcols[t] = ycol
     end
 
-    allxcols = Dict{AbstractTerm, Matrix{Float64}}()
-    xnames = termvars(allxterms)
-    xcols = _getsubcolumns(data, xnames, esample)
-    xschema = schema(allxterms, xcols, contrasts)
-    has_fe_intercept && (xschema = FullRank(xschema, Set(InterceptTerm{true}())))
+    xschema = schema(allxterms, yxdata, contrasts)
+    has_fe_intercept && (xschema = FullRank(xschema, Set([InterceptTerm{true}()])))
     concrete_xterms = apply_schema(allxterms, xschema, StatisticalModel)
     for (t, ct) in zip(eachterm(allxterms), eachterm(concrete_xterms))
-        width(t)>0 && (allxcols[t] = modelmatrix(ct, xcols))
+        if width(ct) > 0
+            xcols = convert(Matrix{Float64}, modelmatrix(ct, yxdata))
+            all(isfinite, xcols) || error("data for term $ct contain NaN or Inf")
+            yxcols[t] = xcols
+        end
     end
 
     if feM !== nothing
-        YX = Combination(values(allycol)..., values(allycol)...)
+        YX = Combination(values(yxcols)...)
         _feresiduals!(YX, feM, fetol, femaxiter)
     end
 
     if !(weights isa UnitWeights)
-        for ycol in values(allycol)
-            ycol .*= sqrt.(weights)
-        end
-        for xcols in values(allxcols)
-            xcols .*= sqrt.(weights)
+        for col in values(yxcols)
+            col .*= sqrt.(weights)
         end
     end
 
-    return (allycol=allycol, allxcols=allxcols), true
+    return (yxcols=yxcols,), true
 end
 
 """
     MakeYXCols <: StatsStep
 
-Call [`InteractionWeightedDIDs.makeyxcols`](@ref) to obtain residuals columns of
-outcome variables and covariates.
-The returned object named `allycol` and `allxcols`
+Call [`InteractionWeightedDIDs.makeyxcols`](@ref) to obtain
+residualized outcome variables and covariates.
+The returned object named `yxcols`
 may be shared across multiple specifications.
 """
 const MakeYXCols = StatsStep{:MakeYXCols, typeof(makeyxcols)}
 
-_getargs(nt::NamedTuple, ::MakeYXCols) = _update(nt,
-    (data=nothing, feM=nothing, weights=nothing, contrasts=Dict{Symbol, Any}(),
-    has_fe_intercept=nothing, fetol=1e-8, femaxiter=10000, esample=nothing))
+required(::MakeYXCols) = (:data, :weights, :esample, :feM, :has_fe_intercept)
+default(::MakeYXCols) = (contrasts=Dict{Symbol, Any}(), fetol=1e-8, femaxiter=10000)
 
-function _combinedargs(::MakeYXCols, allntargs)
-    allyterm, allxterms = allntargs[1].yterm, allntargs[1].xterms
+function combinedargs(::MakeYXCols, allntargs)
+    allyterm, allxterms = (allntargs[1].yterm,), allntargs[1].xterms
     if length(allntargs) > 1
         for i in 2:length(allntargs)
             allyterm += allntargs[i].yterm
@@ -164,60 +165,69 @@ function _combinedargs(::MakeYXCols, allntargs)
     return allyterm, allxterms
 end
 
+function _genindicator(idx::Vector{Int}, n::Int)
+    v = zeros(n)
+    v[idx] .= 1
+    return v
+end
+
+_gencellweight(idx::Vector{Int}, weights::AbstractWeights) = sum(weights[idx])
+
 """
     maketreatcols(args...)
 
-Construct columns for capturing treatment effects.
+Construct residualized binary columns that capture treatment effects
+and obtain cell-level weight sums and observation counts.
 See also [`MakeTreatCols`](@ref).
 """
-function maketreatcols(data, ::Type{<:DynamicTreatment{SharpDesign}},
-        time::Symbol, treatname::Symbol, treatintterms::Terms,
+function maketreatcols(data, treatname::Symbol, treatintterms::Terms,
         feM::Union{AbstractFixedEffectSolver, Nothing}, weights::AbstractWeights,
-        fetol::Real, femaxiter::Int, esample::BitArray, tr_rows::BitArray,
-        exc::Set{<:Integer})
+        esample::BitArray, tr_rows::BitArray, fetol::Real, femaxiter::Int,
+        ::Type{<:DynamicTreatment{SharpDesign}}, time::Symbol, exc::Set{<:Integer})
 
-    alltreatcols = Dict{NamedTuple, Vector{Float64}}()
+    nobs = sum(esample)
     tnames = (treatname, time, termvars(treatintterms)...)
     kept = tr_rows .& .!(getcolumn(data, time).-getcolumn(data, treatname).∈(exc,))
-    # Convert to row table without copying again
+    # Obtain a fast row iterator without copying (if no missing)
     trows = Table(_getsubcolumns(data, tnames, kept))
-    nobs = sum(esample)
-    @inbounds for (n, i) in enumerate(findall(kept))
-        tcol = get!(alltreatcols, trows[n], zeros(nobs))
-        tcol[i] = 1.0
-    end
+    itreats = groupfind(trows)
+    treatcols = map(x->_genindicator(x, nobs), itreats)
+    cellweights = map(x->_gencellweight(x, weights), itreats)
+    cellcounts = weights isa UnitWeights ? cellweights : map(length, itreats)
     
     if feM !== nothing
-        M = Combination(values(alltreatcols)...)
+        M = Combination(values(treatcols)...)
         _feresiduals!(M, feM, fetol, femaxiter)
     end
 
     if !(weights isa UnitWeights)
-        for tcol in values(alltreatcols)
+        for tcol in values(treatcols)
             tcol .*= sqrt.(weights)
         end
     end
 
-    return (alltreatcols=alltreatcols,), true
+    return (treatcols=treatcols, cellweights=cellweights, cellcounts=cellcounts), true
 end
 
 """
     MakeTreatCols <: StatsStep
 
 Call [`InteractionWeightedDIDs.maketreatcols`](@ref) to obtain
-residualized columns that capture treatment effects.
-The returned object named `alltreatcols`
+residualized binary columns that capture treatment effects
+and obtain cell-level weight sums and observation counts.
+The returned objects named `treatcols`, `cellweights` and `cellcounts`
 may be shared across multiple specifications.
 """
 const MakeTreatCols = StatsStep{:MakeTreatCols, typeof(maketreatcols)}
 
-_getargs(nt::NamedTuple, ::MakeTreatCols) =
-    (nt.data, typeof(nt.tr), nt.tr.time, nt.treatname, nt.treatintterms,
-    nt.feM, nt.weights, _update(nt, (fetol=1e-8, femaxiter=10000))...,
-    nt.esample, nt.tr_rows)
+required(::MakeTreatCols) = (:data, :treatname, :treatintterms, :feM,
+    :weights, :esample, :tr_rows)
+default(::MakeTreatCols) = (fetol=1e-8, femaxiter=10000)
+transformed(::MakeTreatCols, @nospecialize(nt::NamedTuple)) =
+    (typeof(nt.tr), nt.tr.time)
 
-_combinedargs(step::MakeTreatCols, allntargs) =
-    _combinedargs(step, allntargs, typeof(allntargs[1].nt.tr))
+combinedargs(step::MakeTreatCols, allntargs) =
+    combinedargs(step, allntargs, typeof(allntargs[1].nt.tr))
 
-_combinedargs(::MakeTreatCols, allntargs, ::Type{<:DynamicTreatment{SharpDesign}}) =
-    Set(intersect((nt.tr.exc for nt in allntargs)...))
+combinedargs(::MakeTreatCols, allntargs, ::Type{<:DynamicTreatment{SharpDesign}}) =
+    (Set(intersect((nt.tr.exc for nt in allntargs)...)),)
