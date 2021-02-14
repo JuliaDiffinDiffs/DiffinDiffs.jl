@@ -201,6 +201,9 @@ end
     nt = (tr=tr, yterm=term(:oop_spend), xterms=(term(1),), yxcols=yxcols0, treatcols=tcols0)
     ret, share = solveleastsquares(nt...)
     # Compare estimates with Stata
+    # gen col0 = wave_hosp==10 & wave==10
+    # gen col1 = wave_hosp==10 & wave==11
+    # reg oop_spend col0 col1
     @test ret.coef[1] ≈ 2862.4141 atol=1e-4
     @test ret.coef[2] ≈ 490.44869 atol=1e-4
     @test ret.coef[3] ≈ 3353.6565 atol=1e-4
@@ -223,4 +226,80 @@ end
     
     res = SolveLeastSquares()(nt)
     @test res.coef == ret.coef
+end
+
+@testset "EstVcov" begin
+    hrs = exampledata("hrs")
+    nobs = size(hrs, 1)
+    col0 = convert(Vector{Float64}, (hrs.wave_hosp.==10).&(hrs.wave.==10))
+    col1 = convert(Vector{Float64}, (hrs.wave_hosp.==10).&(hrs.wave.==11))
+    y = convert(Vector{Float64}, hrs.oop_spend)
+    X = hcat(col0, col1, ones(nobs, 1))
+    crossx = cholesky!(Symmetric(X'X))
+    coef = crossx \ (X'y)
+    residuals = y - X * coef
+    nt = (data=hrs, esample=trues(nobs), vcov=Vcov.simple(), X=X, crossx=crossx,
+        residuals=residuals, fes=FixedEffect[])
+    ret, share = estvcov(nt...)
+    # Compare estimates with Stata
+    # reg oop_spend col0 col1
+    # mat list e(V)
+    @test ret.vcov_mat[1,1] ≈ 388844.2 atol=0.1
+    @test ret.vcov_mat[2,2] ≈ 388844.2 atol=0.1
+    @test ret.vcov_mat[3,3] ≈ 20334.169 atol=1e-3
+    @test ret.vcov_mat[2,1] ≈ 20334.169 atol=1e-3
+    @test ret.vcov_mat[3,1] ≈ -20334.169 atol=1e-3
+    @test ret.dof_residuals == nobs - 3
+
+    nt = merge(nt, (vcov=Vcov.robust(), fes=FixedEffect[]))
+    ret, share = estvcov(nt...)
+    # Compare estimates with Stata
+    # reg oop_spend col0 col1, r
+    # mat list e(V)
+    @test ret.vcov_mat[1,1] ≈ 815817.44 atol=0.1
+    @test ret.vcov_mat[2,2] ≈ 254993.93 atol=1e-2
+    @test ret.vcov_mat[3,3] ≈ 19436.209 atol=1e-3
+    @test ret.vcov_mat[2,1] ≈ 19436.209 atol=1e-3
+    @test ret.vcov_mat[3,1] ≈ -19436.209 atol=1e-3
+    @test ret.dof_residuals == nobs - 3
+
+    nt = merge(nt, (vcov=Vcov.cluster(:hhidpn),))
+    ret, share = estvcov(nt...)
+    # Compare estimates with Stata
+    # reghdfe oop_spend col0 col1, noa clu(hhidpn)
+    # mat list e(V)
+    @test ret.vcov_mat[1,1] ≈ 744005.01 atol=0.1
+    @test ret.vcov_mat[2,2] ≈ 242011.45 atol=1e-2
+    @test ret.vcov_mat[3,3] ≈ 28067.783 atol=1e-3
+    @test ret.vcov_mat[2,1] ≈ 94113.386 atol=1e-2
+    @test ret.vcov_mat[3,1] ≈ 12640.559 atol=1e-2
+    @test ret.dof_residuals == nobs - 3
+
+    fes = FixedEffect[FixedEffect(hrs.hhidpn)]
+    wt = uweights(nobs)
+    feM = AbstractFixedEffectSolver{Float64}(fes, wt, Val{:cpu}, Threads.nthreads())
+    X = hcat(col0, col1)
+    _feresiduals!(Combination(y, X), feM, 1e-8, 10000)
+    crossx = cholesky!(Symmetric(X'X))
+    coef = crossx \ (X'y)
+    residuals = y - X * coef
+    nt = merge(nt, (X=X, crossx=crossx, residuals=residuals, fes=fes, vcov=Vcov.robust()))
+    ret, share = estvcov(nt...)
+    # Compare estimates with Stata
+    # reghdfe oop_spend col0 col1, a(hhidpn) vce(robust)
+    # mat list e(V)
+    @test ret.vcov_mat[1,1] ≈ 654959.97 atol=0.1
+    @test ret.vcov_mat[2,2] ≈ 503679.27 atol=0.1
+    @test ret.vcov_mat[2,1] ≈ 192866.2 atol=0.1
+    @test ret.dof_residuals == nobs - nunique(fes[1]) - 2
+
+    nt = merge(nt, (vcov=Vcov.cluster(:hhidpn),))
+    ret, share = estvcov(nt...)
+    # Compare estimates with Stata
+    # reghdfe oop_spend col0 col1, a(hhidpn) clu(hhidpn)
+    # mat list e(V)
+    @test ret.vcov_mat[1,1] ≈ 606384.66 atol=0.1
+    @test ret.vcov_mat[2,2] ≈ 404399.89 atol=0.1
+    @test ret.vcov_mat[2,1] ≈ 106497.43 atol=0.1
+    @test ret.dof_residuals == nobs - 3
 end

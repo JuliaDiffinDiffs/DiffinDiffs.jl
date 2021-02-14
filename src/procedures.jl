@@ -309,3 +309,49 @@ may be shared across multiple specifications.
 const SolveLeastSquares = StatsStep{:SolveLeastSquares, typeof(solveleastsquares)}
 
 required(::SolveLeastSquares) = (:tr, :yterm, :xterms, :yxcols, :treatcols)
+
+function _vcov(data, esample::BitArray,
+        vcov::Union{Vcov.SimpleCovariance,Vcov.RobustCovariance}, fes::Vector{FixedEffect})
+    dof_absorb = 0
+    for fe in fes
+        dof_absorb += nunique(fe)
+    end
+    return vcov, dof_absorb
+end
+
+function _vcov(data, esample::BitArray, vcov::Vcov.ClusterCovariance,
+        fes::Vector{FixedEffect})
+    cludata = _getsubcolumns(data, vcov.clusters, esample)
+    concrete_vcov = Vcov.materialize(cludata, vcov)
+    dof_absorb = 0
+    for fe in fes
+        any(c->isnested(fe, c.refs), concrete_vcov.clusters) && (dof_absorb += 1)
+    end
+    return concrete_vcov, dof_absorb
+end
+
+"""
+    estvcov(args...)
+
+Estimate variance-covariance matrix.
+See also [`EstVcov`](@ref).
+"""
+function estvcov(data, esample::BitArray, vcov::Vcov.CovarianceEstimator,
+        X::Matrix, crossx::Factorization, residuals::Vector, fes::Vector{FixedEffect})
+    concrete_vcov, dof_absorb = _vcov(data, esample, vcov, fes)
+    dof_residuals = max(1, sum(esample) - size(X,2) - dof_absorb)
+    vcov_data = Vcov.VcovData(X, crossx, residuals, dof_residuals)
+    vcov_mat = getvcov(vcov_data, concrete_vcov)
+    return (vcov_mat=vcov_mat, dof_residuals=dof_residuals), true
+end
+
+"""
+    EstVcov <: StatsStep
+
+Call [`InteractionWeightedDIDs.estvcov`](@ref) to estimate variance-covariance matrix.
+The returned object named `vcov_mat` and `dof_residuals`
+may be shared across multiple specifications.
+"""
+const EstVcov = StatsStep{:EstVcov, typeof(estvcov)}
+
+required(::EstVcov) = (:data, :esample, :vcov, :X, :crossx, :residuals, :fes)

@@ -4,9 +4,11 @@ using InteractionWeightedDIDs
 using DataFrames
 using Dictionaries
 using DiffinDiffsBase: required, default, transformed, combinedargs
+using FixedEffectModels: Combination, nunique
 using FixedEffects
 using InteractionWeightedDIDs: checkvcov!, checkfes!, makefesolver,
-    _feresiduals!, makeyxcols, maketreatcols, solveleastsquares
+    _feresiduals!, makeyxcols, maketreatcols, solveleastsquares, estvcov
+using LinearAlgebra
 using StatsBase: Weights, uweights
 
 import Base: ==
