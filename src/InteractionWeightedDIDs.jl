@@ -2,15 +2,16 @@ module InteractionWeightedDIDs
 
 using Base: Callable
 using Combinatorics: combinations
-using Dictionaries
+using Dictionaries: Dictionary
 using FixedEffectModels: Vcov
 using FixedEffectModels: FixedEffectTerm, Combination,
-    fe, has_fe, parse_fixedeffect, omitsintercept, hasintercept, isnested, tss, Fstat
+    fe, has_fe, parse_fixedeffect, omitsintercept, hasintercept,
+    basecol, isnested, tss, Fstat
 using FixedEffects
-using LinearAlgebra
+using LinearAlgebra: Symmetric, cholesky!
 using Printf
 using Reexport
-using SplitApplyCombine: groupfind
+using SplitApplyCombine: group, groupfind, groupreduce
 using StatsBase: AbstractWeights, UnitWeights, NoQuote
 using StatsModels: termvars, FullRank
 using Tables: columntable, getcolumn, rowtable
@@ -28,11 +29,12 @@ export CheckVcov,
        MakeFESolver,
        MakeYXCols,
        MakeTreatCols,
+       SolveLeastSquares,
        
        RegressionBasedDID,
        Reg
 
-include("fe.jl")
+include("utils.jl")
 include("procedures.jl")
 include("did.jl")
 include("lsweights.jl")

@@ -165,13 +165,26 @@ function combinedargs(::MakeYXCols, allntargs)
     return allyterm, allxterms
 end
 
-function _genindicator(idx::Vector{Int}, n::Int)
+_parentinds(idmap::Vector{Int}, idx::Vector{Int}) = idmap[idx]
+
+# Assume idx is sorted
+function _genindicator(idx::Vector{Int}, esample::BitArray, n::Int)
     v = zeros(n)
-    v[idx] .= 1
+    iv, r = 1, 1
+    @inbounds for i in eachindex(esample)
+        if esample[i]
+            if i == idx[r]
+                v[iv] = 1.0
+                r += 1
+            end
+            iv += 1
+        end
+    end
     return v
 end
 
-_gencellweight(idx::Vector{Int}, weights::AbstractWeights) = sum(weights[idx])
+_gencellweight(idx::Vector{Int}, data, weightname::Symbol) =
+    sum(view(getcolumn(data, weightname), idx))
 
 """
     maketreatcols(args...)
@@ -181,19 +194,39 @@ and obtain cell-level weight sums and observation counts.
 See also [`MakeTreatCols`](@ref).
 """
 function maketreatcols(data, treatname::Symbol, treatintterms::Terms,
-        feM::Union{AbstractFixedEffectSolver, Nothing}, weights::AbstractWeights,
-        esample::BitArray, tr_rows::BitArray, fetol::Real, femaxiter::Int,
+        feM::Union{AbstractFixedEffectSolver, Nothing},
+        weightname::Union{Symbol, Nothing}, weights::AbstractWeights,
+        esample::BitArray, tr_rows::BitArray,
+        cohortinteracted::Bool, fetol::Real, femaxiter::Int,
         ::Type{<:DynamicTreatment{SharpDesign}}, time::Symbol, exc::Set{<:Integer})
 
     nobs = sum(esample)
-    tnames = (treatname, time, termvars(treatintterms)...)
+    tnames = (time, treatname, termvars(treatintterms)...)
     kept = tr_rows .& .!(getcolumn(data, time).-getcolumn(data, treatname).∈(exc,))
-    # Obtain a fast row iterator without copying (if no missing)
+    ikept = findall(kept)
+    # Obtain a fast row iterator without copying (after _getsubcolumns)
     trows = Table(_getsubcolumns(data, tnames, kept))
     itreats = groupfind(trows)
-    treatcols = map(x->_genindicator(x, nobs), itreats)
-    cellweights = map(x->_gencellweight(x, weights), itreats)
-    cellcounts = weights isa UnitWeights ? cellweights : map(length, itreats)
+    # Convert indices of trows to indices of data
+    itreats .= _parentinds.(Ref(ikept), itreats)
+
+    if cohortinteracted
+        tnames = (:rel, treatname, termvars(treatintterms)...)
+        f = k -> NamedTuple{tnames}((getfield(k, time) - getfield(k, treatname),
+            getfield(k, treatname), (getfield(k, n) for n in termvars(treatintterms))...))
+        itreats = Dictionary(map(f, keys(itreats)), itreats)
+    else
+        tnames = (:rel, termvars(treatintterms)...)
+        byf = p -> NamedTuple{tnames}((getfield(p[1], time) - getfield(p[1], treatname),
+            (getfield(p[1], n) for n in termvars(treatintterms))...))
+        itreats = group(byf, p->p[2], pairs(itreats))
+        itreats = map(x->sort!(vcat(x...)), itreats)
+    end
+
+    treatcols = map(x->_genindicator(x, esample, nobs), itreats)
+    cellcounts = map(length, itreats)
+    cellweights = weights isa UnitWeights ? cellcounts :
+        map(x->_gencellweight(x, data, weightname), itreats)
     
     if feM !== nothing
         M = Combination(values(treatcols)...)
@@ -206,7 +239,8 @@ function maketreatcols(data, treatname::Symbol, treatintterms::Terms,
         end
     end
 
-    return (treatcols=treatcols, cellweights=cellweights, cellcounts=cellcounts), true
+    return (itreats=itreats, treatcols=treatcols, cellweights=cellweights,
+        cellcounts=cellcounts), true
 end
 
 """
@@ -215,19 +249,63 @@ end
 Call [`InteractionWeightedDIDs.maketreatcols`](@ref) to obtain
 residualized binary columns that capture treatment effects
 and obtain cell-level weight sums and observation counts.
-The returned objects named `treatcols`, `cellweights` and `cellcounts`
+The returned objects named `itreats`, `treatcols`, `cellweights` and `cellcounts`
 may be shared across multiple specifications.
 """
 const MakeTreatCols = StatsStep{:MakeTreatCols, typeof(maketreatcols)}
 
 required(::MakeTreatCols) = (:data, :treatname, :treatintterms, :feM,
-    :weights, :esample, :tr_rows)
-default(::MakeTreatCols) = (fetol=1e-8, femaxiter=10000)
+    :weightname, :weights, :esample, :tr_rows)
+default(::MakeTreatCols) = (cohortinteracted=true, fetol=1e-8, femaxiter=10000)
 transformed(::MakeTreatCols, @nospecialize(nt::NamedTuple)) =
     (typeof(nt.tr), nt.tr.time)
 
 combinedargs(step::MakeTreatCols, allntargs) =
-    combinedargs(step, allntargs, typeof(allntargs[1].nt.tr))
+    combinedargs(step, allntargs, typeof(allntargs[1].tr))
 
 combinedargs(::MakeTreatCols, allntargs, ::Type{<:DynamicTreatment{SharpDesign}}) =
     (Set(intersect((nt.tr.exc for nt in allntargs)...)),)
+
+"""
+    solveleastsquares(args...)
+
+Solve the least squares problem for regression coefficients and residuals.
+See also [`SolveLeastSquares`](@ref).
+"""
+function solveleastsquares(tr::DynamicTreatment{SharpDesign}, yterm::AbstractTerm,
+        xterms::Terms, yxcols::Dict, treatcols::Dictionary)
+    y = yxcols[yterm]
+    ts = sort!([k for k in keys(treatcols) if !(k.rel in tr.exc)])
+    X = hcat((treatcols[k] for k in ts)..., (yxcols[k] for k in xterms)...)
+    
+    nts = length(ts)
+    basecols = trues(size(X,2))
+    if size(X, 2) > nts
+        basecols = basecol(X)
+        # Do not drop any treatment indicator
+        sum(basecols[1:nts]) == nts ||
+            error("Covariates are collinear with treatment indicators")
+        sum(basecols) < size(X, 2) &&
+            (X = X[:, basecols])
+    end
+    
+    crossx = cholesky!(Symmetric(X'X))
+    coef = crossx \ (X'y)
+    residuals = y - X * coef
+
+    treatinds = Table(ts) 
+    return (coef=coef, crossx=crossx, residuals=residuals, basecols=basecols,
+        treatinds=treatinds), true
+end
+
+"""
+    SolveLeastSquares <: StatsStep
+
+Call [`InteractionWeightedDIDs.solveleastsquares`](@ref) to
+solve the least squares problem for regression coefficients and residuals.
+The returned object named `coef`, `crossx`, `residuals`, `basecols` and `treatinds`
+may be shared across multiple specifications.
+"""
+const SolveLeastSquares = StatsStep{:SolveLeastSquares, typeof(solveleastsquares)}
+
+required(::SolveLeastSquares) = (:tr, :yterm, :xterms, :yxcols, :treatcols)

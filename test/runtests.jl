@@ -2,10 +2,11 @@ using Test
 using InteractionWeightedDIDs
 
 using DataFrames
+using Dictionaries
 using DiffinDiffsBase: required, default, transformed, combinedargs
 using FixedEffects
 using InteractionWeightedDIDs: checkvcov!, checkfes!, makefesolver,
-    _feresiduals!, makeyxcols, maketreatcols
+    _feresiduals!, makeyxcols, maketreatcols, solveleastsquares
 using StatsBase: Weights, uweights
 
 import Base: ==
