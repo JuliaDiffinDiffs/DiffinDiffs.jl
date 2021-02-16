@@ -1,5 +1,8 @@
 const Terms{N} = NTuple{N, AbstractTerm} where N
 
+# A fix to changes made in StatsModels v0.6.21
+termvars(::Tuple{}) = Symbol[]
+
 """
     eachterm(t)
 

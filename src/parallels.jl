@@ -85,7 +85,7 @@ assume a parallel trends assumption holds over all the relevant time periods.
 abstract type TrendParallel{C,S} <: AbstractParallel{C,S} end
 
 """
-    NeverTreatedParallel{C,S,T<:Tuple} <: TrendParallel{C,S}
+    NeverTreatedParallel{C,S} <: TrendParallel{C,S}
 
 Assume a parallel trends assumption holds between any group
 that received the treatment during the sample periods
@@ -93,25 +93,25 @@ and a group that did not receive any treatment in any sample period.
 See also [`nevertreated`](@ref).
 
 # Fields
-- `e::T`: group indices for units that did not receive any treatment.
+- `e::Vector{Int}`: group indices for units that did not receive any treatment.
 - `c::C`: an instance of [`ParallelCondition`](@ref).
 - `s::S`: an instance of [`ParallelStrength`](@ref).
 """
-struct NeverTreatedParallel{C,S,T<:Tuple} <: TrendParallel{C,S}
-    e::T
+struct NeverTreatedParallel{C,S} <: TrendParallel{C,S}
+    e::Vector{Int}
     c::C
     s::S
     function NeverTreatedParallel(e, c::ParallelCondition, s::ParallelStrength)
-        e = (unique!(sort!([e...]))...,)
+        e = unique!(sort!([e...]))
         isempty(e) && error("field `e` cannot be empty") 
-        return new{typeof(c),typeof(s),typeof(e)}(e, c, s)
+        return new{typeof(c),typeof(s)}(e, c, s)
     end
 end
 
 istreated(pr::NeverTreatedParallel, x) = !(x in pr.e)
 
 show(io::IO, pr::NeverTreatedParallel) =
-    print(IOContext(io, :compact=>true), "NeverTreated{", pr.c, ",", pr.s, "}", pr.e)
+    print(IOContext(io, :compact=>true), "NeverTreated{", pr.c, ",", pr.s, "}(", pr.e, ")")
 
 function show(io::IO, ::MIME"text/plain", pr::NeverTreatedParallel)
     println(io, pr.s, " trends with any never-treated group:")
@@ -133,14 +133,14 @@ a wrapper method of `nevertreated` calls this method.
 ```jldoctest; setup = :(using DiffinDiffsBase)
 julia> nevertreated(-1)
 Parallel trends with any never-treated group:
-  Never-treated groups: (-1,)
+  Never-treated groups: [-1]
 
 julia> typeof(nevertreated(-1))
 NeverTreatedParallel{Unconditional,Exact,Tuple{Int64}}
 
 julia> nevertreated([-1, 0])
 Parallel trends with any never-treated group:
-  Never-treated groups: (-1, 0)
+  Never-treated groups: [-1, 0]
 
 julia> nevertreated([-1, 0]) == nevertreated(-1:0) == nevertreated(Set([-1, 0]))
 true
@@ -159,7 +159,7 @@ A wrapper method of `nevertreated` for working with `@formula`.
 @unpack nevertreated
 
 """
-    NotYetTreatedParallel{C,S,T1<:Tuple,T2<:Tuple} <: TrendParallel{C,S}
+    NotYetTreatedParallel{C,S} <: TrendParallel{C,S}
 
 Assume a parallel trends assumption holds between any group
 that received the treatment relatively early
@@ -167,8 +167,8 @@ and any group that received the treatment relatively late (or never receved).
 See also [`notyettreated`](@ref).
 
 # Fields
-- `e::T1`: group indices for units that received the treatment relatively late.
-- `ecut::T2`: user-specified period(s) when units in a group in `e` started to receive treatment.
+- `e::Vector{Int}`: group indices for units that received the treatment relatively late.
+- `ecut::Vector{Int}`: user-specified period(s) when units in a group in `e` started to receive treatment.
 - `c::C`: an instance of [`ParallelCondition`](@ref).
 - `s::S`: an instance of [`ParallelStrength`](@ref).
 
@@ -177,25 +177,24 @@ See also [`notyettreated`](@ref).
     - never-treated groups are included and use indices with smaller values;
     - the sample has a rotating panel structure with periods overlapping with some others.
 """
-struct NotYetTreatedParallel{C,S,T1<:Tuple,T2<:Tuple} <: TrendParallel{C,S}
-    e::T1
-    ecut::T2
+struct NotYetTreatedParallel{C,S} <: TrendParallel{C,S}
+    e::Vector{Int}
+    ecut::Vector{Int}
     c::C
     s::S
     function NotYetTreatedParallel(e, ecut, c::ParallelCondition, s::ParallelStrength)
-        e = (unique!(sort!([e...]))...,)
+        e = unique!(sort!([e...]))
         isempty(e) && error("field `e` cannot be empty")
-        ecut = (unique!(sort!([ecut...]))...,)
+        ecut = unique!(sort!([ecut...]))
         isempty(ecut) && error("field `ecut` cannot be empty")
-        return new{typeof(c),typeof(s),typeof(e),typeof(ecut)}(e, ecut, c, s)
+        return new{typeof(c),typeof(s)}(e, ecut, c, s)
     end
 end
 
 istreated(pr::NotYetTreatedParallel, x) = !(x in pr.e)
 
-function show(io::IO, pr::NotYetTreatedParallel)
-    print(IOContext(io, :compact=>true), "NotYetTreated{", pr.c, ",", pr.s, "}", pr.e)
-end
+show(io::IO, pr::NotYetTreatedParallel) =
+    print(IOContext(io, :compact=>true), "NotYetTreated{", pr.c, ",", pr.s, "}(", pr.e, ")")
 
 function show(io::IO, ::MIME"text/plain", pr::NotYetTreatedParallel)
     println(io, pr.s, " trends with any not-yet-treated group:")
@@ -219,21 +218,21 @@ a wrapper method of `notyettreated` calls this method.
 ```jldoctest; setup = :(using DiffinDiffsBase) 
 julia> notyettreated(5)
 Parallel trends with any not-yet-treated group:
-  Not-yet-treated groups: (5,)
-  Treated since: (5,)
+  Not-yet-treated groups: [5]
+  Treated since: [5]
 
 julia> typeof(notyettreated(5))
 NotYetTreatedParallel{Unconditional,Exact,Tuple{Int64},Tuple{Int64}}
 
 julia> notyettreated([-1, 5, 6], 5)
 Parallel trends with any not-yet-treated group:
-  Not-yet-treated groups: (-1, 5, 6)
-  Treated since: (5,)
+  Not-yet-treated groups: [-1, 5, 6]
+  Treated since: [5]
 
 julia> notyettreated([4, 5, 6], [4, 5, 6])
 Parallel trends with any not-yet-treated group:
-  Not-yet-treated groups: (4, 5, 6)
-  Treated since: (4, 5, 6)
+  Not-yet-treated groups: [4, 5, 6]
+  Treated since: [4, 5, 6]
 ```
 """
 notyettreated(e, ecut, c::ParallelCondition, s::ParallelStrength) =

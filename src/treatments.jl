@@ -34,33 +34,34 @@ abstract type AbstractTreatment end
 @fieldequal AbstractTreatment
 
 """
-    DynamicTreatment{S<:TreatmentSharpness, E<:Tuple} <: AbstractTreatment
+    DynamicTreatment{S<:TreatmentSharpness} <: AbstractTreatment
 
 Specify an absorbing binary treatment with effects allowed to evolve over time.
 See also [`dynamic`](@ref).
 
 # Fields
 - `time::Symbol`: column name of data representing calendar time.
-- `exc::E`: excluded relative time.
+- `exc::Vector{Int}`: excluded relative time.
 - `s::S`: an instance of [`TreatmentSharpness`](@ref).
 """
-struct DynamicTreatment{S<:TreatmentSharpness, E<:Tuple} <: AbstractTreatment
+struct DynamicTreatment{S<:TreatmentSharpness} <: AbstractTreatment
     time::Symbol
-    exc::E
+    exc::Vector{Int}
     s::S
     function DynamicTreatment(time::Symbol, exc, s::TreatmentSharpness)
-        exc = exc !== nothing ? (unique!(sort!([exc...]))...,) : ()
-        return new{typeof(s),typeof(exc)}(time, exc, s)
+        exc = exc !== nothing ? unique!(sort!([exc...])) : Int[]
+        return new{typeof(s)}(time, exc, s)
     end
 end
 
 show(io::IO, tr::DynamicTreatment) =
-    print(IOContext(io, :compact=>true), "Dynamic{", tr.s, "}", tr.exc)
+    print(IOContext(io, :compact=>true), "Dynamic{", tr.s, "}(",
+        isempty(tr.exc) ? "none" : tr.exc, ")")
 
 function show(io::IO, ::MIME"text/plain", tr::DynamicTreatment)
     println(io, tr.s, " dynamic treatment:")
     println(io, "  column name of time variable: ", tr.time)
-    print(io, "  excluded relative time: ", tr.exc===() ? "none" : tr.exc)
+    print(io, "  excluded relative time: ", isempty(tr.exc) ? "none" : tr.exc)
 end
 
 """
@@ -76,7 +77,7 @@ a wrapper method of `dynamic` calls this method.
 julia> dynamic(:month, -1)
 Sharp dynamic treatment:
   column name of time variable: month
-  excluded relative time: (-1,)
+  excluded relative time: [-1]
 
 julia> typeof(dynamic(:month, -1))
 DynamicTreatment{SharpDesign,Tuple{Int64}}
@@ -84,12 +85,12 @@ DynamicTreatment{SharpDesign,Tuple{Int64}}
 julia> dynamic(:month, -3:-1)
 Sharp dynamic treatment:
   column name of time variable: month
-  excluded relative time: (-3, -2, -1)
+  excluded relative time: [-3, -2, -1]
 
 julia> dynamic(:month, [-2,-1], sharp())
 Sharp dynamic treatment:
   column name of time variable: month
-  excluded relative time: (-2, -1)
+  excluded relative time: [-2, -1]
 ```
 """
 dynamic(time::Symbol, exc, s::TreatmentSharpness=sharp()) =
