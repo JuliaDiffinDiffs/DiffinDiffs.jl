@@ -54,16 +54,29 @@ end
 @testset "MakeYXCols" begin
     hrs = exampledata("hrs")
     nobs = size(hrs, 1)
+    t1 = InterceptTerm{true}()
     nt = (data=hrs, weights=uweights(nobs), esample=trues(nobs), feM=nothing, has_fe_intercept=false, default(MakeYXCols())...)
     ret, share = makeyxcols(nt..., (term(:oop_spend),), (term(1),))
-    @test ret.yxcols == Dict(term(:oop_spend)=>hrs.oop_spend, term(1)=>ones(nobs, 1))
+    @test ret.yxcols == Dict(term(:oop_spend)=>hrs.oop_spend, t1=>ones(nobs, 1))
+    @test ret.yxterms[term(:oop_spend)] isa ContinuousTerm
+    @test ret.yxterms[t1] isa InterceptTerm{true}
+    @test ret.nfeiterations === nothing
+    @test ret.feconverged === nothing
+
+    # Verify that an intercept will be added if not having one
+    ret1, share = makeyxcols(nt..., (term(:oop_spend),), ())
+    @test ret1 == ret
+    ret1, share = makeyxcols(nt..., (term(:oop_spend),), (term(0),))
+    @test ret1.yxcols == ret.yxcols
+    @test ret1.yxterms[t1] isa InterceptTerm{true}
 
     wt = Weights(hrs.rwthh)
     nt = merge(nt, (weights=wt,))
     ret, share = makeyxcols(nt..., (term(:oop_spend), term(:riearnsemp)), (term(:male),))
     @test ret.yxcols == Dict(term(:oop_spend)=>hrs.oop_spend.*sqrt.(wt),
         term(:riearnsemp)=>hrs.riearnsemp.*sqrt.(wt),
-        term(:male)=>reshape(hrs.male.*sqrt.(wt), nobs, 1))
+        term(:male)=>reshape(hrs.male.*sqrt.(wt), nobs, 1),
+        t1=>reshape(sqrt.(wt), nobs, 1))
 
     df = DataFrame(hrs)
     df.riearnsemp[1] = NaN
@@ -101,6 +114,8 @@ end
     _feresiduals!(resids, feM, 1e-8, 10000)
     resids .*= sqrt.(wt)
     @test ret.yxcols == Dict(term(:oop_spend)=>reshape(resids, nobs))
+    @test ret.nfeiterations isa Int
+    @test ret.feconverged
     # Verify input data are not modified
     @test df.oop_spend == hrs.oop_spend
 
@@ -117,8 +132,7 @@ end
         (InterceptTerm{false}(), term(:male)))
     
     nt = merge(nt, (data=df, yterm=term(:oop_spend), xterms=(InterceptTerm{false}(),)))
-    @test MakeYXCols()(nt) ==
-        merge(nt, (yxcols=Dict(term(:oop_spend)=>reshape(resids, nobs)),))
+    @test MakeYXCols()(nt) == merge(nt, ret)
 end
 
 @testset "MakeTreatCols" begin
@@ -193,13 +207,20 @@ end
 @testset "SolveLeastSquares" begin
     hrs = exampledata("hrs")
     nobs = size(hrs, 1)
+    df = DataFrame(hrs)
+    df.t2 = fill(2.0, nobs)
+    t1 = InterceptTerm{true}()
+    t0 = InterceptTerm{false}()
     tr = dynamic(:wave, -1)
-    yxcols0 = Dict(term(:oop_spend)=>hrs.oop_spend, term(1)=>ones(nobs, 1))
+    yxterms = Dict([x=>apply_schema(x, schema(x, df), StatisticalModel)
+        for x in (term(:oop_spend), t1, term(:t2), t0, term(:male))])
+    yxcols0 = Dict(term(:oop_spend)=>hrs.oop_spend, t1=>ones(nobs, 1))
     col0 = convert(Vector{Float64}, (hrs.wave_hosp.==10).&(hrs.wave.==10))
     col1 = convert(Vector{Float64}, (hrs.wave_hosp.==10).&(hrs.wave.==11))
     tcols0 = Dictionary([(rel=0, wave_hosp=10), (rel=1, wave_hosp=10)], [col0, col1])
-    nt = (tr=tr, yterm=term(:oop_spend), xterms=(term(1),), yxcols=yxcols0, treatcols=tcols0)
-    ret, share = solveleastsquares(nt...)
+    nt = (tr=tr, yterm=term(:oop_spend), xterms=(term(1),), yxterms=yxterms,
+        yxcols=yxcols0, treatcols=tcols0, has_fe_intercept=false)
+    ret, share = solveleastsquares!(nt...)
     # Compare estimates with Stata
     # gen col0 = wave_hosp==10 & wave==10
     # gen col1 = wave_hosp==10 & wave==11
@@ -211,21 +232,34 @@ end
     @test ret.treatinds.rel == [0, 1]
     @test ret.treatinds.wave_hosp == [10, 10]
 
+    # Verify that an intercept will be added if needed
+    nt1 = merge(nt, (xterms=(),))
+    ret1, share = solveleastsquares!(nt1...)
+    @test ret1 == ret
+    nt1 = merge(nt, (xterms=(term(0),),))
+    ret1, share = solveleastsquares!(nt1...)
+    @test ret1.xterms == (t0,)
+    @test size(ret1.X, 2) == 2
+
     # Test colliner xterms are handled
-    yxcols1 = Dict(term(:oop_spend)=>hrs.oop_spend, term(1)=>ones(nobs),
-        term(2)=>fill(2.0, nobs))
-    nt1 = merge(nt, (xterms=(term(1), term(2)), yxcols=yxcols1))
-    ret1, share = solveleastsquares(nt1...)
+    yxcols1 = Dict(term(:oop_spend)=>hrs.oop_spend, t1=>ones(nobs), term(:t2)=>df.t2)
+    nt1 = merge(nt, (xterms=(term(1), term(:t2)), yxcols=yxcols1))
+    ret1, share = solveleastsquares!(nt1...)
     @test ret1.coef[1:2] == ret.coef[1:2]
     @test sum(ret1.basecols) == 3
 
     insert!(tcols0, (rel=1, wave_hosp=0), ones(nobs))
-    nt1 = merge(nt1, (treatcols=tcols0,))
-    @test_throws ErrorException solveleastsquares(nt1...)
+    insert!(tcols0, (rel=1, wave_hosp=1), ones(nobs))
+    # basecol is rather conservative in dropping collinear columns
+    # If there are three constant columns, it may be that only one of them gets dropped
+    # Also need to have at least one term in xterms for basecol to work
+    yxcols2 = Dict(term(:oop_spend)=>hrs.oop_spend, term(:male)=>hrs.male)
+    nt1 = merge(nt1, (xterms=(term(:male), term(0)), yxcols=yxcols2, treatcols=tcols0))
+    @test_throws ErrorException solveleastsquares!(nt1...)
     delete!(tcols0, (rel=1, wave_hosp=0))
+    delete!(tcols0, (rel=1, wave_hosp=1))
     
-    res = SolveLeastSquares()(nt)
-    @test res.coef == ret.coef
+    @test SolveLeastSquares()(nt) == merge(nt, ret)
 end
 
 @testset "EstVcov" begin
@@ -238,8 +272,9 @@ end
     crossx = cholesky!(Symmetric(X'X))
     coef = crossx \ (X'y)
     residuals = y - X * coef
-    nt = (data=hrs, esample=trues(nobs), vcov=Vcov.simple(), X=X, crossx=crossx,
-        residuals=residuals, fes=FixedEffect[])
+    nt = (data=hrs, esample=trues(nobs), vcov=Vcov.simple(), coef=coef,
+        X=X, crossx=crossx, residuals=residuals, xterms=(term(1),), fes=FixedEffect[],
+        has_fe_intercept=false)
     ret, share = estvcov(nt...)
     # Compare estimates with Stata
     # reg oop_spend col0 col1
@@ -249,7 +284,8 @@ end
     @test ret.vcov_mat[3,3] ≈ 20334.169 atol=1e-3
     @test ret.vcov_mat[2,1] ≈ 20334.169 atol=1e-3
     @test ret.vcov_mat[3,1] ≈ -20334.169 atol=1e-3
-    @test ret.dof_residuals == nobs - 3
+    @test ret.dof_resid == nobs - 3
+    @test ret.F ≈ 10.68532285556941 atol=1e-6
 
     nt = merge(nt, (vcov=Vcov.robust(), fes=FixedEffect[]))
     ret, share = estvcov(nt...)
@@ -261,7 +297,8 @@ end
     @test ret.vcov_mat[3,3] ≈ 19436.209 atol=1e-3
     @test ret.vcov_mat[2,1] ≈ 19436.209 atol=1e-3
     @test ret.vcov_mat[3,1] ≈ -19436.209 atol=1e-3
-    @test ret.dof_residuals == nobs - 3
+    @test ret.dof_resid == nobs - 3
+    @test ret.F ≈ 5.371847047691197 atol=1e-6
 
     nt = merge(nt, (vcov=Vcov.cluster(:hhidpn),))
     ret, share = estvcov(nt...)
@@ -273,7 +310,8 @@ end
     @test ret.vcov_mat[3,3] ≈ 28067.783 atol=1e-3
     @test ret.vcov_mat[2,1] ≈ 94113.386 atol=1e-2
     @test ret.vcov_mat[3,1] ≈ 12640.559 atol=1e-2
-    @test ret.dof_residuals == nobs - 3
+    @test ret.dof_resid == nobs - 3
+    @test ret.F ≈ 5.542094561672688 atol=1e-6
 
     fes = FixedEffect[FixedEffect(hrs.hhidpn)]
     wt = uweights(nobs)
@@ -283,7 +321,7 @@ end
     crossx = cholesky!(Symmetric(X'X))
     coef = crossx \ (X'y)
     residuals = y - X * coef
-    nt = merge(nt, (X=X, crossx=crossx, residuals=residuals, fes=fes, vcov=Vcov.robust()))
+    nt = merge(nt, (vcov=Vcov.robust(), coef=coef, X=X, crossx=crossx, residuals=residuals, xterms=(), fes=fes, has_fe_intercept=true))
     ret, share = estvcov(nt...)
     # Compare estimates with Stata
     # reghdfe oop_spend col0 col1, a(hhidpn) vce(robust)
@@ -291,7 +329,8 @@ end
     @test ret.vcov_mat[1,1] ≈ 654959.97 atol=0.1
     @test ret.vcov_mat[2,2] ≈ 503679.27 atol=0.1
     @test ret.vcov_mat[2,1] ≈ 192866.2 atol=0.1
-    @test ret.dof_residuals == nobs - nunique(fes[1]) - 2
+    @test ret.dof_resid == nobs - nunique(fes[1]) - 2
+    @test ret.F ≈ 7.559815337537517 atol=1e-6
 
     nt = merge(nt, (vcov=Vcov.cluster(:hhidpn),))
     ret, share = estvcov(nt...)
@@ -301,5 +340,8 @@ end
     @test ret.vcov_mat[1,1] ≈ 606384.66 atol=0.1
     @test ret.vcov_mat[2,2] ≈ 404399.89 atol=0.1
     @test ret.vcov_mat[2,1] ≈ 106497.43 atol=0.1
-    @test ret.dof_residuals == nobs - 3
+    @test ret.dof_resid == nobs - 3
+    @test ret.F ≈ 8.197452252592386 atol=1e-6
+
+    @test EstVcov()(nt) == merge(nt, ret)
 end

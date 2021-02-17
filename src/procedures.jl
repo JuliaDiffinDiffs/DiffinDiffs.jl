@@ -4,10 +4,10 @@
 Exclude rows that are invalid for `vcov`.
 See also [`CheckVcov`](@ref).
 """
-checkvcov!(data, esample::BitArray, vcov::Union{Vcov.SimpleCovariance,Vcov.RobustCovariance}) =
-    NamedTuple(), false
+checkvcov!(data, esample::BitVector,
+    vcov::Union{Vcov.SimpleCovariance, Vcov.RobustCovariance}) = NamedTuple(), false
 
-function checkvcov!(data, esample::BitArray, vcov::Vcov.ClusterCovariance)
+function checkvcov!(data, esample::BitVector, vcov::Vcov.ClusterCovariance)
     esample .&= Vcov.completecases(data, vcov)
     return (esample=esample,), false
 end
@@ -31,7 +31,7 @@ drop singleton observations for any fixed effect
 and determine whether intercept term should be omitted.
 See also [`CheckFEs`](@ref).
 """
-function checkfes!(data, esample::BitArray, xterms::Terms, drop_singletons::Bool)
+function checkfes!(data, esample::BitVector, xterms::Terms, drop_singletons::Bool)
     fes, fenames, xterms = parse_fixedeffect(data, xterms)
     has_fe_intercept = false
     nsingle = 0
@@ -66,7 +66,8 @@ default(::CheckFEs) = (xterms=(), drop_singletons=true)
 Construct `FixedEffects.AbstractFixedEffectSolver`.
 See also [`MakeFESolver`](@ref).
 """
-function makefesolver(fenames::Vector{Symbol}, weights::AbstractWeights, esample::BitArray, fes::Vector{FixedEffect})
+function makefesolver(fenames::Vector{Symbol}, weights::AbstractWeights, esample::BitVector,
+        fes::Vector{FixedEffect})
     if !isempty(fes)
         fes = FixedEffect[fe[esample] for fe in fes]
         feM = AbstractFixedEffectSolver{Float64}(fes, weights, Val{:cpu}, Threads.nthreads())
@@ -92,7 +93,9 @@ function _feresiduals!(M::AbstractArray, feM::AbstractFixedEffectSolver,
         tol::Real, maxiter::Integer)
     _, iters, convs = solve_residuals!(M, feM; tol=tol, maxiter=maxiter, progress_bar=false)
     iter = maximum(iters)
-    all(convs) || @warn "no convergence of fixed effect solver in $(iter) iterations"
+    conv = all(convs)
+    conv || @warn "no convergence of fixed effect solver in $(iter) iterations"
+    return iter, conv
 end
 
 """
@@ -102,7 +105,7 @@ Construct columns for outcome variables and covariates
 and residualize them with fixed effects.
 See also [`MakeYXCols`](@ref).
 """
-function makeyxcols(data, weights::AbstractWeights, esample::BitArray,
+function makeyxcols(data, weights::AbstractWeights, esample::BitVector,
         feM::Union{AbstractFixedEffectSolver, Nothing}, has_fe_intercept::Bool,
         contrasts::Dict, fetol::Real, femaxiter::Int, allyterm::Terms, allxterms::Terms)
     
@@ -110,14 +113,25 @@ function makeyxcols(data, weights::AbstractWeights, esample::BitArray,
     yxnames = union(termvars(allyterm), termvars(allxterms))
     yxdata = _getsubcolumns(data, yxnames, esample)
     concrete_yterms = apply_schema(allyterm, schema(allyterm, yxdata), StatisticalModel)
+    yxterms = Dict{AbstractTerm, AbstractTerm}()
     for (t, ct) in zip(eachterm(allyterm), eachterm(concrete_yterms))
         ycol = convert(Vector{Float64}, modelcols(ct, yxdata))
         all(isfinite, ycol) || error("data for term $ct contain NaN or Inf")
         yxcols[t] = ycol
+        yxterms[t] = ct
     end
 
+    # Standardize how an intercept or omitsintercept is represented
+    allxterms = parse_intercept(allxterms)
+
+    # Add an intercept if not already having one
+    has_fe_intercept || hasintercept(allxterms) ||
+        (allxterms = (allxterms..., InterceptTerm{true}()))
+
+    # Any term other than InterceptTerm{true}() that represents the intercept
+    # will be replaced by InterceptTerm{true}()
+    # Need to take such changes into account when creating X matrix
     xschema = schema(allxterms, yxdata, contrasts)
-    has_fe_intercept && (xschema = FullRank(xschema, Set([InterceptTerm{true}()])))
     concrete_xterms = apply_schema(allxterms, xschema, StatisticalModel)
     for (t, ct) in zip(eachterm(allxterms), eachterm(concrete_xterms))
         if width(ct) > 0
@@ -125,11 +139,13 @@ function makeyxcols(data, weights::AbstractWeights, esample::BitArray,
             all(isfinite, xcols) || error("data for term $ct contain NaN or Inf")
             yxcols[t] = xcols
         end
+        yxterms[t] = ct
     end
 
+    iter, conv = nothing, nothing
     if feM !== nothing
         YX = Combination(values(yxcols)...)
-        _feresiduals!(YX, feM, fetol, femaxiter)
+        iter, conv = _feresiduals!(YX, feM, fetol, femaxiter)
     end
 
     if !(weights isa UnitWeights)
@@ -138,7 +154,7 @@ function makeyxcols(data, weights::AbstractWeights, esample::BitArray,
         end
     end
 
-    return (yxcols=yxcols,), true
+    return (yxcols=yxcols, yxterms=yxterms, nfeiterations=iter, feconverged=conv), true
 end
 
 """
@@ -146,7 +162,7 @@ end
 
 Call [`InteractionWeightedDIDs.makeyxcols`](@ref) to obtain
 residualized outcome variables and covariates.
-The returned object named `yxcols`
+The returned objects named `yxcols`, `yxterms`, `nfeiterations` and `feconverged`
 may be shared across multiple specifications.
 """
 const MakeYXCols = StatsStep{:MakeYXCols, typeof(makeyxcols)}
@@ -155,20 +171,20 @@ required(::MakeYXCols) = (:data, :weights, :esample, :feM, :has_fe_intercept)
 default(::MakeYXCols) = (contrasts=Dict{Symbol, Any}(), fetol=1e-8, femaxiter=10000)
 
 function combinedargs(::MakeYXCols, allntargs)
-    allyterm, allxterms = (allntargs[1].yterm,), allntargs[1].xterms
     if length(allntargs) > 1
-        for i in 2:length(allntargs)
-            allyterm += allntargs[i].yterm
-            allxterms += allntargs[i].xterms
+        allyterm, allxterms = Set{AbstractTerm}(), Set{AbstractTerm}()
+        for nt in allntargs
+            push!(allyterm, nt.yterm)
+            !isempty(nt.xterms) && push!(allxterms, nt.xterms...)
         end
+        return (allyterm...,), (allxterms...,)
+    else
+        return (allntargs[1].yterm,), allntargs[1].xterms
     end
-    return allyterm, allxterms
 end
 
-_parentinds(idmap::Vector{Int}, idx::Vector{Int}) = idmap[idx]
-
 # Assume idx is sorted
-function _genindicator(idx::Vector{Int}, esample::BitArray, n::Int)
+function _genindicator(idx::Vector{Int}, esample::BitVector, n::Int)
     v = zeros(n)
     iv, r = 1, 1
     @inbounds for i in eachindex(esample)
@@ -196,7 +212,7 @@ See also [`MakeTreatCols`](@ref).
 function maketreatcols(data, treatname::Symbol, treatintterms::Terms,
         feM::Union{AbstractFixedEffectSolver, Nothing},
         weightname::Union{Symbol, Nothing}, weights::AbstractWeights,
-        esample::BitArray, tr_rows::BitArray,
+        esample::BitVector, tr_rows::BitVector,
         cohortinteracted::Bool, fetol::Real, femaxiter::Int,
         ::Type{<:DynamicTreatment{SharpDesign}}, time::Symbol, exc::Set{<:Integer})
 
@@ -206,10 +222,10 @@ function maketreatcols(data, treatname::Symbol, treatintterms::Terms,
     ikept = findall(kept)
     # Obtain a fast row iterator without copying (after _getsubcolumns)
     trows = Table(_getsubcolumns(data, tnames, kept))
-    itreats = groupfind(trows)
-    # Convert indices of trows to indices of data
-    itreats .= _parentinds.(Ref(ikept), itreats)
+    # Obtain row indices that take value one for each treatment indicator
+    itreats = group(trows, ikept)
 
+    # Calculate relative time
     if cohortinteracted
         tnames = (:rel, treatname, termvars(treatintterms)...)
         f = k -> NamedTuple{tnames}((getfield(k, time) - getfield(k, treatname),
@@ -217,9 +233,9 @@ function maketreatcols(data, treatname::Symbol, treatintterms::Terms,
         itreats = Dictionary(map(f, keys(itreats)), itreats)
     else
         tnames = (:rel, termvars(treatintterms)...)
-        byf = p -> NamedTuple{tnames}((getfield(p[1], time) - getfield(p[1], treatname),
-            (getfield(p[1], n) for n in termvars(treatintterms))...))
-        itreats = group(byf, p->p[2], pairs(itreats))
+        byf = p -> NamedTuple{tnames}((getfield(p, time) - getfield(p, treatname),
+            (getfield(p, n) for n in termvars(treatintterms))...))
+        itreats = group(mapview(byf, keys(itreats)), itreats)
         itreats = map(x->sort!(vcat(x...)), itreats)
     end
 
@@ -267,16 +283,24 @@ combinedargs(::MakeTreatCols, allntargs, ::Type{<:DynamicTreatment{SharpDesign}}
     (Set(intersect((nt.tr.exc for nt in allntargs)...)),)
 
 """
-    solveleastsquares(args...)
+    solveleastsquares!(args...)
 
 Solve the least squares problem for regression coefficients and residuals.
 See also [`SolveLeastSquares`](@ref).
 """
-function solveleastsquares(tr::DynamicTreatment{SharpDesign}, yterm::AbstractTerm,
-        xterms::Terms, yxcols::Dict, treatcols::Dictionary)
+function solveleastsquares!(tr::DynamicTreatment{SharpDesign}, yterm::AbstractTerm,
+        xterms::Terms, yxterms::Dict, yxcols::Dict, treatcols::Dictionary,
+        has_fe_intercept::Bool)
     y = yxcols[yterm]
     ts = sort!([k for k in keys(treatcols) if !(k.rel in tr.exc)])
-    X = hcat((treatcols[k] for k in ts)..., (yxcols[k] for k in xterms)...)
+    # Be consistent with allxterms in makeyxcols
+    xterms = parse_intercept(xterms)
+    # Add an intercept if needed
+    has_fe_intercept || hasintercept(xterms) ||
+        omitsintercept(xterms) || (xterms = (xterms..., InterceptTerm{true}()))
+    
+    X = hcat((treatcols[k] for k in ts)...,
+        (yxcols[k] for k in xterms if width(yxterms[k])>0)...)
     
     nts = length(ts)
     basecols = trues(size(X,2))
@@ -293,24 +317,26 @@ function solveleastsquares(tr::DynamicTreatment{SharpDesign}, yterm::AbstractTer
     coef = crossx \ (X'y)
     residuals = y - X * coef
 
-    treatinds = Table(ts) 
-    return (coef=coef, crossx=crossx, residuals=residuals, basecols=basecols,
-        treatinds=treatinds), true
+    treatinds = Table(ts)
+
+    return (coef=coef, X=X, crossx=crossx, residuals=residuals, treatinds=treatinds,
+        xterms=xterms, basecols=basecols), true
 end
 
 """
     SolveLeastSquares <: StatsStep
 
-Call [`InteractionWeightedDIDs.solveleastsquares`](@ref) to
+Call [`InteractionWeightedDIDs.solveleastsquares!`](@ref) to
 solve the least squares problem for regression coefficients and residuals.
-The returned object named `coef`, `crossx`, `residuals`, `basecols` and `treatinds`
+The returned objects named `coef`, `X`, `crossx`, `residuals`, `basecols` and `treatinds`
 may be shared across multiple specifications.
 """
-const SolveLeastSquares = StatsStep{:SolveLeastSquares, typeof(solveleastsquares)}
+const SolveLeastSquares = StatsStep{:SolveLeastSquares, typeof(solveleastsquares!)}
 
-required(::SolveLeastSquares) = (:tr, :yterm, :xterms, :yxcols, :treatcols)
+required(::SolveLeastSquares) = (:tr, :yterm, :xterms, :yxterms, :yxcols, :treatcols,
+    :has_fe_intercept)
 
-function _vcov(data, esample::BitArray,
+function _vcov(data, esample::BitVector,
         vcov::Union{Vcov.SimpleCovariance,Vcov.RobustCovariance}, fes::Vector{FixedEffect})
     dof_absorb = 0
     for fe in fes
@@ -319,7 +345,7 @@ function _vcov(data, esample::BitArray,
     return vcov, dof_absorb
 end
 
-function _vcov(data, esample::BitArray, vcov::Vcov.ClusterCovariance,
+function _vcov(data, esample::BitVector, vcov::Vcov.ClusterCovariance,
         fes::Vector{FixedEffect})
     cludata = _getsubcolumns(data, vcov.clusters, esample)
     concrete_vcov = Vcov.materialize(cludata, vcov)
@@ -333,25 +359,36 @@ end
 """
     estvcov(args...)
 
-Estimate variance-covariance matrix.
+Estimate variance-covariance matrix and F-statistic.
 See also [`EstVcov`](@ref).
 """
-function estvcov(data, esample::BitArray, vcov::Vcov.CovarianceEstimator,
-        X::Matrix, crossx::Factorization, residuals::Vector, fes::Vector{FixedEffect})
+function estvcov(data, esample::BitVector, vcov::CovarianceEstimator, coef::Vector,
+        X::Matrix, crossx::Factorization, residuals::Vector,
+        xterms::Terms, fes::Vector{FixedEffect}, has_fe_intercept::Bool)
     concrete_vcov, dof_absorb = _vcov(data, esample, vcov, fes)
-    dof_residuals = max(1, sum(esample) - size(X,2) - dof_absorb)
-    vcov_data = Vcov.VcovData(X, crossx, residuals, dof_residuals)
+    dof_resid = max(1, sum(esample) - size(X,2) - dof_absorb)
+    vcov_data = Vcov.VcovData(X, crossx, residuals, dof_resid)
     vcov_mat = getvcov(vcov_data, concrete_vcov)
-    return (vcov_mat=vcov_mat, dof_residuals=dof_residuals), true
+
+    # Fstat assumes the last coef is intercept if having any intercept
+    has_intercept = !isempty(xterms) && isintercept(xterms[end])
+    F = Fstat(coef, vcov_mat, has_intercept)
+    has_intercept = has_intercept || has_fe_intercept
+    df_F = max(1, Vcov.df_FStat(vcov_data, concrete_vcov, has_intercept))
+    p = fdistccdf(max(length(coef) - has_intercept, 1), df_F, F)
+
+    return (vcov_mat=vcov_mat, dof_resid=dof_resid, F=F, p=p), true
 end
 
 """
     EstVcov <: StatsStep
 
-Call [`InteractionWeightedDIDs.estvcov`](@ref) to estimate variance-covariance matrix.
-The returned object named `vcov_mat` and `dof_residuals`
+Call [`InteractionWeightedDIDs.estvcov`](@ref) to
+estimate variance-covariance matrix and F-statistic.
+The returned objects named `vcov_mat`, `dof_resid`, `F` and `p`
 may be shared across multiple specifications.
 """
 const EstVcov = StatsStep{:EstVcov, typeof(estvcov)}
 
-required(::EstVcov) = (:data, :esample, :vcov, :X, :crossx, :residuals, :fes)
+required(::EstVcov) = (:data, :esample, :vcov, :coef, :X, :crossx, :residuals, :xterms,
+    :fes, :has_fe_intercept)

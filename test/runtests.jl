@@ -3,13 +3,14 @@ using InteractionWeightedDIDs
 
 using DataFrames
 using Dictionaries
-using DiffinDiffsBase: required, default, transformed, combinedargs
+using DiffinDiffsBase: required, default, transformed, combinedargs, valid_didargs
 using FixedEffectModels: Combination, nunique
 using FixedEffects
 using InteractionWeightedDIDs: checkvcov!, checkfes!, makefesolver,
-    _feresiduals!, makeyxcols, maketreatcols, solveleastsquares, estvcov
+    _feresiduals!, makeyxcols, maketreatcols, solveleastsquares!, estvcov
 using LinearAlgebra
 using StatsBase: Weights, uweights
+using StatsModels: ConstantTerm, ContinuousTerm, schema, apply_schema
 
 import Base: ==
 
@@ -17,7 +18,8 @@ import Base: ==
     x.refs == y.refs && x.interaction == y.interaction && x.n == y.n
 
 const tests = [
-    "procedures"
+    "procedures",
+    "did"
 ]
 
 printstyled("Running tests:\n", color=:blue)

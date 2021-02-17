@@ -4,22 +4,25 @@ using Base: Callable
 using Combinatorics: combinations
 using Dictionaries: Dictionary
 using FixedEffectModels: FixedEffectTerm, Combination,
-    fe, has_fe, parse_fixedeffect, omitsintercept, hasintercept,
-    basecol, isnested, tss, Fstat, nunique
+    fe, has_fe, parse_fixedeffect, basecol, isnested, nunique
 using FixedEffects
 using LinearAlgebra: Factorization, Symmetric, cholesky!
 using Printf
 using Reexport
-using SplitApplyCombine: group, groupfind, groupreduce
-using StatsBase: AbstractWeights, UnitWeights, NoQuote, vcov
-using StatsModels: termvars, FullRank
-using Tables: columntable, getcolumn, rowtable
+using SplitApplyCombine: group, mapview
+using StatsBase: AbstractWeights, CovarianceEstimator, UnitWeights, NoQuote, vcov
+using StatsFuns: fdistccdf
+using StatsModels: coefnames
+using Tables: getcolumn
 using TypedTables: Table
 using Vcov
 @reexport using DiffinDiffsBase
+using DiffinDiffsBase: termvars, hasintercept, omitsintercept, isintercept, parse_intercept
 
 import Base: show
-import DiffinDiffsBase: required, default, transformed, combinedargs, _getsubcolumns
+import DiffinDiffsBase: required, default, transformed, combinedargs, _getsubcolumns,
+    valid_didargs, result
+import FixedEffectModels: has_fe
 
 # Handle naming conflicts
 const getvcov = vcov
@@ -36,7 +39,8 @@ export CheckVcov,
        EstVcov,
        
        RegressionBasedDID,
-       Reg
+       Reg,
+       RegressionBasedDIDResult
 
 include("utils.jl")
 include("procedures.jl")
