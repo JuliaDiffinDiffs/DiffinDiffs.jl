@@ -3,6 +3,7 @@ using DiffinDiffsBase
 
 using DataFrames
 using DiffinDiffsBase: unpack, @unpack, hastreat, parse_treat,
+    hasintercept, omitsintercept, isintercept, isomitsintercept, parse_intercept,
     _f, groupargs, pool, checkdata, checkvars!, makeweights, _getsubcolumns, parse_didargs
 using StatsBase: Weights, UnitWeights
 using StatsModels: termvars

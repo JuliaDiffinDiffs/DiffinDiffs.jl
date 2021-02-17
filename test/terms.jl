@@ -101,3 +101,18 @@ end
         @test_throws ArgumentError parse_treat(f)
     end
 end
+
+@testset "parse_intercept" begin
+    @test hasintercept(()) == false
+    @test omitsintercept(()) == false
+    @test isintercept(term(1))
+    @test isomitsintercept(term(0))
+    @test isomitsintercept(term(-1))
+
+    @test parse_intercept(()) == ()
+    @test parse_intercept((term(:x),)) == (term(:x),)
+    @test parse_intercept((term(1),)) == (InterceptTerm{true}(),)
+    @test parse_intercept((term(0), term(-1))) == (InterceptTerm{false}(),)
+    @test parse_intercept((term(1), term(0), term(:x))) ==
+        (term(:x), InterceptTerm{false}(), InterceptTerm{true}())
+end

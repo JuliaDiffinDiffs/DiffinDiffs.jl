@@ -12,7 +12,7 @@ using Tables: istable, getcolumn, columntable
 
 import Base: ==, show, union
 import Base: eltype, firstindex, lastindex, getindex, iterate, length, sym_in
-import StatsModels: termvars
+import StatsModels: termvars, hasintercept, omitsintercept
 
 export cb,
        ≊,

@@ -1,8 +1,5 @@
 const Terms{N} = NTuple{N, AbstractTerm} where N
 
-# A fix to changes made in StatsModels v0.6.21
-termvars(::Tuple{}) = Symbol[]
-
 """
     eachterm(t)
 
@@ -11,19 +8,22 @@ Return an iterable collection of terms in `t`.
 eachterm(@nospecialize(t::AbstractTerm)) = (t,)
 eachterm(@nospecialize(t::Terms)) = t
 
-==(a::Terms{N}, b::Terms{N}) where N = all([t in b for t in a])
-==(a::InteractionTerm, b::InteractionTerm) = a.terms==b.terms
-==(a::FormulaTerm, b::FormulaTerm) = a.lhs==b.lhs && a.rhs==b.rhs
+==(@nospecialize(a::Terms), @nospecialize(b::Terms)) =
+    length(a)==length(b) && all(t->t in b, a)
+==(@nospecialize(a::InteractionTerm), @nospecialize(b::InteractionTerm)) =
+    a.terms==b.terms
+==(@nospecialize(a::FormulaTerm), @nospecialize(b::FormulaTerm)) =
+    a.lhs==b.lhs && a.rhs==b.rhs
 
 """
     TreatmentTerm{T<:AbstractTreatment} <: AbstractTerm
 
-Contain specification information on treatment and parallel trends assumption.
+A term that contains specifications on treatment and parallel trends assumption.
 See also [`treat`](@ref).
 
 # Fields
 - `sym::Symbol`: the column name of data representing treatment status.
-- `tr::T`: a treatment type that specifies the treatment and indices of estimates.
+- `tr::T`: a treatment type that specifies the causal parameters of interest.
 - `pr::P`: a parallel type that specifies the parallel trends assumption.
 """
 struct TreatmentTerm{T<:AbstractTreatment,P<:AbstractParallel} <: AbstractTerm
@@ -59,17 +59,17 @@ hastreat(::TreatmentTerm) = true
 hastreat(::FunctionTerm{typeof(treat)}) = true
 hastreat(t::InteractionTerm) = any(hastreat(x) for x in t.terms)
 hastreat(::AbstractTerm) = false
-hastreat(t::FormulaTerm) = any(hastreat(x) for x in eachterm(t.rhs))
+hastreat(@nospecialize(t::FormulaTerm)) = any(hastreat(x) for x in eachterm(t.rhs))
 
 """
     parse_treat(formula::FormulaTerm)
 
-Return a `Tuple` of three objects extracted from the right-hand-side of `formula`.
+Extract terms related to treatment specifications from `formula`.
 
 # Returns
 - `TreatmentTerm`: the unique `TreatmentTerm` contained in the `formula`.
-- `Tuple`: any term that is interacted with the `TreatmentTerm`.
-- `Tuple`: any remaining term in `formula.rhs`.
+- `Terms`: a tuple of any term that is interacted with the `TreatmentTerm`.
+- `Terms`: a tuple of remaining terms in `formula.rhs`.
 
 Error will be raised if either existence or uniqueness of the `TreatmentTerm` is violated.
 """
@@ -112,3 +112,28 @@ function parse_treat(@nospecialize(formula::FormulaTerm))
     xterms = Tuple(term for term in eachterm(formula.rhs) if !hastreat(term))
     return treats[1][1], treats[1][2], xterms
 end
+
+# A tentative solution to changes made in StatsModels v0.6.21
+hasintercept(::Tuple{}) = false
+omitsintercept(::Tuple{}) = false
+
+isintercept(t::AbstractTerm) = t in (InterceptTerm{true}(), ConstantTerm(1))
+isomitsintercept(t::AbstractTerm) =
+    t in (InterceptTerm{false}(), ConstantTerm(0), ConstantTerm(-1))
+
+"""
+    parse_intercept(ts::Terms)
+
+Convert any `ConstantTerm` to `InterceptTerm` and add them to the end of the tuple.
+This is useful for obtaining a unique way of specifying the intercept
+before going through the `schema`--`apply_schema` pipeline defined in `StatsModels`.
+"""
+function parse_intercept(@nospecialize(ts::Terms))
+    out = AbstractTerm[t for t in ts if !(isintercept(t) || isomitsintercept(t))]
+    omitsintercept(ts) && push!(out, InterceptTerm{false}())
+    # This order is assumed by InteractionWeightedDIDs.Fstat
+    hasintercept(ts) && push!(out, InterceptTerm{true}())
+    return (out...,)
+end
+
+termvars(::Tuple{}) = Symbol[]
