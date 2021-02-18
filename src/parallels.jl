@@ -215,7 +215,7 @@ When working with `@formula`,
 a wrapper method of `notyettreated` calls this method.
 
 # Examples
-```jldoctest; setup = :(using DiffinDiffsBase) 
+```jldoctest; setup = :(using DiffinDiffsBase)
 julia> notyettreated(5)
 Parallel trends with any not-yet-treated group:
   Not-yet-treated groups: [5]

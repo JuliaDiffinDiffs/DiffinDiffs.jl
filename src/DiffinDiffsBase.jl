@@ -12,7 +12,11 @@ using Tables: istable, getcolumn, columntable
 
 import Base: ==, show, union
 import Base: eltype, firstindex, lastindex, getindex, iterate, length, sym_in
+import StatsBase: coef, vcov, responsename, coefnames, weights, nobs, dof_residual
 import StatsModels: termvars, hasintercept, omitsintercept
+
+# Reexport objects from StatsBase
+export coef, vcov, responsename, coefnames, weights, nobs, dof_residual
 
 export cb,
        ≊,
@@ -63,7 +67,8 @@ export cb,
        did,
        didspec,
        @did,
-       DIDResult
+       DIDResult,
+       outcomename
 
 include("utils.jl")
 include("treatments.jl")

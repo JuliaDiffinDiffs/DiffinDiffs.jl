@@ -19,13 +19,13 @@ end
     @test length(d) == 2
     @test eltype(d) == StatsStep
     @test d[1] == TestStep()
-    @test d[1:2] == [TestStep(), TestResult()]
-    @test d[[2,1]] == [TestResult(), TestStep()]
+    @test d[1:2] == [TestStep(), TestNextStep()]
+    @test d[[2,1]] == [TestNextStep(), TestStep()]
     @test_throws BoundsError d[3]
     @test_throws MethodError d[:a]
-    @test collect(d) == StatsStep[TestStep(), TestResult()]
+    @test collect(d) == StatsStep[TestStep(), TestNextStep()]
     @test iterate(d) == (TestStep(), 2)
-    @test iterate(d, 2) === (TestResult(), 3)
+    @test iterate(d, 2) === (TestNextStep(), 3)
     @test iterate(d, 3) === nothing
 end
 
@@ -153,16 +153,53 @@ end
     @test sp6 === @did [noproceed] TestDID @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) & z + x)
 end
 
+@testset "DIDResult" begin
+    r = result(TestDID, NamedTuple()).result
+
+    @test coef(r) == r.coef
+    @test coef(r, 1) == 1
+    @test coef(r, "rel: 1 & c: 1") == 1
+    @test coef(r, :c5) == 5
+    @test coef(r, 1:2) == [1.0, 2.0]
+    @test coef(r, 5:-1:3) == [5.0, 4.0, 3.0]
+    @test coef(r, (1, :c5, "rel: 1 & c: 1")) == [1.0, 5.0, 1.0]
+    @test coef(r, [1 "rel: 1 & c: 1" :c5]) == [1.0 1.0 5.0]
+    @test coef(x->true, r) == collect(Float64, 1:4)
+    @test coef(x->x.rel==1, r) == [1.0, 2.0]
+
+    @test vcov(r) == r.vcov
+    @test vcov(r, 1) == 1
+    @test vcov(r, 1, 2) == 2
+    @test vcov(r, "rel: 1 & c: 1") == 1
+    @test vcov(r, :c5) == 25
+    @test vcov(r, "rel: 1 & c: 1", :c5) == 5
+    @test vcov(r, 1:2) == r.vcov[1:2, 1:2]
+    @test vcov(r, 5:-1:3) == r.vcov[5:-1:3, 5:-1:3]
+    @test vcov(r, (1, :c5, "rel: 1 & c: 1")) == r.vcov[[1,5,1], [1,5,1]]
+    @test vcov(r, [1 :c5 "rel: 1 & c: 1"]) == r.vcov[[1,5,1], [1,5,1]]
+    @test vcov(x->true, r) == r.vcov[1:4, 1:4]
+    @test vcov(x->x.rel==1, r) == r.vcov[1:2, 1:2]
+
+    @test nobs(r) == 6
+    @test dof_residual(r) == 5
+    @test responsename(r) == "y"
+    @test outcomename(r) == responsename(r)
+    @test coefnames(r) == r.coefnames
+    @test weights(r) == :w
+end
+
 @testset "did @did" begin
+    r = result(TestDID, NamedTuple()).result
     d0 = @did TestDID TR PR
     d1 = @did PR TR TestDID
-    @test d0 == "testresult"
+    @test d0 == r
     @test d1 == d0
-    @test did(TestDID, TR, PR) == d0
-    @test did(PR, TR, TestDID) == d0
+    @test did(TestDID, TR, PR) == r
+    @test did(PR, TR, TestDID) == r
 
     d = @did [keepall] TestDID testterm
-    @test d ≊ (tr=TR, pr=PR, treatname=:g, str=sprint(show, TR), spr=sprint(show, PR), result="testresult")
+    @test d ≊ (tr=TR, pr=PR, treatname=:g, str=sprint(show, TR), spr=sprint(show, PR),
+        next="next"*sprint(show, TR), result=r)
     @test did(TestDID, testterm; keepall=true) == d
 
     d0 = @did [keepall] TestDID term(:y) ~ testterm
@@ -180,10 +217,10 @@ end
     @test did(TestDID, @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) & z + x); keepall=true) == d1
 
     d = @did [keep=:treatname] TestDID testterm
-    @test d ≊ (treatname=:g, result="testresult")
+    @test d ≊ (treatname=:g, result=r)
     @test did(TestDID, testterm; keep=:treatname) == d
     d = @did [keep=[:treatname,:tr]] TestDID testterm
-    @test d ≊ (treatname=:g, tr=TR, result="testresult")
+    @test d ≊ (treatname=:g, tr=TR, result=r)
     @test did(TestDID, testterm; keep=[:treatname,:tr]) == d
 
     @test_throws ArgumentError @did TestDID

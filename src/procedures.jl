@@ -39,13 +39,13 @@ const CheckData = StatsStep{:CheckData, typeof(checkdata)}
 required(::CheckData) = (:data,)
 default(::CheckData) = (subset=nothing, weightname=nothing)
 
-function _overlaptime(tr::DynamicTreatment, tr_rows::BitArray, data)
+function _overlaptime(tr::DynamicTreatment, tr_rows::BitVector, data)
     control_time = Set(view(getcolumn(data, tr.time), .!tr_rows))
     treated_time = Set(view(getcolumn(data, tr.time), tr_rows))
     return intersect(control_time, treated_time), control_time, treated_time
 end
 
-function overlap!(esample::BitArray, tr_rows::BitArray, tr::DynamicTreatment,
+function overlap!(esample::BitVector, tr_rows::BitVector, tr::DynamicTreatment,
         ::NeverTreatedParallel{Unconditional}, treatname::Symbol, data)
     overlap_time, control_time, treated_time = _overlaptime(tr, tr_rows, data)
     length(control_time)==length(treated_time)==length(overlap_time) ||
@@ -53,7 +53,7 @@ function overlap!(esample::BitArray, tr_rows::BitArray, tr::DynamicTreatment,
     tr_rows .&= esample
 end
     
-function overlap!(esample::BitArray, tr_rows::BitArray, tr::DynamicTreatment,
+function overlap!(esample::BitVector, tr_rows::BitVector, tr::DynamicTreatment,
         pr::NotYetTreatedParallel{Unconditional}, treatname::Symbol, data)
     overlap_time, _c, _t = _overlaptime(tr, tr_rows, data)
     timetype = eltype(overlap_time)
@@ -75,7 +75,7 @@ and find rows with data from treated units.
 See also [`CheckVars`](@ref).
 """
 function checkvars!(data, tr::AbstractTreatment, pr::AbstractParallel,
-        yterm::AbstractTerm, treatname::Symbol, esample::BitArray,
+        yterm::AbstractTerm, treatname::Symbol, esample::BitVector,
         treatintterms::Terms, xterms::Terms)
 
     treatvars = union([treatname], (termvars(t) for t in (tr, pr, treatintterms))...)
@@ -116,13 +116,13 @@ default(::CheckVars) = (treatintterms=(), xterms=())
 Construct a generic `Weights` vector.
 See also [`MakeWeights`](@ref).
 """
-function makeweights(data, esample::BitArray, weightname::Symbol)
+function makeweights(data, esample::BitVector, weightname::Symbol)
     weights = Weights(convert(Vector{Float64}, view(getcolumn(data, weightname), esample)))
     all(isfinite, weights) || error("data column $weightname contain not-a-number values")
     (weights=weights,), true
 end
 
-function makeweights(data, esample::BitArray, weightname::Nothing)
+function makeweights(data, esample::BitVector, weightname::Nothing)
     weights = uweights(sum(esample))
     (weights=weights,), true
 end
