@@ -153,8 +153,15 @@ end
     @test sp6 === @did [noproceed] TestDID @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) & z + x)
 end
 
+@testset "_treatnames" begin
+    t = Table((rel=[1, 2],))
+    @test _treatnames(t) == ["rel: 1", "rel: 2"]
+    r = TestResult(2, 2)
+    @test _treatnames(r.treatinds) == ["rel: $a & c: $b" for a in 1:2 for b in 1:2]
+end
+
 @testset "DIDResult" begin
-    r = result(TestDID, NamedTuple()).result
+    r = TestResult(2, 2)
 
     @test coef(r) == r.coef
     @test coef(r, 1) == 1
@@ -185,6 +192,7 @@ end
     @test responsename(r) == "y"
     @test outcomename(r) == responsename(r)
     @test coefnames(r) == r.coefnames
+    @test treatnames(r) == r.coefnames[1:4]
     @test weights(r) == :w
 end
 

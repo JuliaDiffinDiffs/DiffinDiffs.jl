@@ -175,6 +175,27 @@ All concrete subtypes of `DIDResult` are expected to have the following fields:
 abstract type DIDResult <: StatisticalModel end
 
 """
+    _treatnames(treatinds)
+
+Generate names for treatment coefficients.
+Assume `treatinds` is compatible with the `Tables.jl` interface.
+"""
+function _treatnames(treatinds)
+    cols = columnnames(treatinds)
+    ncol = length(cols)
+    # Assume treatinds has at least one column
+    c1 = cols[1]
+    names = Ref(string(c1, ": ")).*string.(getcolumn(treatinds, c1))
+    if ncol > 1
+        for i in 2:ncol
+            ci = cols[i]
+            names .*= Ref(string(" & ", ci, ": ")).*string.(getcolumn(treatinds, ci))
+        end
+    end
+    return names
+end
+
+"""
     coef(r::DIDResult)
 
 Access the vector where all point estimates are stored in `r`.
@@ -296,6 +317,13 @@ outcomename(r::DIDResult) = responsename(r)
 Return a vector of coefficient names.
 """
 coefnames(r::DIDResult) = r.coefnames
+
+"""
+    treatnames(r::DIDResult)
+
+Return a vector of names for treatment coefficients.
+"""
+treatnames(r::DIDResult) = r.coefnames[1:size(r.treatinds,1)]
 
 """
     weights(r::DIDResult)

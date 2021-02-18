@@ -8,7 +8,7 @@ using Reexport
 using SplitApplyCombine: groupfind, groupview
 using StatsBase: Weights, uweights
 @reexport using StatsModels
-using Tables: istable, getcolumn, columntable
+using Tables: istable, getcolumn, columntable, columnnames
 
 import Base: ==, show, union
 import Base: eltype, firstindex, lastindex, getindex, iterate, length, sym_in
@@ -68,7 +68,8 @@ export cb,
        didspec,
        @did,
        DIDResult,
-       outcomename
+       outcomename,
+       treatnames
 
 include("utils.jl")
 include("treatments.jl")
