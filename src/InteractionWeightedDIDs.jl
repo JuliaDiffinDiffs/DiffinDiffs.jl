@@ -24,9 +24,6 @@ import DiffinDiffsBase: required, default, transformed, combinedargs, _getsubcol
     valid_didargs, result
 import FixedEffectModels: has_fe
 
-# Handle naming conflicts
-const getvcov = vcov
-
 export Vcov,
        fe
 

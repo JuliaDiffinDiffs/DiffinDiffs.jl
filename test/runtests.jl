@@ -22,9 +22,9 @@ const tests = [
     "did"
 ]
 
-printstyled("Running tests:\n", color=:blue)
+printstyled("Running tests:\n", color=:blue, bold=true)
 
-for test in tests
+@time for test in tests
     include("$test.jl")
     println("\033[1m\033[32mPASSED\033[0m: $(test)")
 end

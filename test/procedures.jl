@@ -1,8 +1,8 @@
 @testset "CheckVcov" begin
     hrs = exampledata("hrs")
-    nt = (data=hrs, esample=trues(size(hrs,1)), vcov=Vcov.robust())
+    nt = (data=hrs, esample=trues(size(hrs,1)), vce=Vcov.robust())
     @test checkvcov!(nt...) == (NamedTuple(), false)
-    nt = merge(nt, (vcov=Vcov.cluster(:hhidpn),))
+    nt = merge(nt, (vce=Vcov.cluster(:hhidpn),))
     @test checkvcov!(nt...) == ((esample=trues(size(hrs,1)),), false)
 
     @test CheckVcov()((data=hrs, esample=trues(size(hrs,1)))) ==
@@ -272,7 +272,7 @@ end
     crossx = cholesky!(Symmetric(X'X))
     coef = crossx \ (X'y)
     residuals = y - X * coef
-    nt = (data=hrs, esample=trues(nobs), vcov=Vcov.simple(), coef=coef,
+    nt = (data=hrs, esample=trues(nobs), vce=Vcov.simple(), coef=coef,
         X=X, crossx=crossx, residuals=residuals, xterms=(term(1),), fes=FixedEffect[],
         has_fe_intercept=false)
     ret, share = estvcov(nt...)
@@ -287,7 +287,7 @@ end
     @test ret.dof_resid == nobs - 3
     @test ret.F ≈ 10.68532285556941 atol=1e-6
 
-    nt = merge(nt, (vcov=Vcov.robust(), fes=FixedEffect[]))
+    nt = merge(nt, (vce=Vcov.robust(), fes=FixedEffect[]))
     ret, share = estvcov(nt...)
     # Compare estimates with Stata
     # reg oop_spend col0 col1, r
@@ -300,7 +300,7 @@ end
     @test ret.dof_resid == nobs - 3
     @test ret.F ≈ 5.371847047691197 atol=1e-6
 
-    nt = merge(nt, (vcov=Vcov.cluster(:hhidpn),))
+    nt = merge(nt, (vce=Vcov.cluster(:hhidpn),))
     ret, share = estvcov(nt...)
     # Compare estimates with Stata
     # reghdfe oop_spend col0 col1, noa clu(hhidpn)
@@ -321,7 +321,7 @@ end
     crossx = cholesky!(Symmetric(X'X))
     coef = crossx \ (X'y)
     residuals = y - X * coef
-    nt = merge(nt, (vcov=Vcov.robust(), coef=coef, X=X, crossx=crossx, residuals=residuals, xterms=(), fes=fes, has_fe_intercept=true))
+    nt = merge(nt, (vce=Vcov.robust(), coef=coef, X=X, crossx=crossx, residuals=residuals, xterms=(), fes=fes, has_fe_intercept=true))
     ret, share = estvcov(nt...)
     # Compare estimates with Stata
     # reghdfe oop_spend col0 col1, a(hhidpn) vce(robust)
@@ -332,7 +332,7 @@ end
     @test ret.dof_resid == nobs - nunique(fes[1]) - 2
     @test ret.F ≈ 7.559815337537517 atol=1e-6
 
-    nt = merge(nt, (vcov=Vcov.cluster(:hhidpn),))
+    nt = merge(nt, (vce=Vcov.cluster(:hhidpn),))
     ret, share = estvcov(nt...)
     # Compare estimates with Stata
     # reghdfe oop_spend col0 col1, a(hhidpn) clu(hhidpn)

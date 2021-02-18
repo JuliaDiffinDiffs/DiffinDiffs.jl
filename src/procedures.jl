@@ -1,27 +1,27 @@
 """
     checkvcov!(args...)
 
-Exclude rows that are invalid for `vcov`.
+Exclude rows that are invalid for variance-covariance estimator.
 See also [`CheckVcov`](@ref).
 """
 checkvcov!(data, esample::BitVector,
-    vcov::Union{Vcov.SimpleCovariance, Vcov.RobustCovariance}) = NamedTuple(), false
+    vce::Union{Vcov.SimpleCovariance, Vcov.RobustCovariance}) = NamedTuple(), false
 
-function checkvcov!(data, esample::BitVector, vcov::Vcov.ClusterCovariance)
-    esample .&= Vcov.completecases(data, vcov)
+function checkvcov!(data, esample::BitVector, vce::Vcov.ClusterCovariance)
+    esample .&= Vcov.completecases(data, vce)
     return (esample=esample,), false
 end
 
 """
     CheckVcov <: StatsStep
 
-Call [`InteractionWeightedDIDs.checkvcov!`](@ref) to exclude invalid rows for
-`Vcov.CovarianceEstimator`.
+Call [`InteractionWeightedDIDs.checkvcov!`](@ref) to
+exclude rows that are invalid for variance-covariance estimator.
 """
 const CheckVcov = StatsStep{:CheckVcov, typeof(checkvcov!)}
 
 required(::CheckVcov) = (:data, :esample)
-default(::CheckVcov) = (vcov=Vcov.robust(),)
+default(::CheckVcov) = (vce=Vcov.robust(),)
 
 """
     checkfes!(args...)
@@ -336,24 +336,24 @@ const SolveLeastSquares = StatsStep{:SolveLeastSquares, typeof(solveleastsquares
 required(::SolveLeastSquares) = (:tr, :yterm, :xterms, :yxterms, :yxcols, :treatcols,
     :has_fe_intercept)
 
-function _vcov(data, esample::BitVector,
-        vcov::Union{Vcov.SimpleCovariance,Vcov.RobustCovariance}, fes::Vector{FixedEffect})
+function _vce(data, esample::BitVector,
+        vce::Union{Vcov.SimpleCovariance,Vcov.RobustCovariance}, fes::Vector{FixedEffect})
     dof_absorb = 0
     for fe in fes
         dof_absorb += nunique(fe)
     end
-    return vcov, dof_absorb
+    return vce, dof_absorb
 end
 
-function _vcov(data, esample::BitVector, vcov::Vcov.ClusterCovariance,
+function _vce(data, esample::BitVector, vce::Vcov.ClusterCovariance,
         fes::Vector{FixedEffect})
-    cludata = _getsubcolumns(data, vcov.clusters, esample)
-    concrete_vcov = Vcov.materialize(cludata, vcov)
+    cludata = _getsubcolumns(data, vce.clusters, esample)
+    concrete_vce = Vcov.materialize(cludata, vce)
     dof_absorb = 0
     for fe in fes
-        any(c->isnested(fe, c.refs), concrete_vcov.clusters) && (dof_absorb += 1)
+        any(c->isnested(fe, c.refs), concrete_vce.clusters) && (dof_absorb += 1)
     end
-    return concrete_vcov, dof_absorb
+    return concrete_vce, dof_absorb
 end
 
 """
@@ -362,19 +362,19 @@ end
 Estimate variance-covariance matrix and F-statistic.
 See also [`EstVcov`](@ref).
 """
-function estvcov(data, esample::BitVector, vcov::CovarianceEstimator, coef::Vector,
+function estvcov(data, esample::BitVector, vce::CovarianceEstimator, coef::Vector,
         X::Matrix, crossx::Factorization, residuals::Vector,
         xterms::Terms, fes::Vector{FixedEffect}, has_fe_intercept::Bool)
-    concrete_vcov, dof_absorb = _vcov(data, esample, vcov, fes)
+    concrete_vce, dof_absorb = _vce(data, esample, vce, fes)
     dof_resid = max(1, sum(esample) - size(X,2) - dof_absorb)
-    vcov_data = Vcov.VcovData(X, crossx, residuals, dof_resid)
-    vcov_mat = getvcov(vcov_data, concrete_vcov)
+    vce_data = Vcov.VcovData(X, crossx, residuals, dof_resid)
+    vcov_mat = vcov(vce_data, concrete_vce)
 
     # Fstat assumes the last coef is intercept if having any intercept
     has_intercept = !isempty(xterms) && isintercept(xterms[end])
     F = Fstat(coef, vcov_mat, has_intercept)
     has_intercept = has_intercept || has_fe_intercept
-    df_F = max(1, Vcov.df_FStat(vcov_data, concrete_vcov, has_intercept))
+    df_F = max(1, Vcov.df_FStat(vce_data, concrete_vce, has_intercept))
     p = fdistccdf(max(length(coef) - has_intercept, 1), df_F, F)
 
     return (vcov_mat=vcov_mat, dof_resid=dof_resid, F=F, p=p), true
@@ -390,5 +390,5 @@ may be shared across multiple specifications.
 """
 const EstVcov = StatsStep{:EstVcov, typeof(estvcov)}
 
-required(::EstVcov) = (:data, :esample, :vcov, :coef, :X, :crossx, :residuals, :xterms,
+required(::EstVcov) = (:data, :esample, :vce, :coef, :X, :crossx, :residuals, :xterms,
     :fes, :has_fe_intercept)
