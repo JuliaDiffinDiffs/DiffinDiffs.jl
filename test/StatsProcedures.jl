@@ -1,5 +1,5 @@
 using DiffinDiffsBase: _f, _get, groupargs,
-    _sharedby, _show_args, _args_kwargs, _parse!, proceed
+    _sharedby, _show_args, _args_kwargs, _parse!, pool, proceed
 import DiffinDiffsBase: required, default, transformed, combinedargs
 
 testvoidstep(a::String) = NamedTuple(), false
@@ -129,8 +129,8 @@ end
 @testset "SharedStatsStep" begin
     s1 = SharedStatsStep(TestRegStep(), 1)
     s2 = SharedStatsStep(TestRegStep(), [3,2])
-    @test _sharedby(s1) == (1,)
-    @test _sharedby(s2) == (2,3)
+    @test _sharedby(s1) == [1]
+    @test _sharedby(s2) == [2,3]
     @test _f(s1) == testregstep
     @test groupargs(s1, NamedTuple()) == ("a", "b")
 
@@ -144,47 +144,47 @@ end
 
 @testset "PooledStatsProcedure" begin
     ps = (rp,)
-    shared = ((SharedStatsStep(s, 1) for s in rp)...,)
+    shared = [SharedStatsStep(s, 1) for s in rp]
     p1 = pool(rp)
-    @test p1 == PooledStatsProcedure{typeof(ps), typeof(shared)}(ps, shared)
+    @test p1 == PooledStatsProcedure(ps, shared)
     @test length(p1) == 3
     @test eltype(PooledStatsProcedure) == SharedStatsStep
     @test firstindex(p1) == 1
     @test lastindex(p1) == 3
     @test p1[1] == SharedStatsStep(rp[1], 1)
-    @test p1[1:3] == ((SharedStatsStep(s, 1) for s in rp)...,)
+    @test p1[1:3] == [SharedStatsStep(s, 1) for s in rp]
     @test iterate(p1) == (shared[1], 2)
     @test iterate(p1, 2) == (shared[2], 3)
 
     ps = (rp, rp)
-    shared = ((SharedStatsStep(s, (1,2)) for s in rp)...,)
+    shared = [SharedStatsStep(s, (1,2)) for s in rp]
     p2 = pool(rp, rp)
-    @test p2 == PooledStatsProcedure{typeof(ps), typeof(shared)}(ps, shared)
+    @test p2 == PooledStatsProcedure(ps, shared)
     @test length(p2) == 3
 
     ps = (up, up)
-    shared = ((SharedStatsStep(s, (1,2)) for s in up)...,)
+    shared = [SharedStatsStep(s, (1,2)) for s in up]
     p3 = pool(up, up)
-    @test p3 == PooledStatsProcedure{typeof(ps), typeof(shared)}(ps, shared)
+    @test p3 == PooledStatsProcedure(ps, shared)
     @test length(p3) == 1
 
     ps = (np,)
-    shared = ()
+    shared = []
     p4 = pool(np)
-    @test p4 == PooledStatsProcedure{typeof(ps), typeof(shared)}(ps, shared)
+    @test p4 == PooledStatsProcedure(ps, shared)
     @test length(p4) == 0
 
     ps = (up, rp)
-    shared = (SharedStatsStep(rp[1], 2), SharedStatsStep(rp[2], (1,2)), SharedStatsStep(rp[3], 2))
+    shared = [SharedStatsStep(rp[1], 2), SharedStatsStep(rp[2], (1,2)), SharedStatsStep(rp[3], 2)]
     p5 = pool(up, rp)
-    @test p5 == PooledStatsProcedure{typeof(ps), typeof(shared)}(ps, shared)
+    @test p5 == PooledStatsProcedure(ps, shared)
     @test length(p5) == 3
 
     ps = (rp, ip)
-    shared = (SharedStatsStep(rp[1], 1), SharedStatsStep(ip[1], 2), SharedStatsStep(rp[2], 1),
-        SharedStatsStep(ip[2], 2), SharedStatsStep(rp[3], (1,2)))
+    shared = [SharedStatsStep(rp[1], 1), SharedStatsStep(ip[1], 2), SharedStatsStep(rp[2], 1),
+        SharedStatsStep(ip[2], 2), SharedStatsStep(rp[3], (1,2))]
     p6 = pool(rp, ip)
-    @test p6 == PooledStatsProcedure{typeof(ps), typeof(shared)}(ps, shared)
+    @test p6 == PooledStatsProcedure(ps, shared)
     @test length(p6) == 5
 
     @test sprint(show, p1) == "PooledStatsProcedure"

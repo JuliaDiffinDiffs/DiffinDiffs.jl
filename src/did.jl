@@ -231,7 +231,8 @@ for each corresponding row in `treatinds`.
     This method only selects estimates for treatment coefficients.
     Covariates are not taken into account.
 """
-coef(f::Function, r::DIDResult) = view(r.coef, 1:length(r.treatinds))[f.(r.treatinds)]
+@inline coef(f::Function, r::DIDResult) =
+    view(r.coef, 1:length(r.treatinds))[f.(r.treatinds)]
 
 """
     vcov(r::DIDResult)
@@ -275,7 +276,7 @@ for each corresponding row in `treatinds`.
     This method only selects estimates for treatment coefficients.
     Covariates are not taken into account.
 """
-function vcov(f::Function, r::DIDResult)
+@inline function vcov(f::Function, r::DIDResult)
     N = length(r.treatinds)
     inds = f.(r.treatinds)
     return view(r.vcov, 1:N, 1:N)[inds, inds]
