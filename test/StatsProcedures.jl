@@ -1,4 +1,4 @@
-using DiffinDiffsBase: _f, _get, groupargs,
+using DiffinDiffsBase: _f, _get, groupargs, _get_default,
     _sharedby, _show_args, _args_kwargs, _parse!, pool, proceed
 import DiffinDiffsBase: required, default, transformed, combinedargs
 
@@ -26,20 +26,20 @@ combinedargs(::TestCombineStep, ntargs) = [nt.b for nt in ntargs]
 
 testinvalidstep(a::String, b::String) = b, false
 const TestInvalidStep = StatsStep{:TestInvalidStep, typeof(testinvalidstep)}
-default(::TestInvalidStep) = (a="a",b="b")
+default(::TestInvalidStep) = (a="a", b="b")
 
 const TestUnnamedStep = StatsStep{:TestUnnamedStep, typeof(testinvalidstep)}
 
 @testset "StatsStep" begin
     @testset "_get" begin
-        @test _get((), NamedTuple()) == ()
-        @test _get((:a,), (a=1, b=2)) == (1,)
-        @test_throws ErrorException _get((:a,), (b=2,))
+        @test _get(NamedTuple(), ()) == ()
+        @test _get((a=1, b=2), (:a,)) == (1,)
+        @test_throws ErrorException _get((b=2,), (:a,))
 
         @test _get(NamedTuple(), NamedTuple()) == ()
-        @test _get((a=1,), (b=2,)) == (1,)
-        @test _get((a=1,), (a=1, b=2)) == (1,)
-        @test _get((a=1, b=2), (a=2,)) == (2, 2)
+        @test _get((a=1,), (b=2,)) == (2,)
+        @test _get((a=1,), (a=2, b=2)) == (1, 2)
+        @test _get((a=1, b=2), (a=2,)) == (1,)
     end
 
     @testset "args" begin
@@ -124,6 +124,12 @@ const ep = EP()
     @test sprint(show, np) == "NullProcedure"
     @test sprint(show, MIME("text/plain"), np) == """
         NullProcedure (TestProcedure with 0 step)"""
+end
+
+@testset "_get_default" begin
+    @test _get_default(rp, NamedTuple()) == (a="a", b="b")
+    @test _get_default(rp, (a="a1",)) == (a="a1", b="b")
+    @test _get_default(rp, (c="c",)) == (a="a", b="b", c="c")
 end
 
 @testset "SharedStatsStep" begin

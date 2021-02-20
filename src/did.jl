@@ -87,7 +87,7 @@ with the specified arguments.
 """
 didspec(args...; kwargs...) = StatsSpec(_didargs(args...; kwargs...)...)
 
-function _show_args(io::IO, sp::StatsSpec{A,<:DiffinDiffsEstimator}) where A
+function _show_args(io::IO, sp::StatsSpec{<:DiffinDiffsEstimator})
     if haskey(sp.args, :tr) || haskey(sp.args, :pr)
         print(io, ":")
         haskey(sp.args, :tr) && print(io, "\n  ", sp.args[:tr])
@@ -139,7 +139,7 @@ macro did(args...)
     nargs = length(args)
     options = :(Dict{Symbol, Any}())
     noproceed = false
-    didargs = []
+    didargs = ()
     if nargs > 0
         if isexpr(args[1], :vect, :hcat, :vcat)
             noproceed = _parse!(options, args[1].args)
@@ -150,9 +150,9 @@ macro did(args...)
     end
     dargs, dkwargs = _args_kwargs(didargs)
     if noproceed
-        return esc(:(StatsSpec(valid_didargs(parse_didargs($(dargs...); $(dkwargs...)))...)))
+        return :(StatsSpec(valid_didargs(parse_didargs($(esc.(dargs)...); $(esc.(dkwargs)...)))...))
     else
-        return esc(:(StatsSpec(valid_didargs(parse_didargs($(dargs...); $(dkwargs...)))...)(; $options...)))
+        return :(StatsSpec(valid_didargs(parse_didargs($(esc.(dargs)...); $(esc.(dkwargs)...)))...)(; $(esc(options))...))
     end
 end
 
