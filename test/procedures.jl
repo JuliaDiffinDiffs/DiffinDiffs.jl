@@ -43,7 +43,8 @@ end
     nobs = size(hrs, 1)
     fes = FixedEffect[FixedEffect(hrs.hhidpn)]
     fenames = [:fe_hhidpn]
-    nt = (fenames=fenames, weights=uweights(nobs), esample=trues(nobs), fes=fes)
+    nt = (fenames=fenames, weights=uweights(nobs), esample=trues(nobs),
+        default(MakeFESolver())..., fes=fes)
     ret, share = makefesolver(nt...)
     @test ret.feM isa FixedEffects.FixedEffectSolverCPU{Float64}
     nt = merge(nt, (fenames=Symbol[], fes=FixedEffect[]))

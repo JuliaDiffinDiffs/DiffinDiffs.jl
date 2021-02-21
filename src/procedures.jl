@@ -67,10 +67,10 @@ Construct `FixedEffects.AbstractFixedEffectSolver`.
 See also [`MakeFESolver`](@ref).
 """
 function makefesolver(fenames::Vector{Symbol}, weights::AbstractWeights, esample::BitVector,
-        fes::Vector{FixedEffect})
+        nfethreads::Int, fes::Vector{FixedEffect})
     if !isempty(fes)
         fes = FixedEffect[fe[esample] for fe in fes]
-        feM = AbstractFixedEffectSolver{Float64}(fes, weights, Val{:cpu}, Threads.nthreads())
+        feM = AbstractFixedEffectSolver{Float64}(fes, weights, Val{:cpu}, nfethreads)
         return (feM=feM,), true
     else
         return (feM=nothing,), true
@@ -86,6 +86,7 @@ The returned object named `feM` may be shared across multiple specifications.
 const MakeFESolver = StatsStep{:MakeFESolver, typeof(makefesolver)}
 
 required(::MakeFESolver) = (:fenames, :weights, :esample)
+default(::MakeFESolver) = (nfethreads=Threads.nthreads(),)
 # Determine equality of fes by fenames
 combinedargs(::MakeFESolver, allntargs) = (allntargs[1].fes,)
 
@@ -214,7 +215,7 @@ function maketreatcols(data, treatname::Symbol, treatintterms::Terms,
         weightname::Union{Symbol, Nothing}, weights::AbstractWeights,
         esample::BitVector, tr_rows::BitVector,
         cohortinteracted::Bool, fetol::Real, femaxiter::Int,
-        ::Type{<:DynamicTreatment{SharpDesign}}, time::Symbol, exc::Set{<:Integer})
+        ::Type{DynamicTreatment{SharpDesign}}, time::Symbol, exc::Set{<:Integer})
 
     nobs = sum(esample)
     tnames = (time, treatname, termvars(treatintterms)...)
@@ -279,7 +280,7 @@ transformed(::MakeTreatCols, @nospecialize(nt::NamedTuple)) =
 combinedargs(step::MakeTreatCols, allntargs) =
     combinedargs(step, allntargs, typeof(allntargs[1].tr))
 
-combinedargs(::MakeTreatCols, allntargs, ::Type{<:DynamicTreatment{SharpDesign}}) =
+combinedargs(::MakeTreatCols, allntargs, ::Type{DynamicTreatment{SharpDesign}}) =
     (Set(intersect((nt.tr.exc for nt in allntargs)...)),)
 
 """
@@ -351,7 +352,8 @@ function _vce(data, esample::BitVector, vce::Vcov.ClusterCovariance,
     concrete_vce = Vcov.materialize(cludata, vce)
     dof_absorb = 0
     for fe in fes
-        any(c->isnested(fe, c.refs), concrete_vce.clusters) && (dof_absorb += 1)
+        # ! To be fixed
+        dof_absorb += any(c->isnested(fe, c.refs), concrete_vce.clusters) ? 1 : nunique(fe)
     end
     return concrete_vce, dof_absorb
 end
