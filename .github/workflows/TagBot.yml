@@ -13,3 +13,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ssh: ${{ secrets.SSH_KEY }}
+          user: junyuan-chen
+          email: 37969042+junyuan-chen@users.noreply.github.com
+          gpg: ${{ secrets.GPG_KEY }}
+          gpg_password: ${{ secrets.GPG_PASSWORD }}
