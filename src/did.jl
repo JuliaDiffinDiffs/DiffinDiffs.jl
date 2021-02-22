@@ -66,67 +66,74 @@ function result(::Type{Reg}, @nospecialize(nt::NamedTuple))
     return merge(nt, (result=didresult,))
 end
 
+"""
+    has_fe(r::RegressionBasedDIDResult)
+
+Test whether any fixed effect is involved in regression.
+"""
 has_fe(r::RegressionBasedDIDResult) = !isempty(r.fenames)
 
-format_scientific(f::Number) = @sprintf("%.3f", f)
-
-function _summary(r::RegressionBasedDIDResult)
-    top = ["Number of obs" sprint(show, nobs(r), context=:compact=>true);
-        "Degrees of freedom" sprint(show, nobs(r) - dof_residual(r), context=:compact=>true);
-        "F-statistic" sprint(show, r.F, context = :compact => true);
-        "p-value" format_scientific(r.p)]
-    fe_info = has_fe(r) ?  
-        ["Converged" sprint(show, r.feconverged, context=:compact=>true);
-        "Singletons dropped" sprint(show, r.nfesingledropped, context=:compact=>true);
-        ] : nothing
-    return top, fe_info
-end
+_top_info(r::RegressionBasedDIDResult) = (
+    "Number of obs" => nobs(r),
+    "Degrees of freedom" => nobs(r) - dof_residual(r),
+    "F-statistic" => TestStat(r.F),
+    "p-value" => PValue(r.p)
+)
 
 _nunique(t::Table, s::Symbol) = length(unique(getproperty(t, s)))
 
-_excluded_rel_str(tr::DynamicTreatment) = 
-    isempty(tr.exc) ? "None" : join(string.(tr.exc), " ")
+_excluded_rel_str(tr::DynamicTreatment) =
+    isempty(tr.exc) ? "none" : join(string.(tr.exc), " ")
 
-_treat_info(tr::DynamicTreatment, trinds::Table, treatname::Symbol) =
-    ["Number of cohorts" sprint(show, _nunique(trinds, treatname), context=:compact=>true);
-    "Interactions within cohorts" sprint(show, length(columnnames(trinds))-2, context=:compact=>true);
-    "Relative time periods" sprint(show, _nunique(trinds, :rel), context=:compact=>true);
-    "Excluded periods" sprint(show, NoQuote(_excluded_rel_str(tr)), context=:compact=>true)]
+_treat_info(r::RegressionBasedDIDResult{true}, tr::DynamicTreatment) = (
+    "Number of cohorts" => _nunique(r.treatinds, r.treatname),
+    "Interactions within cohorts" => length(columnnames(r.treatinds)) - 2,
+    "Relative time periods" => _nunique(r.treatinds, :rel),
+    "Excluded periods" => NoQuote(_excluded_rel_str(tr))
+)
+
+_treat_info(r::RegressionBasedDIDResult{false}, tr::DynamicTreatment) = (
+    "Relative time periods" => _nunique(r.treatinds, :rel),
+    "Excluded periods" => NoQuote(_excluded_rel_str(tr))
+)
 
 _treat_spec(r::RegressionBasedDIDResult{true}, tr::DynamicTreatment{SharpDesign}) =
     "Cohort-interacted sharp dynamic specification"
 
 _treat_spec(r::RegressionBasedDIDResult{false}, tr::DynamicTreatment{SharpDesign}) =
     "Sharp dynamic specification"
-    
-function show(io::IO, r::RegressionBasedDIDResult;
-    totalwidth::Int=70, interwidth::Int=4+mod(totalwidth,2))
+
+_fe_info(r::RegressionBasedDIDResult) = (
+    "Converged" => r.feconverged,
+    "Singletons dropped" => r.nfesingledropped
+)
+
+show(io::IO, ::RegressionBasedDIDResult) = print(io, "Regression-based DID result")
+
+function show(io::IO, ::MIME"text/plain", r::RegressionBasedDIDResult;
+        totalwidth::Int=70, interwidth::Int=4+mod(totalwidth,2))
     halfwidth = div(totalwidth-interwidth, 2)
-    top, fe_info = _summary(r)
-    tr_info = _treat_info(r.tr, r.treatinds, r.treatname)
-    blocks = [top, tr_info, fe_info]
+    top_info = _top_info(r)
+    fe_info = has_fe(r) ? _fe_info(r) : ()
+    tr_info = _treat_info(r, r.tr)
+    blocks = (top_info, tr_info, fe_info)
     fes = has_fe(r) ? join(string.(r.fenames), " ") : "none"
     fetitle = string("Fixed effects: ", fes)
-    blocktitles = ["Summary of results",
-                   _treat_spec(r, r.tr),
-                   fetitle[1:min(totalwidth,length(fetitle))]]
+    blocktitles = ("Summary of results: Regression-based DID",
+        _treat_spec(r, r.tr), fetitle[1:min(totalwidth,length(fetitle))])
+
     for (ib, b) in enumerate(blocks)
-        for i in 1:size(b, 1)
-            b[i, 1] = b[i, 1] * ":"
-        end
-        println(io, "─" ^totalwidth)
+        println(io, repeat('─', totalwidth))
         println(io, blocktitles[ib])
-        println(io, "─" ^totalwidth)
-        for i in 1:(div(size(b, 1) - 1, 2)+1)
-            print(io, b[2*i-1, 1])
-            print(io, lpad(b[2*i-1, 2], halfwidth - length(b[2*i-1, 1])))
-            print(io, " " ^interwidth)
-            if size(b, 1) >= 2*i
-                print(io, b[2*i, 1])
-                print(io, lpad(b[2*i, 2], halfwidth - length(b[2*i, 1])))
+        if !isempty(b)
+            # Print line between block title and block content
+            println(io, repeat('─', totalwidth))
+            for (i, e) in enumerate(b)
+                print(io, e[1], ':')
+                print(io, lpad(e[2], halfwidth - length(e[1]) - 1))
+                print(io, isodd(i) ? repeat(' ', interwidth) : '\n')
             end
-            println(io)
         end
     end
-    println(io, "─" ^totalwidth)
+    print(io, repeat('─', totalwidth))
 end

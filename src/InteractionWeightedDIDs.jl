@@ -1,16 +1,14 @@
 module InteractionWeightedDIDs
 
 using Base: Callable
-using Combinatorics: combinations
 using Dictionaries: Dictionary
 using FixedEffectModels: FixedEffectTerm, Combination,
-    fe, has_fe, parse_fixedeffect, basecol, isnested, nunique
+    fe, parse_fixedeffect, basecol, isnested, nunique
 using FixedEffects
 using LinearAlgebra: Factorization, Symmetric, cholesky!
-using Printf
 using Reexport
 using SplitApplyCombine: group, mapview
-using StatsBase: AbstractWeights, CovarianceEstimator, UnitWeights, NoQuote, vcov
+using StatsBase: AbstractWeights, CovarianceEstimator, UnitWeights, PValue, TestStat, NoQuote
 using StatsFuns: fdistccdf
 using StatsModels: coefnames
 using Tables: getcolumn, columnnames
@@ -43,6 +41,5 @@ export CheckVcov,
 include("utils.jl")
 include("procedures.jl")
 include("did.jl")
-include("lsweights.jl")
 
 end

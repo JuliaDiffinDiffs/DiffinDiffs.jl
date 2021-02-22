@@ -17,6 +17,9 @@ import Base: ==
 ==(x::FixedEffect{R,I}, y::FixedEffect{R,I}) where {R,I} =
     x.refs == y.refs && x.interaction == y.interaction && x.n == y.n
 
+# A workaround to be replaced
+==(x::Vcov.ClusterCovariance, y::Vcov.ClusterCovariance) = true
+
 const tests = [
     "procedures",
     "did"

@@ -188,14 +188,16 @@ end
 function _genindicator(idx::Vector{Int}, esample::BitVector, n::Int)
     v = zeros(n)
     iv, r = 1, 1
+    nr = length(idx)
     @inbounds for i in eachindex(esample)
         if esample[i]
-            if i == idx[r]
+            if idx[r] == i
                 v[iv] = 1.0
                 r += 1
             end
             iv += 1
         end
+        r > nr && break
     end
     return v
 end
@@ -378,8 +380,7 @@ function estvcov(data, esample::BitVector, vce::CovarianceEstimator, coef::Vecto
     has_intercept = has_intercept || has_fe_intercept
     df_F = max(1, Vcov.df_FStat(vce_data, concrete_vce, has_intercept))
     p = fdistccdf(max(length(coef) - has_intercept, 1), df_F, F)
-
-    return (vcov_mat=vcov_mat, dof_resid=dof_resid, F=F, p=p), true
+    return (vcov_mat=vcov_mat, vce=concrete_vce, dof_resid=dof_resid, F=F, p=p), true
 end
 
 """
@@ -387,7 +388,7 @@ end
 
 Call [`InteractionWeightedDIDs.estvcov`](@ref) to
 estimate variance-covariance matrix and F-statistic.
-The returned objects named `vcov_mat`, `dof_resid`, `F` and `p`
+The returned objects named `vcov_mat`, `vce`, `dof_resid`, `F` and `p`
 may be shared across multiple specifications.
 """
 const EstVcov = StatsStep{:EstVcov, typeof(estvcov)}
