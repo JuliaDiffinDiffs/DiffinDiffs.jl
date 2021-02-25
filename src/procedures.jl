@@ -25,7 +25,7 @@ function checkdata(data, subset::Union{AbstractVector, Nothing},
     end
     
     sum(esample) == 0 && error("no nonmissing data")
-    return (esample=esample,), false
+    return (esample=esample,)
 end
 
 """
@@ -97,7 +97,7 @@ function checkvars!(data, tr::AbstractTreatment, pr::AbstractParallel,
 
     overlap!(esample, tr_rows, tr, pr, treatname, data)
     sum(esample) == 0 && error("no nonmissing data")
-    return (esample=esample, tr_rows=tr_rows), false
+    return (esample=esample, tr_rows=tr_rows)
 end
 
 """
@@ -109,6 +109,7 @@ const CheckVars = StatsStep{:CheckVars, typeof(checkvars!)}
 
 required(::CheckVars) = (:data, :tr, :pr, :yterm, :treatname, :esample)
 default(::CheckVars) = (treatintterms=(), xterms=())
+copyargs(::CheckVars) = (6,)
 
 """
     makeweights(args...)
@@ -119,19 +120,18 @@ See also [`MakeWeights`](@ref).
 function makeweights(data, esample::BitVector, weightname::Symbol)
     weights = Weights(convert(Vector{Float64}, view(getcolumn(data, weightname), esample)))
     all(isfinite, weights) || error("data column $weightname contain not-a-number values")
-    (weights=weights,), true
+    return (weights=weights,)
 end
 
 function makeweights(data, esample::BitVector, weightname::Nothing)
     weights = uweights(sum(esample))
-    (weights=weights,), true
+    return (weights=weights,)
 end
 
 """
     MakeWeights <: StatsStep
 
 Call [`DiffinDiffsBase.makeweights`](@ref) to create a generic `Weights` vector.
-The returned object named `weights` may be shared across multiple specifications.
 """
 const MakeWeights = StatsStep{:MakeWeights, typeof(makeweights)}
 

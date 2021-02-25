@@ -1,34 +1,31 @@
 using DiffinDiffsBase: _f, _get, groupargs, _get_default,
     _sharedby, _show_args, _args_kwargs, _parse!, pool, proceed
-import DiffinDiffsBase: required, default, transformed, combinedargs
+import DiffinDiffsBase: required, default, transformed, combinedargs, copyargs
 
-testvoidstep(a::String) = NamedTuple(), false
+testvoidstep(a::String) = NamedTuple()
 const TestVoidStep = StatsStep{:TestVoidStep, typeof(testvoidstep)}
 required(::TestVoidStep) = (:a,)
 
-testregstep(a::String, b::String) = (c=a*b,), false
+testregstep(a::String, b::String) = (c=a*b,)
 const TestRegStep = StatsStep{:TestRegStep, typeof(testregstep)}
 default(::TestRegStep) = (a="a", b="b")
 
-testlaststep(a::String, c::String) = (result=a*c,), false
+testlaststep(a::String, c::String) = (result=a*c,)
 const TestLastStep = StatsStep{:TestLastStep, typeof(testlaststep)}
 default(::TestLastStep) = (a="a",)
 transformed(::TestLastStep, ntargs::NamedTuple) = (ntargs.c,)
 
-testarraystep(a::String) = (result=[a],), false
-const TestArrayStep = StatsStep{:TestArrayStep, typeof(testarraystep)}
-default(::TestArrayStep) = (a="a",)
-
-testcombinestep(a::String, bs::String...) = (c=collect(bs),), true
+testcombinestep(a::String, bs::String...) = (c=collect(bs),)
 const TestCombineStep = StatsStep{:TestCombineStep, typeof(testcombinestep)}
 default(::TestCombineStep) = (a="a",)
 combinedargs(::TestCombineStep, ntargs) = [nt.b for nt in ntargs]
 
-testinvalidstep(a::String, b::String) = b, false
-const TestInvalidStep = StatsStep{:TestInvalidStep, typeof(testinvalidstep)}
-default(::TestInvalidStep) = (a="a", b="b")
+testarraystep(a::String, c::Array) = (result=c,)
+const TestArrayStep = StatsStep{:TestArrayStep, typeof(testarraystep)}
+required(::TestArrayStep) = (:a, :c)
+copyargs(::TestArrayStep) = (2,)
 
-const TestUnnamedStep = StatsStep{:TestUnnamedStep, typeof(testinvalidstep)}
+const TestUnnamedStep = StatsStep{:TestUnnamedStep, typeof(testregstep)}
 
 @testset "StatsStep" begin
     @testset "_get" begin
@@ -64,14 +61,14 @@ const TestUnnamedStep = StatsStep{:TestUnnamedStep, typeof(testinvalidstep)}
         @test TestLastStep()((a="a", b="a", c="ab")) ==
             (a="a", b="a", c="ab", result="aab")
         
-        @test TestArrayStep()((a="a",)) == (a="a", result=["a"])
         @test TestCombineStep()((a="a", b="b")) == (a="a", b="b", c=["b"])
+        c = ["c"]
+        ret = TestArrayStep()((a="a", c=c,))
+        @test ret.result === c
 
         @test sprint(show, TestVoidStep()) == "TestVoidStep"
         @test sprint(show, MIME("text/plain"), TestVoidStep()) ==
             "TestVoidStep (StatsStep that calls testvoidstep)"
-        
-        @test_throws ErrorException TestInvalidStep()()
     end
 end
 
@@ -86,8 +83,8 @@ const NP = TestProcedure{:NullProcedure,Tuple{}}
 const np = NP()
 const CP = TestProcedure{:CombineProcedure,Tuple{TestCombineStep,TestArrayStep}}
 const cp = CP()
-const EP = TestProcedure{:InvalidProcedure,Tuple{TestInvalidStep}}
-const ep = EP()
+const AP = TestProcedure{:ArrayProcedure,Tuple{TestArrayStep}}
+const ap = AP()
 
 @testset "AbstractStatsProcedure" begin
     @test length(rp) == 3
@@ -266,8 +263,10 @@ testformatter(nt::NamedTuple) = (haskey(nt, :name) ? nt.name : "", nt.p, (a=nt.a
     s5 = StatsSpec("s5", IP, (a="a", b="b"))
     s6 = StatsSpec("s6", CP, (a="a", b="b1"))
     s7 = StatsSpec("s7", CP, (a="a", b="b2"))
-    s8 = StatsSpec("s8", NP, NamedTuple())
-    s9 = StatsSpec("s9", EP, (a="a", b="b"))
+    c = ["c"]
+    s8 = StatsSpec("s8", AP, (a="a", c=c))
+    s9 = StatsSpec("s9", AP, (a="a1", c=c))
+    s10 = StatsSpec("s10", NP, NamedTuple())
     
     @test proceed([s1]) == ["aab"]
     @test proceed([s1,s2], verbose=true) == ["aab", "aab"]
@@ -290,19 +289,23 @@ testformatter(nt::NamedTuple) = (haskey(nt, :name) ? nt.name : "", nt.p, (a=nt.a
     @test proceed([s1,s4], keepall=true) ==
         [(a="a", b="b", c="ab", result="aab"), (a="a", b="b", c="ab")]
 
-    @test proceed([s6], keepall=true) == [(a="a", b="b1", c=["b1"], result=["a"])]
+    @test proceed([s6], keepall=true) == [(a="a", b="b1", c=["b1"], result=["b1"])]
     ret = proceed([s6,s7], keepall=true)
-    @test ret == [(a="a", b="b1", c=["b1", "b2"], result=["a"]),
-        (a="a", b="b2", c=["b1", "b2"], result=["a"])]
+    @test ret == [(a="a", b="b1", c=["b1", "b2"], result=["b1", "b2"]),
+        (a="a", b="b2", c=["b1", "b2"], result=["b1", "b2"])]
     @test ret[1].c === ret[2].c
-    @test ret[1].result !== ret[2].result
+    @test ret[1].result === ret[2].result
 
-    @test proceed([s8]) == [nothing]
-    @test proceed([s8], keepall=true) == NamedTuple[NamedTuple()]
-    @test proceed([s8], keep=:result) == NamedTuple[NamedTuple()]
+    ret = proceed([s8], keepall=true)
+    @test ret[1].c === ret[1].result
+    ret = proceed([s8,s9], keepall=true)
+    @test ret[1].c !== ret[1].result
+
+    @test proceed([s10]) == [nothing]
+    @test proceed([s10], keepall=true) == NamedTuple[NamedTuple()]
+    @test proceed([s10], keep=:result) == NamedTuple[NamedTuple()]
 
     @test_throws ArgumentError proceed(StatsSpec[])
-    @test_throws ErrorException proceed([s9])
 end
 
 @testset "_parse!" begin

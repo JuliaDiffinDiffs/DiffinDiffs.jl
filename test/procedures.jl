@@ -2,10 +2,10 @@
     @testset "checkdata" begin
         hrs = exampledata("hrs")
         nt = (data=hrs, subset=nothing, weightname=nothing)
-        @test checkdata(nt...) == ((esample=trues(size(hrs,1)),), false)
+        @test checkdata(nt...) == (esample=trues(size(hrs,1)),)
         
         nt = merge(nt, (weightname=:rwthh, subset=hrs.male))
-        @test checkdata(nt...) == ((esample=BitArray(hrs.male),), false)
+        @test checkdata(nt...) == (esample=BitArray(hrs.male),)
         
         nt = merge(nt, (data=rand(10,10),))
         @test_throws ArgumentError checkdata(nt...)
@@ -37,38 +37,38 @@ end
         hrs = exampledata("hrs")
         nt = (data=hrs, tr=dynamic(:wave, -1), pr=nevertreated(11), yterm=term(:oop_spend),
             treatname=:wave_hosp, esample=trues(size(hrs,1)), treatintterms=(), xterms=())
-        @test checkvars!(nt...) == ((esample=trues(size(hrs,1)),
-            tr_rows=hrs.wave_hosp.!=11), false)
+        @test checkvars!(nt...) == (esample=trues(size(hrs,1)),
+            tr_rows=hrs.wave_hosp.!=11)
         
         nt = merge(nt, (pr=notyettreated(11),))
-        @test checkvars!(nt...) == ((esample=hrs.wave.!=11,
-            tr_rows=(hrs.wave_hosp.!=11).&(hrs.wave.!=11)), false)
+        @test checkvars!(nt...) == (esample=hrs.wave.!=11,
+            tr_rows=(hrs.wave_hosp.!=11).&(hrs.wave.!=11))
         
         nt = merge(nt, (pr=notyettreated(11, 10), esample=trues(size(hrs,1))))
         @test checkvars!(nt...) ==
-            ((esample=.!(hrs.wave_hosp.∈(10,)).& .!(hrs.wave.∈((10,11),)),
-            tr_rows=(.!(hrs.wave_hosp.∈((10,11),)).& .!(hrs.wave.∈((10,11),)))), false)
+            (esample=.!(hrs.wave_hosp.∈(10,)).& .!(hrs.wave.∈((10,11),)),
+            tr_rows=(.!(hrs.wave_hosp.∈((10,11),)).& .!(hrs.wave.∈((10,11),))))
         
         nt = merge(nt, (pr=nevertreated(11), treatintterms=(term(:male),),
             xterms=(term(:white),), esample=trues(size(hrs,1))))
-        @test checkvars!(nt...) == ((esample=trues(size(hrs,1)),
-            tr_rows=hrs.wave_hosp.!=11), false)
+        @test checkvars!(nt...) == (esample=trues(size(hrs,1)),
+            tr_rows=hrs.wave_hosp.!=11)
         
         df = DataFrame(hrs)
         allowmissing!(df)
         df.male .= ifelse.(df.wave_hosp.==11, missing, df.male)
 
         nt = merge(nt, (data=df,))
-        @test checkvars!(nt...) == ((esample=trues(size(hrs,1)),
-            tr_rows=hrs.wave_hosp.!=11), false)
+        @test checkvars!(nt...) == (esample=trues(size(hrs,1)),
+            tr_rows=hrs.wave_hosp.!=11)
         
         df.male .= ifelse.(df.wave_hosp.==10, missing, df.male)
-        @test checkvars!(nt...) == ((esample=df.wave_hosp.!=10,
-            tr_rows=hrs.wave_hosp.∈((8,9),)), false)
+        @test checkvars!(nt...) == (esample=df.wave_hosp.!=10,
+            tr_rows=hrs.wave_hosp.∈((8,9),))
 
         df.white .= ifelse.(df.wave_hosp.==9, missing, df.white)
-        @test checkvars!(nt...) == ((esample=df.wave_hosp.∈((8,11),),
-            tr_rows=hrs.wave_hosp.==8), false)
+        @test checkvars!(nt...) == (esample=df.wave_hosp.∈((8,11),),
+            tr_rows=hrs.wave_hosp.==8)
     end
 
     @testset "StatsStep" begin
@@ -81,6 +81,9 @@ end
         hrs = exampledata("hrs")
         nt = (data=hrs, tr=dynamic(:wave, -1), pr=nevertreated(11), yterm=term(:oop_spend),
             treatname=:wave_hosp, treatintterms=(), xterms=(), esample=trues(size(hrs,1)))
+        gargs = groupargs(CheckVars(), nt)
+        @test gargs[copyargs(CheckVars())...] == nt.esample
+        
         @test CheckVars()(nt) ==
             merge(nt, (esample=trues(size(hrs,1)), tr_rows=hrs.wave_hosp.!=11))
         nt = (data=hrs, tr=dynamic(:wave, -1), pr=nevertreated(11), yterm=term(:oop_spend),
@@ -95,12 +98,12 @@ end
     @testset "makeweights" begin
         hrs = exampledata("hrs")
         nt = (data=hrs, esample=trues(size(hrs,1)), weightname=nothing)
-        r, s = makeweights(nt...)
-        @test r.weights isa UnitWeights && sum(r.weights) == size(hrs,1) && s
+        r = makeweights(nt...)
+        @test r.weights isa UnitWeights && sum(r.weights) == size(hrs,1)
 
         nt = merge(nt, (weightname=:rwthh,))
-        r, s = makeweights(nt...)
-        @test r.weights isa Weights && sum(r.weights) == sum(hrs.rwthh) && s
+        r = makeweights(nt...)
+        @test r.weights isa Weights && sum(r.weights) == sum(hrs.rwthh)
     end
 
     @testset "StatsStep" begin

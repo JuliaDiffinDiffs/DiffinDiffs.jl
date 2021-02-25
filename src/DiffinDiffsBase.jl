@@ -5,7 +5,6 @@ using Combinatorics: combinations
 using MacroTools: @capture, isexpr, postwalk
 using Missings: disallowmissing
 using Reexport
-using SplitApplyCombine: groupfind, groupview
 using StatsBase: Weights, uweights
 @reexport using StatsModels
 using Tables: istable, getcolumn, columntable, columnnames

@@ -21,11 +21,11 @@ TestParallel(e::Int) = TestParallel{ParallelCondition,ParallelStrength}(e)
 tpara(c::ConstantTerm) = TestParallel{ParallelCondition,ParallelStrength}(c.n)
 
 teststep(tr::AbstractTreatment, pr::AbstractParallel) =
-    ((str=sprint(show, tr), spr=sprint(show, pr)), false)
+    (str=sprint(show, tr), spr=sprint(show, pr))
 const TestStep = StatsStep{:TestStep, typeof(teststep)}
 required(::TestStep) = (:tr, :pr)
 
-testnextstep(::AbstractTreatment, str::String) = ((next="next"*str,), false)
+testnextstep(::AbstractTreatment, str::String) = (next="next"*str,)
 const TestNextStep = StatsStep{:TestNextStep, typeof(testnextstep)}
 required(::TestNextStep) = (:tr, :str)
 
