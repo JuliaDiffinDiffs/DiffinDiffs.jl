@@ -57,23 +57,23 @@ end
     end
 
     @testset "show" begin
-        @test sprint(show, dt0) == "Dynamic{S}(none)"
+        @test sprint(show, dt0) == "Dynamic{S}()"
         @test sprint(show, MIME("text/plain"), dt0) == """
             Sharp dynamic treatment:
               column name of time variable: month
               excluded relative time: none"""
 
-        @test sprint(show, dt1) == "Dynamic{S}([-1])"
+        @test sprint(show, dt1) == "Dynamic{S}(-1)"
         @test sprint(show, MIME("text/plain"), dt1) == """
             Sharp dynamic treatment:
               column name of time variable: month
-              excluded relative time: [-1]"""
+              excluded relative time: -1"""
 
-        @test sprint(show, dt2) == "Dynamic{S}([-2, -1])"
+        @test sprint(show, dt2) == "Dynamic{S}(-2, -1)"
         @test sprint(show, MIME("text/plain"), dt2) == """
             Sharp dynamic treatment:
               column name of time variable: month
-              excluded relative time: [-2, -1]"""
+              excluded relative time: -2, -1"""
     end
 end
 

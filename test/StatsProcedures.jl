@@ -190,6 +190,13 @@ end
     @test p6 == PooledStatsProcedure(ps, shared)
     @test length(p6) == 5
 
+    ps = (rp, cp)
+    shared = [SharedStatsStep(rp[1], 1), SharedStatsStep(rp[2], 1),
+        SharedStatsStep(rp[3], 1), SharedStatsStep(cp[1], 2), SharedStatsStep(cp[2], 2)]
+    p7 = pool(rp, cp)
+    @test p7 == PooledStatsProcedure(ps, shared)
+    @test length(p7) == 5
+
     @test sprint(show, p1) == "PooledStatsProcedure"
     @test sprint(show, MIME("text/plain"), p1) == """
         PooledStatsProcedure with 3 steps from 1 procedure:
@@ -305,6 +312,8 @@ testformatter(nt::NamedTuple) = (haskey(nt, :name) ? nt.name : "", nt.p, (a=nt.a
     @test proceed([s10], keepall=true) == NamedTuple[NamedTuple()]
     @test proceed([s10], keep=:result) == NamedTuple[NamedTuple()]
 
+    @test proceed([s1], pause=1) == ["b"]
+
     @test_throws ArgumentError proceed(StatsSpec[])
 end
 
@@ -354,6 +363,10 @@ end
     r = @specset [verbose keep=[:a]] a=a begin
         StatsSpec(testformatter(testparser(RP; b="b"))...) end
     @test r == [(a="a0", result="a0a0b")]
+
+    r = @specset [verbose pause=1] a=a begin
+        StatsSpec(testformatter(testparser(RP; b="b"))...) end
+    @test r == ["b"]
     
     s0 = @specset [noproceed] for i in 1:3
         a = "a"*string(i)

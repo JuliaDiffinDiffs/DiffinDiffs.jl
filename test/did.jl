@@ -106,20 +106,20 @@ end
         @test sprint(show, sp) == "unnamed"
         @test sprint(show, MIME("text/plain"), sp) == """
             unnamed (StatsSpec for TestDID):
-              Dynamic{S}([-1])
-              NeverTreated{U,P}([-1])"""
+              Dynamic{S}(-1)
+              NeverTreated{U,P}(-1)"""
 
         sp = StatsSpec("", TestDID, (tr=dynamic(:time,-1),))
         @test sprint(show, sp) == "unnamed"
         @test sprint(show, MIME("text/plain"), sp) == """
             unnamed (StatsSpec for TestDID):
-              Dynamic{S}([-1])"""
+              Dynamic{S}(-1)"""
         
-        sp = StatsSpec("name", TestDID, (pr=nevertreated(-1),))
+        sp = StatsSpec("name", TestDID, (pr=notyettreated(-1),))
         @test sprint(show, sp) == "name"
         @test sprint(show, MIME("text/plain"), sp) == """
             name (StatsSpec for TestDID):
-              NeverTreated{U,P}([-1])"""
+              NotYetTreated{U,P}(-1)"""
     end
 end
 

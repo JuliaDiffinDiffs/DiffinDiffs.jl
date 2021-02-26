@@ -14,6 +14,8 @@ import Base: eltype, firstindex, lastindex, getindex, iterate, length, sym_in
 import StatsBase: coef, vcov, responsename, coefnames, weights, nobs, dof_residual
 import StatsModels: termvars, hasintercept, omitsintercept
 
+const TimeType = Int
+
 # Reexport objects from StatsBase
 export coef, vcov, responsename, coefnames, weights, nobs, dof_residual
 
