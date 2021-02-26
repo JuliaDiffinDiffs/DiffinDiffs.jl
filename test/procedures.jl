@@ -1,9 +1,9 @@
 @testset "CheckVcov" begin
     hrs = exampledata("hrs")
     nt = (data=hrs, esample=trues(size(hrs,1)), vce=Vcov.robust())
-    @test checkvcov!(nt...) == (NamedTuple(), false)
+    @test checkvcov!(nt...) == NamedTuple()
     nt = merge(nt, (vce=Vcov.cluster(:hhidpn),))
-    @test checkvcov!(nt...) == ((esample=trues(size(hrs,1)),), false)
+    @test checkvcov!(nt...) == (esample=trues(size(hrs,1)),)
 
     @test CheckVcov()((data=hrs, esample=trues(size(hrs,1)))) ==
         (data=hrs, esample=trues(size(hrs,1)))
@@ -12,20 +12,20 @@ end
 @testset "CheckFEs" begin
     hrs = exampledata("hrs")
     nt = (data=hrs, esample=trues(size(hrs,1)), xterms=(term(:white),), drop_singletons=true)
-    @test checkfes!(nt...) == ((xterms=(term(:white),), esample=trues(size(hrs,1)),
-        fes=FixedEffect[], fenames=Symbol[], has_fe_intercept=false, nsingle=0), false)
+    @test checkfes!(nt...) == (xterms=(term(:white),), esample=trues(size(hrs,1)),
+        fes=FixedEffect[], fenames=Symbol[], has_fe_intercept=false, nsingle=0)
     nt = merge(nt, (xterms=(fe(:hhidpn),),))
-    @test checkfes!(nt...) == ((xterms=(InterceptTerm{false}(),), esample=trues(size(hrs,1)),
-        fes=[FixedEffect(hrs.hhidpn)], fenames=[:fe_hhidpn], has_fe_intercept=true, nsingle=0), false)
+    @test checkfes!(nt...) == (xterms=(InterceptTerm{false}(),), esample=trues(size(hrs,1)),
+        fes=[FixedEffect(hrs.hhidpn)], fenames=[:fe_hhidpn], has_fe_intercept=true, nsingle=0)
     
     df = DataFrame(hrs)
     df = df[(df.wave.==7).|((df.wave.==8).&(df.wave_hosp.==8)), :]
     nobs = size(df, 1)
     nt = merge(nt, (data=df, esample=trues(nobs)))
     kept = df.wave_hosp.==8
-    @test checkfes!(nt...) == ((xterms=(InterceptTerm{false}(),), esample=kept,
+    @test checkfes!(nt...) == (xterms=(InterceptTerm{false}(),), esample=kept,
         fes=[FixedEffect(df.hhidpn)], fenames=[:fe_hhidpn], has_fe_intercept=true,
-        nsingle=nobs-sum(kept)), false)
+        nsingle=nobs-sum(kept))
 
     df = df[df.wave.==7, :]
     nobs = size(df, 1)
@@ -45,10 +45,10 @@ end
     fenames = [:fe_hhidpn]
     nt = (fenames=fenames, weights=uweights(nobs), esample=trues(nobs),
         default(MakeFESolver())..., fes=fes)
-    ret, share = makefesolver(nt...)
+    ret = makefesolver(nt...)
     @test ret.feM isa FixedEffects.FixedEffectSolverCPU{Float64}
     nt = merge(nt, (fenames=Symbol[], fes=FixedEffect[]))
-    @test makefesolver(nt...) == ((feM=nothing,), true)
+    @test makefesolver(nt...) == (feM=nothing,)
     @test MakeFESolver()(nt) == merge(nt, (feM=nothing,))
 end
 
@@ -57,7 +57,7 @@ end
     nobs = size(hrs, 1)
     t1 = InterceptTerm{true}()
     nt = (data=hrs, weights=uweights(nobs), esample=trues(nobs), feM=nothing, has_fe_intercept=false, default(MakeYXCols())...)
-    ret, share = makeyxcols(nt..., (term(:oop_spend),), (term(1),))
+    ret = makeyxcols(nt..., (term(:oop_spend),), (term(1),))
     @test ret.yxcols == Dict(term(:oop_spend)=>hrs.oop_spend, t1=>ones(nobs, 1))
     @test ret.yxterms[term(:oop_spend)] isa ContinuousTerm
     @test ret.yxterms[t1] isa InterceptTerm{true}
@@ -65,15 +65,15 @@ end
     @test ret.feconverged === nothing
 
     # Verify that an intercept will be added if not having one
-    ret1, share = makeyxcols(nt..., (term(:oop_spend),), ())
+    ret1 = makeyxcols(nt..., (term(:oop_spend),), ())
     @test ret1 == ret
-    ret1, share = makeyxcols(nt..., (term(:oop_spend),), (term(0),))
+    ret1 = makeyxcols(nt..., (term(:oop_spend),), (term(0),))
     @test ret1.yxcols == ret.yxcols
     @test ret1.yxterms[t1] isa InterceptTerm{true}
 
     wt = Weights(hrs.rwthh)
     nt = merge(nt, (weights=wt,))
-    ret, share = makeyxcols(nt..., (term(:oop_spend), term(:riearnsemp)), (term(:male),))
+    ret = makeyxcols(nt..., (term(:oop_spend), term(:riearnsemp)), (term(:male),))
     @test ret.yxcols == Dict(term(:oop_spend)=>hrs.oop_spend.*sqrt.(wt),
         term(:riearnsemp)=>hrs.riearnsemp.*sqrt.(wt),
         term(:male)=>reshape(hrs.male.*sqrt.(wt), nobs, 1),
@@ -94,7 +94,7 @@ end
     fes = [FixedEffect(df.hhidpn)]
     feM = AbstractFixedEffectSolver{Float64}(fes, wt, Val{:cpu}, Threads.nthreads())
     nt = merge(nt, (data=df, weights=wt, feM=feM, has_fe_intercept=true))
-    ret, share = makeyxcols(nt..., (term(:oop_spend),), (InterceptTerm{false}(), term(:x)))
+    ret = makeyxcols(nt..., (term(:oop_spend),), (InterceptTerm{false}(), term(:x)))
     resids = reshape(copy(df.oop_spend), nobs, 1)
     _feresiduals!(resids, feM, 1e-8, 10000)
     resids .*= sqrt.(wt)
@@ -110,7 +110,7 @@ end
     fes = [FixedEffect(df.hhidpn[esample])]
     feM = AbstractFixedEffectSolver{Float64}(fes, wt, Val{:cpu}, Threads.nthreads())
     nt = merge(nt, (data=df, esample=esample, weights=wt, feM=feM, has_fe_intercept=true))
-    ret, share = makeyxcols(nt..., (term(:oop_spend),), (InterceptTerm{false}(),))
+    ret = makeyxcols(nt..., (term(:oop_spend),), (InterceptTerm{false}(),))
     resids = reshape(df.oop_spend[esample], nobs, 1)
     _feresiduals!(resids, feM, 1e-8, 10000)
     resids .*= sqrt.(wt)
@@ -143,7 +143,7 @@ end
     nt = (data=hrs, treatname=:wave_hosp, treatintterms=(), feM=nothing,
         weightname=nothing, weights=uweights(nobs), esample=trues(nobs),
         tr_rows=hrs.wave_hosp.!=11, default(MakeTreatCols())...)
-    ret, share = maketreatcols(nt..., typeof(tr), tr.time, Set([-1]))
+    ret = maketreatcols(nt..., typeof(tr), tr.time, Set([-1]))
     @test length(ret.itreats) == 12
     @test ret.itreats[(rel=0, wave_hosp=10)] ==
         collect(1:nobs)[(hrs.wave_hosp.==10).&(hrs.wave.==10)]
@@ -156,13 +156,13 @@ end
     @test all(x->x==163, getindices(w, filter(x->x.wave_hosp==10, keys(w))))
 
     nt = merge(nt, (treatintterms=(term(:male),),))
-    ret, share = maketreatcols(nt..., typeof(tr), tr.time, Set([-1]))
+    ret = maketreatcols(nt..., typeof(tr), tr.time, Set([-1]))
     @test length(ret.itreats) == 24
     @test ret.itreats[(rel=0, wave_hosp=10, male=1)] ==
         collect(1:nobs)[(hrs.wave_hosp.==10).&(hrs.wave.==10).&(hrs.male.==1)]
 
     nt = merge(nt, (cohortinteracted=false, treatintterms=()))
-    ret, share = maketreatcols(nt..., typeof(tr), tr.time, Set([-1]))
+    ret = maketreatcols(nt..., typeof(tr), tr.time, Set([-1]))
     @test length(ret.itreats) == 6
     @test ret.itreats[(rel=0,)] ==
         collect(1:nobs)[(hrs.wave_hosp.==hrs.wave).&(hrs.wave_hosp.!=11)]
@@ -170,7 +170,7 @@ end
     @test ret.treatcols[(rel=0,)] == col1
 
     nt = merge(nt, (treatintterms=(term(:male),),))
-    ret, share = maketreatcols(nt..., typeof(tr), tr.time, Set([-1]))
+    ret = maketreatcols(nt..., typeof(tr), tr.time, Set([-1]))
     @test length(ret.itreats) == 12
     @test ret.itreats[(rel=0, male=1)] ==
         collect(1:nobs)[(hrs.wave_hosp.==hrs.wave).&(hrs.wave_hosp.!=11).&(hrs.male.==1)]
@@ -183,7 +183,7 @@ end
     feM = AbstractFixedEffectSolver{Float64}(fes, wt, Val{:cpu}, Threads.nthreads())
     nt = merge(nt, (data=df, feM=feM, weightname=:rwthh, weights=wt, esample=esample,
         treatintterms=(), cohortinteracted=true))
-    ret, share = maketreatcols(nt..., typeof(tr), tr.time, Set([-1]))
+    ret = maketreatcols(nt..., typeof(tr), tr.time, Set([-1]))
     col = reshape(col[esample], nobs, 1)
     defaults = (default(MakeTreatCols())...,)
     _feresiduals!(col, feM, defaults[[2,3]]...)
@@ -221,7 +221,7 @@ end
     tcols0 = Dictionary([(rel=0, wave_hosp=10), (rel=1, wave_hosp=10)], [col0, col1])
     nt = (tr=tr, yterm=term(:oop_spend), xterms=(term(1),), yxterms=yxterms,
         yxcols=yxcols0, treatcols=tcols0, has_fe_intercept=false)
-    ret, share = solveleastsquares!(nt...)
+    ret = solveleastsquares!(nt...)
     # Compare estimates with Stata
     # gen col0 = wave_hosp==10 & wave==10
     # gen col1 = wave_hosp==10 & wave==11
@@ -235,17 +235,17 @@ end
 
     # Verify that an intercept will be added if needed
     nt1 = merge(nt, (xterms=(),))
-    ret1, share = solveleastsquares!(nt1...)
+    ret1 = solveleastsquares!(nt1...)
     @test ret1 == ret
     nt1 = merge(nt, (xterms=(term(0),),))
-    ret1, share = solveleastsquares!(nt1...)
+    ret1 = solveleastsquares!(nt1...)
     @test ret1.xterms == (t0,)
     @test size(ret1.X, 2) == 2
 
     # Test colliner xterms are handled
     yxcols1 = Dict(term(:oop_spend)=>hrs.oop_spend, t1=>ones(nobs), term(:t2)=>df.t2)
     nt1 = merge(nt, (xterms=(term(1), term(:t2)), yxcols=yxcols1))
-    ret1, share = solveleastsquares!(nt1...)
+    ret1 = solveleastsquares!(nt1...)
     @test ret1.coef[1:2] == ret.coef[1:2]
     @test sum(ret1.basecols) == 3
 
@@ -276,7 +276,7 @@ end
     nt = (data=hrs, esample=trues(nobs), vce=Vcov.simple(), coef=coef,
         X=X, crossx=crossx, residuals=residuals, xterms=(term(1),), fes=FixedEffect[],
         has_fe_intercept=false)
-    ret, share = estvcov(nt...)
+    ret = estvcov(nt...)
     # Compare estimates with Stata
     # reg oop_spend col0 col1
     # mat list e(V)
@@ -289,7 +289,7 @@ end
     @test ret.F ≈ 10.68532285556941 atol=1e-6
 
     nt = merge(nt, (vce=Vcov.robust(), fes=FixedEffect[]))
-    ret, share = estvcov(nt...)
+    ret = estvcov(nt...)
     # Compare estimates with Stata
     # reg oop_spend col0 col1, r
     # mat list e(V)
@@ -302,7 +302,7 @@ end
     @test ret.F ≈ 5.371847047691197 atol=1e-6
 
     nt = merge(nt, (vce=Vcov.cluster(:hhidpn),))
-    ret, share = estvcov(nt...)
+    ret = estvcov(nt...)
     # Compare estimates with Stata
     # reghdfe oop_spend col0 col1, noa clu(hhidpn)
     # mat list e(V)
@@ -323,7 +323,7 @@ end
     coef = crossx \ (X'y)
     residuals = y - X * coef
     nt = merge(nt, (vce=Vcov.robust(), coef=coef, X=X, crossx=crossx, residuals=residuals, xterms=(), fes=fes, has_fe_intercept=true))
-    ret, share = estvcov(nt...)
+    ret = estvcov(nt...)
     # Compare estimates with Stata
     # reghdfe oop_spend col0 col1, a(hhidpn) vce(robust)
     # mat list e(V)
@@ -334,7 +334,7 @@ end
     @test ret.F ≈ 7.559815337537517 atol=1e-6
 
     nt = merge(nt, (vce=Vcov.cluster(:hhidpn),))
-    ret, share = estvcov(nt...)
+    ret = estvcov(nt...)
     # Compare estimates with Stata
     # reghdfe oop_spend col0 col1, a(hhidpn) clu(hhidpn)
     # mat list e(V)

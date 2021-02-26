@@ -11,8 +11,8 @@ const Reg = RegressionBasedDID
 
 function _get_default(::Reg, @nospecialize(ntargs::NamedTuple))
     defaults = (subset=nothing, weightname=nothing, vce=Vcov.RobustCovariance(),
-        treatintterms=(), xterms=(), drop_singletons=true, nfethreads=6,
-        contrasts=Dict{Symbol,Any}(), fetol=1.0e-8, femaxiter=10000, cohortinteracted=true)
+        treatintterms=(), xterms=(), drop_singletons=true, nfethreads=Threads.nthreads(),
+        contrasts=nothing, fetol=1e-8, femaxiter=10000, cohortinteracted=true)
     return merge(defaults, ntargs)
 end
 
@@ -42,7 +42,7 @@ struct RegressionBasedDIDResult{CohortInteracted} <: DIDResult
     treatinds::Table
     yxterms::Dict{AbstractTerm, AbstractTerm}
     treatname::Symbol
-    contrasts::Dict{Symbol, Any}
+    contrasts::Union{Dict{Symbol, Any}, Nothing}
     weightname::Union{Symbol, Nothing}
     fenames::Vector{Symbol}
     nfeiterations::Union{Int, Nothing}

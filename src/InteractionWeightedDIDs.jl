@@ -19,7 +19,7 @@ using DiffinDiffsBase: termvars, hasintercept, omitsintercept, isintercept, pars
     _getsubcolumns, _treatnames
 
 import Base: show
-import DiffinDiffsBase: required, default, transformed, combinedargs,
+import DiffinDiffsBase: required, default, transformed, combinedargs, copyargs,
     _get_default, valid_didargs, result
 import FixedEffectModels: has_fe
 

@@ -5,11 +5,11 @@ Exclude rows that are invalid for variance-covariance estimator.
 See also [`CheckVcov`](@ref).
 """
 checkvcov!(data, esample::BitVector,
-    vce::Union{Vcov.SimpleCovariance, Vcov.RobustCovariance}) = NamedTuple(), false
+    vce::Union{Vcov.SimpleCovariance, Vcov.RobustCovariance}) = NamedTuple()
 
 function checkvcov!(data, esample::BitVector, vce::Vcov.ClusterCovariance)
     esample .&= Vcov.completecases(data, vce)
-    return (esample=esample,), false
+    return (esample=esample,)
 end
 
 """
@@ -22,6 +22,7 @@ const CheckVcov = StatsStep{:CheckVcov, typeof(checkvcov!)}
 
 required(::CheckVcov) = (:data, :esample)
 default(::CheckVcov) = (vce=Vcov.robust(),)
+copyargs(::CheckVcov) = (2,)
 
 """
     checkfes!(args...)
@@ -45,7 +46,7 @@ function checkfes!(data, esample::BitVector, xterms::Terms, drop_singletons::Boo
     end
     sum(esample) == 0 && error("no nonmissing data")
     return (xterms=xterms, esample=esample, fes=fes, fenames=fenames,
-        has_fe_intercept=has_fe_intercept, nsingle=nsingle), false
+        has_fe_intercept=has_fe_intercept, nsingle=nsingle)
 end
 
 """
@@ -59,6 +60,7 @@ const CheckFEs = StatsStep{:CheckFixedEffects, typeof(checkfes!)}
 
 required(::CheckFEs) = (:data, :esample)
 default(::CheckFEs) = (xterms=(), drop_singletons=true)
+copyargs(::CheckFEs) = (2,)
 
 """
     makefesolver(args...)
@@ -71,9 +73,9 @@ function makefesolver(fenames::Vector{Symbol}, weights::AbstractWeights, esample
     if !isempty(fes)
         fes = FixedEffect[fe[esample] for fe in fes]
         feM = AbstractFixedEffectSolver{Float64}(fes, weights, Val{:cpu}, nfethreads)
-        return (feM=feM,), true
+        return (feM=feM,)
     else
-        return (feM=nothing,), true
+        return (feM=nothing,)
     end
 end
 
@@ -81,7 +83,6 @@ end
     MakeFESolver <: StatsStep
 
 Call [`InteractionWeightedDIDs.makefesolver`](@ref) to construct the fixed effect solver.
-The returned object named `feM` may be shared across multiple specifications.
 """
 const MakeFESolver = StatsStep{:MakeFESolver, typeof(makefesolver)}
 
@@ -108,7 +109,8 @@ See also [`MakeYXCols`](@ref).
 """
 function makeyxcols(data, weights::AbstractWeights, esample::BitVector,
         feM::Union{AbstractFixedEffectSolver, Nothing}, has_fe_intercept::Bool,
-        contrasts::Dict, fetol::Real, femaxiter::Int, allyterm::Terms, allxterms::Terms)
+        contrasts::Union{Dict, Nothing}, fetol::Real, femaxiter::Int,
+        allyterm::Terms, allxterms::Terms)
     
     yxcols = Dict{AbstractTerm, VecOrMat{Float64}}()
     yxnames = union(termvars(allyterm), termvars(allxterms))
@@ -132,7 +134,8 @@ function makeyxcols(data, weights::AbstractWeights, esample::BitVector,
     # Any term other than InterceptTerm{true}() that represents the intercept
     # will be replaced by InterceptTerm{true}()
     # Need to take such changes into account when creating X matrix
-    xschema = schema(allxterms, yxdata, contrasts)
+    xschema = contrasts === nothing ? schema(allxterms, yxdata) :
+        schema(allxterms, yxdata, contrasts)
     concrete_xterms = apply_schema(allxterms, xschema, StatisticalModel)
     for (t, ct) in zip(eachterm(allxterms), eachterm(concrete_xterms))
         if width(ct) > 0
@@ -155,7 +158,7 @@ function makeyxcols(data, weights::AbstractWeights, esample::BitVector,
         end
     end
 
-    return (yxcols=yxcols, yxterms=yxterms, nfeiterations=iter, feconverged=conv), true
+    return (yxcols=yxcols, yxterms=yxterms, nfeiterations=iter, feconverged=conv)
 end
 
 """
@@ -163,13 +166,11 @@ end
 
 Call [`InteractionWeightedDIDs.makeyxcols`](@ref) to obtain
 residualized outcome variables and covariates.
-The returned objects named `yxcols`, `yxterms`, `nfeiterations` and `feconverged`
-may be shared across multiple specifications.
 """
 const MakeYXCols = StatsStep{:MakeYXCols, typeof(makeyxcols)}
 
 required(::MakeYXCols) = (:data, :weights, :esample, :feM, :has_fe_intercept)
-default(::MakeYXCols) = (contrasts=Dict{Symbol, Any}(), fetol=1e-8, femaxiter=10000)
+default(::MakeYXCols) = (contrasts=nothing, fetol=1e-8, femaxiter=10000)
 
 function combinedargs(::MakeYXCols, allntargs)
     if length(allntargs) > 1
@@ -259,7 +260,7 @@ function maketreatcols(data, treatname::Symbol, treatintterms::Terms,
     end
 
     return (itreats=itreats, treatcols=treatcols, cellweights=cellweights,
-        cellcounts=cellcounts), true
+        cellcounts=cellcounts)
 end
 
 """
@@ -268,8 +269,6 @@ end
 Call [`InteractionWeightedDIDs.maketreatcols`](@ref) to obtain
 residualized binary columns that capture treatment effects
 and obtain cell-level weight sums and observation counts.
-The returned objects named `itreats`, `treatcols`, `cellweights` and `cellcounts`
-may be shared across multiple specifications.
 """
 const MakeTreatCols = StatsStep{:MakeTreatCols, typeof(maketreatcols)}
 
@@ -323,7 +322,7 @@ function solveleastsquares!(tr::DynamicTreatment{SharpDesign}, yterm::AbstractTe
     treatinds = Table(ts)
 
     return (coef=coef, X=X, crossx=crossx, residuals=residuals, treatinds=treatinds,
-        xterms=xterms, basecols=basecols), true
+        xterms=xterms, basecols=basecols)
 end
 
 """
@@ -331,8 +330,6 @@ end
 
 Call [`InteractionWeightedDIDs.solveleastsquares!`](@ref) to
 solve the least squares problem for regression coefficients and residuals.
-The returned objects named `coef`, `X`, `crossx`, `residuals`, `basecols` and `treatinds`
-may be shared across multiple specifications.
 """
 const SolveLeastSquares = StatsStep{:SolveLeastSquares, typeof(solveleastsquares!)}
 
@@ -380,7 +377,7 @@ function estvcov(data, esample::BitVector, vce::CovarianceEstimator, coef::Vecto
     has_intercept = has_intercept || has_fe_intercept
     df_F = max(1, Vcov.df_FStat(vce_data, concrete_vce, has_intercept))
     p = fdistccdf(max(length(coef) - has_intercept, 1), df_F, F)
-    return (vcov_mat=vcov_mat, vce=concrete_vce, dof_resid=dof_resid, F=F, p=p), true
+    return (vcov_mat=vcov_mat, vce=concrete_vce, dof_resid=dof_resid, F=F, p=p)
 end
 
 """
@@ -388,8 +385,6 @@ end
 
 Call [`InteractionWeightedDIDs.estvcov`](@ref) to
 estimate variance-covariance matrix and F-statistic.
-The returned objects named `vcov_mat`, `vce`, `dof_resid`, `F` and `p`
-may be shared across multiple specifications.
 """
 const EstVcov = StatsStep{:EstVcov, typeof(estvcov)}
 

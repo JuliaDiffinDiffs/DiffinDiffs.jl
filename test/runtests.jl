@@ -3,7 +3,8 @@ using InteractionWeightedDIDs
 
 using DataFrames
 using Dictionaries
-using DiffinDiffsBase: required, default, transformed, combinedargs, valid_didargs
+using DiffinDiffsBase: required, default, transformed, combinedargs, valid_didargs,
+    _get_default, @fieldequal
 using FixedEffectModels: Combination, nunique
 using FixedEffects
 using InteractionWeightedDIDs: checkvcov!, checkfes!, makefesolver,
@@ -19,6 +20,8 @@ import Base: ==
 
 # A workaround to be replaced
 ==(x::Vcov.ClusterCovariance, y::Vcov.ClusterCovariance) = true
+
+@fieldequal RegressionBasedDIDResult
 
 const tests = [
     "procedures",
