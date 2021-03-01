@@ -3,8 +3,7 @@ using InteractionWeightedDIDs
 
 using DataFrames
 using Dictionaries
-using DiffinDiffsBase: required, default, transformed, combinedargs, valid_didargs,
-    _get_default, @fieldequal
+using DiffinDiffsBase: required, default, transformed, combinedargs, valid_didargs, @fieldequal
 using FixedEffectModels: Combination, nunique
 using FixedEffects
 using InteractionWeightedDIDs: checkvcov!, checkfes!, makefesolver,

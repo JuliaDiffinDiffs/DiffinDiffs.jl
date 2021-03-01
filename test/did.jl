@@ -1,8 +1,6 @@
 @testset "RegressionBasedDID" begin
     hrs = exampledata("hrs")
 
-    @test _get_default(Reg(), NamedTuple()) == merge((default(s) for s in Reg())...)
-
     r = @did(Reg, data=hrs, dynamic(:wave, -1), notyettreated([11]),
         vce=Vcov.cluster(:hhidpn), yterm=term(:oop_spend), treatname=:wave_hosp,
         treatintterms=(), xterms=(fe(:wave)+fe(:hhidpn)))

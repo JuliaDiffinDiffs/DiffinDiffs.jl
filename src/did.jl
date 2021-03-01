@@ -9,17 +9,24 @@ const RegressionBasedDID = DiffinDiffsEstimator{:RegressionBasedDID,
 
 const Reg = RegressionBasedDID
 
-function _get_default(::Reg, @nospecialize(ntargs::NamedTuple))
-    defaults = (subset=nothing, weightname=nothing, vce=Vcov.RobustCovariance(),
-        treatintterms=(), xterms=(), drop_singletons=true, nfethreads=Threads.nthreads(),
-        contrasts=nothing, fetol=1e-8, femaxiter=10000, cohortinteracted=true)
-    return merge(defaults, ntargs)
-end
-
 function valid_didargs(d::Type{Reg}, ::DynamicTreatment{SharpDesign},
-        ::TrendParallel{Unconditional, Exact}, @nospecialize(ntargs::NamedTuple))
-    ntargs = _get_default(d(), ntargs)
-    name = haskey(ntargs, :name) ? ntargs.name : ""
+        ::TrendParallel{Unconditional, Exact}, args::Dict{Symbol,Any})
+    name = get(args, :name, "")::String
+    ntargs = (data=args[:data], tr=args[:tr]::DynamicTreatment{SharpDesign},
+        pr=args[:pr]::TrendParallel{Unconditional, Exact},
+        yterm=args[:yterm]::Union{Term,FunctionTerm},
+        treatname=args[:treatname]::Symbol,
+        subset=get(args, :subset, nothing)::Union{BitVector,Nothing},
+        weightname=get(args, :weightname, nothing)::Union{Symbol,Nothing},
+        vce=get(args, :vce, Vcov.RobustCovariance())::Vcov.CovarianceEstimator,
+        treatintterms=get(args, :treatintterms, ())::Terms,
+        xterms=get(args, :xterms, ())::Terms,
+        drop_singletons=get(args, :drop_singletons, true)::Bool,
+        nfethreads=get(args, :nfethreads, Threads.nthreads())::Int,
+        contrasts=get(args, :contrasts, nothing)::Union{Dict{Symbol,Any},Nothing},
+        fetol=get(args, :fetol, 1e-8)::Float64,
+        femaxiter=get(args, :femaxiter, 10000)::Int,
+        cohortinteracted=get(args, :cohortinteracted, true)::Bool)
     return name, d, ntargs
 end
 

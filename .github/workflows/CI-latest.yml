@@ -41,5 +41,5 @@ jobs:
             ${{ runner.os }}-
       - uses: julia-actions/julia-buildpkg@v1
       - name: Install latest dependencies
-        run: julia --project=. -e 'using Pkg; Pkg.add(name="DiffinDiffsBase", rev="master"); Pkg.instantiate()'
+        run: julia --project=. -e "using Pkg; Pkg.add(PackageSpec(name=\""DiffinDiffsBase\"", rev=\""master\"")); Pkg.instantiate()"
       - uses: julia-actions/julia-runtest@v1

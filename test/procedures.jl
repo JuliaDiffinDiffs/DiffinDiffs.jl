@@ -43,11 +43,10 @@ end
     nobs = size(hrs, 1)
     fes = FixedEffect[FixedEffect(hrs.hhidpn)]
     fenames = [:fe_hhidpn]
-    nt = (fenames=fenames, weights=uweights(nobs), esample=trues(nobs),
-        default(MakeFESolver())..., fes=fes)
+    nt = (fes=fes, weights=uweights(nobs), esample=trues(nobs), default(MakeFESolver())...)
     ret = makefesolver(nt...)
     @test ret.feM isa FixedEffects.FixedEffectSolverCPU{Float64}
-    nt = merge(nt, (fenames=Symbol[], fes=FixedEffect[]))
+    nt = merge(nt, (fes=FixedEffect[],))
     @test makefesolver(nt...) == (feM=nothing,)
     @test MakeFESolver()(nt) == merge(nt, (feM=nothing,))
 end
@@ -57,7 +56,8 @@ end
     nobs = size(hrs, 1)
     t1 = InterceptTerm{true}()
     nt = (data=hrs, weights=uweights(nobs), esample=trues(nobs), feM=nothing, has_fe_intercept=false, default(MakeYXCols())...)
-    ret = makeyxcols(nt..., (term(:oop_spend),), (term(1),))
+    ret = makeyxcols(nt..., Set{AbstractTerm}((term(:oop_spend),)),
+        Set{AbstractTerm}((term(1),)))
     @test ret.yxcols == Dict(term(:oop_spend)=>hrs.oop_spend, t1=>ones(nobs, 1))
     @test ret.yxterms[term(:oop_spend)] isa ContinuousTerm
     @test ret.yxterms[t1] isa InterceptTerm{true}
@@ -65,15 +65,17 @@ end
     @test ret.feconverged === nothing
 
     # Verify that an intercept will be added if not having one
-    ret1 = makeyxcols(nt..., (term(:oop_spend),), ())
+    ret1 = makeyxcols(nt..., Set{AbstractTerm}((term(:oop_spend),)), Set{AbstractTerm}())
     @test ret1 == ret
-    ret1 = makeyxcols(nt..., (term(:oop_spend),), (term(0),))
+    ret1 = makeyxcols(nt..., Set{AbstractTerm}((term(:oop_spend),)),
+        Set{AbstractTerm}((term(0),)))
     @test ret1.yxcols == ret.yxcols
     @test ret1.yxterms[t1] isa InterceptTerm{true}
 
     wt = Weights(hrs.rwthh)
     nt = merge(nt, (weights=wt,))
-    ret = makeyxcols(nt..., (term(:oop_spend), term(:riearnsemp)), (term(:male),))
+    ret = makeyxcols(nt..., Set{AbstractTerm}((term(:oop_spend), term(:riearnsemp))),
+        Set{AbstractTerm}((term(:male),)))
     @test ret.yxcols == Dict(term(:oop_spend)=>hrs.oop_spend.*sqrt.(wt),
         term(:riearnsemp)=>hrs.riearnsemp.*sqrt.(wt),
         term(:male)=>reshape(hrs.male.*sqrt.(wt), nobs, 1),
@@ -82,10 +84,12 @@ end
     df = DataFrame(hrs)
     df.riearnsemp[1] = NaN
     nt = merge(nt, (data=df,))
-    @test_throws ErrorException makeyxcols(nt..., (term(:riearnsemp),), (term(1),))
+    @test_throws ErrorException makeyxcols(nt..., Set{AbstractTerm}((term(:riearnsemp),)),
+        Set{AbstractTerm}((term(1),)))
     df.spouse = convert(Vector{Float64}, df.spouse)
     df.spouse[1] = Inf
-    @test_throws ErrorException makeyxcols(nt..., (term(:oop_spend),), (term(:spouse),))
+    @test_throws ErrorException makeyxcols(nt..., Set{AbstractTerm}((term(:oop_spend),)),
+        Set{AbstractTerm}((term(:spouse),)))
 
     df = DataFrame(hrs)
     x = randn(nobs)
@@ -94,7 +98,8 @@ end
     fes = [FixedEffect(df.hhidpn)]
     feM = AbstractFixedEffectSolver{Float64}(fes, wt, Val{:cpu}, Threads.nthreads())
     nt = merge(nt, (data=df, weights=wt, feM=feM, has_fe_intercept=true))
-    ret = makeyxcols(nt..., (term(:oop_spend),), (InterceptTerm{false}(), term(:x)))
+    ret = makeyxcols(nt..., Set{AbstractTerm}((term(:oop_spend),)),
+        Set{AbstractTerm}((InterceptTerm{false}(), term(:x))))
     resids = reshape(copy(df.oop_spend), nobs, 1)
     _feresiduals!(resids, feM, 1e-8, 10000)
     resids .*= sqrt.(wt)
@@ -110,7 +115,8 @@ end
     fes = [FixedEffect(df.hhidpn[esample])]
     feM = AbstractFixedEffectSolver{Float64}(fes, wt, Val{:cpu}, Threads.nthreads())
     nt = merge(nt, (data=df, esample=esample, weights=wt, feM=feM, has_fe_intercept=true))
-    ret = makeyxcols(nt..., (term(:oop_spend),), (InterceptTerm{false}(),))
+    ret = makeyxcols(nt..., Set{AbstractTerm}((term(:oop_spend),)),
+        Set{AbstractTerm}((InterceptTerm{false}(),)))
     resids = reshape(df.oop_spend[esample], nobs, 1)
     _feresiduals!(resids, feM, 1e-8, 10000)
     resids .*= sqrt.(wt)
@@ -121,16 +127,19 @@ end
     @test df.oop_spend == hrs.oop_spend
 
     allntargs = NamedTuple[(yterm=term(:oop_spend), xterms=())]
-    @test combinedargs(MakeYXCols(), allntargs) == ((term(:oop_spend),), ())
+    @test combinedargs(MakeYXCols(), allntargs) ==
+        (Set{AbstractTerm}((term(:oop_spend),)), Set{AbstractTerm}())
     push!(allntargs, allntargs[1])
-    @test combinedargs(MakeYXCols(), allntargs) == ((term(:oop_spend),), ())
+    @test combinedargs(MakeYXCols(), allntargs) ==
+        (Set{AbstractTerm}((term(:oop_spend),)), Set{AbstractTerm}())
     push!(allntargs, (yterm=term(:riearnsemp), xterms=(InterceptTerm{false}(),)))
     @test combinedargs(MakeYXCols(), allntargs) ==
-        ((term(:oop_spend),term(:riearnsemp)), (InterceptTerm{false}(),))
+        (Set{AbstractTerm}((term(:oop_spend),term(:riearnsemp))),
+        Set{AbstractTerm}((InterceptTerm{false}(),)))
     push!(allntargs, (yterm=term(:riearnsemp), xterms=(term(:male),)))
     @test combinedargs(MakeYXCols(), allntargs) ==
-        ((term(:oop_spend),term(:riearnsemp)),
-        (InterceptTerm{false}(), term(:male)))
+        (Set{AbstractTerm}((term(:oop_spend),term(:riearnsemp))),
+        Set{AbstractTerm}((InterceptTerm{false}(), term(:male))))
     
     nt = merge(nt, (data=df, yterm=term(:oop_spend), xterms=(InterceptTerm{false}(),)))
     @test MakeYXCols()(nt) == merge(nt, ret)
@@ -143,7 +152,7 @@ end
     nt = (data=hrs, treatname=:wave_hosp, treatintterms=(), feM=nothing,
         weightname=nothing, weights=uweights(nobs), esample=trues(nobs),
         tr_rows=hrs.wave_hosp.!=11, default(MakeTreatCols())...)
-    ret = maketreatcols(nt..., typeof(tr), tr.time, Set([-1]))
+    ret = maketreatcols(nt..., typeof(tr), tr.time, IdDict(-1=>1))
     @test length(ret.itreats) == 12
     @test ret.itreats[(rel=0, wave_hosp=10)] ==
         collect(1:nobs)[(hrs.wave_hosp.==10).&(hrs.wave.==10)]
@@ -156,13 +165,13 @@ end
     @test all(x->x==163, getindices(w, filter(x->x.wave_hosp==10, keys(w))))
 
     nt = merge(nt, (treatintterms=(term(:male),),))
-    ret = maketreatcols(nt..., typeof(tr), tr.time, Set([-1]))
+    ret = maketreatcols(nt..., typeof(tr), tr.time, IdDict(-1=>1))
     @test length(ret.itreats) == 24
     @test ret.itreats[(rel=0, wave_hosp=10, male=1)] ==
         collect(1:nobs)[(hrs.wave_hosp.==10).&(hrs.wave.==10).&(hrs.male.==1)]
 
     nt = merge(nt, (cohortinteracted=false, treatintterms=()))
-    ret = maketreatcols(nt..., typeof(tr), tr.time, Set([-1]))
+    ret = maketreatcols(nt..., typeof(tr), tr.time, IdDict(-1=>1))
     @test length(ret.itreats) == 6
     @test ret.itreats[(rel=0,)] ==
         collect(1:nobs)[(hrs.wave_hosp.==hrs.wave).&(hrs.wave_hosp.!=11)]
@@ -170,7 +179,7 @@ end
     @test ret.treatcols[(rel=0,)] == col1
 
     nt = merge(nt, (treatintterms=(term(:male),),))
-    ret = maketreatcols(nt..., typeof(tr), tr.time, Set([-1]))
+    ret = maketreatcols(nt..., typeof(tr), tr.time, IdDict(-1=>1))
     @test length(ret.itreats) == 12
     @test ret.itreats[(rel=0, male=1)] ==
         collect(1:nobs)[(hrs.wave_hosp.==hrs.wave).&(hrs.wave_hosp.!=11).&(hrs.male.==1)]
@@ -183,7 +192,7 @@ end
     feM = AbstractFixedEffectSolver{Float64}(fes, wt, Val{:cpu}, Threads.nthreads())
     nt = merge(nt, (data=df, feM=feM, weightname=:rwthh, weights=wt, esample=esample,
         treatintterms=(), cohortinteracted=true))
-    ret = maketreatcols(nt..., typeof(tr), tr.time, Set([-1]))
+    ret = maketreatcols(nt..., typeof(tr), tr.time, IdDict(-1=>1))
     col = reshape(col[esample], nobs, 1)
     defaults = (default(MakeTreatCols())...,)
     _feresiduals!(col, feM, defaults[[2,3]]...)
@@ -192,13 +201,13 @@ end
     @test ret.cellweights[(rel=0, wave_hosp=10)] == 881700
 
     allntargs = NamedTuple[(tr=tr,)]
-    @test combinedargs(MakeTreatCols(), allntargs) == (Set([-1]),)
+    @test combinedargs(MakeTreatCols(), allntargs) == (IdDict(-1=>1),)
     push!(allntargs, allntargs[1])
-    @test combinedargs(MakeTreatCols(), allntargs) == (Set([-1]),)
+    @test combinedargs(MakeTreatCols(), allntargs) == (IdDict(-1=>2),)
     push!(allntargs, (tr=dynamic(:wave, [-1,-2]),))
-    @test combinedargs(MakeTreatCols(), allntargs) == (Set([-1]),)
+    @test combinedargs(MakeTreatCols(), allntargs) == (IdDict(-1=>3),)
     push!(allntargs, (tr=dynamic(:wave, [-3]),))
-    @test combinedargs(MakeTreatCols(), allntargs) == (Set{Int}(),)
+    @test combinedargs(MakeTreatCols(), allntargs) == (IdDict{Int,Int}(),)
 
     nt = merge(nt, (tr=tr,))
     @test MakeTreatCols()(nt) == merge(nt, (itreats=ret.itreats, treatcols=ret.treatcols,

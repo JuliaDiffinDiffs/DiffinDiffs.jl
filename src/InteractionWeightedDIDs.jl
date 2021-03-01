@@ -20,7 +20,7 @@ using DiffinDiffsBase: termvars, hasintercept, omitsintercept, isintercept, pars
 
 import Base: show
 import DiffinDiffsBase: required, default, transformed, combinedargs, copyargs,
-    _get_default, valid_didargs, result
+    valid_didargs, result, _count!
 import FixedEffectModels: has_fe
 
 export Vcov,

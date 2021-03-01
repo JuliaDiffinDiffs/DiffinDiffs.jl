@@ -68,8 +68,8 @@ copyargs(::CheckFEs) = (2,)
 Construct `FixedEffects.AbstractFixedEffectSolver`.
 See also [`MakeFESolver`](@ref).
 """
-function makefesolver(fenames::Vector{Symbol}, weights::AbstractWeights, esample::BitVector,
-        nfethreads::Int, fes::Vector{FixedEffect})
+function makefesolver(fes::Vector{FixedEffect}, weights::AbstractWeights,
+        esample::BitVector, nfethreads::Int)
     if !isempty(fes)
         fes = FixedEffect[fe[esample] for fe in fes]
         feM = AbstractFixedEffectSolver{Float64}(fes, weights, Val{:cpu}, nfethreads)
@@ -86,10 +86,8 @@ Call [`InteractionWeightedDIDs.makefesolver`](@ref) to construct the fixed effec
 """
 const MakeFESolver = StatsStep{:MakeFESolver, typeof(makefesolver)}
 
-required(::MakeFESolver) = (:fenames, :weights, :esample)
+required(::MakeFESolver) = (:fes, :weights, :esample)
 default(::MakeFESolver) = (nfethreads=Threads.nthreads(),)
-# Determine equality of fes by fenames
-combinedargs(::MakeFESolver, allntargs) = (allntargs[1].fes,)
 
 function _feresiduals!(M::AbstractArray, feM::AbstractFixedEffectSolver,
         tol::Real, maxiter::Integer)
@@ -110,9 +108,11 @@ See also [`MakeYXCols`](@ref).
 function makeyxcols(data, weights::AbstractWeights, esample::BitVector,
         feM::Union{AbstractFixedEffectSolver, Nothing}, has_fe_intercept::Bool,
         contrasts::Union{Dict, Nothing}, fetol::Real, femaxiter::Int,
-        allyterm::Terms, allxterms::Terms)
+        allyterm::Set{AbstractTerm}, allxterms::Set{AbstractTerm})
     
     yxcols = Dict{AbstractTerm, VecOrMat{Float64}}()
+    allyterm = (allyterm...,)
+    allxterms = (allxterms...,)
     yxnames = union(termvars(allyterm), termvars(allxterms))
     yxdata = _getsubcolumns(data, yxnames, esample)
     concrete_yterms = apply_schema(allyterm, schema(allyterm, yxdata), StatisticalModel)
@@ -173,16 +173,12 @@ required(::MakeYXCols) = (:data, :weights, :esample, :feM, :has_fe_intercept)
 default(::MakeYXCols) = (contrasts=nothing, fetol=1e-8, femaxiter=10000)
 
 function combinedargs(::MakeYXCols, allntargs)
-    if length(allntargs) > 1
-        allyterm, allxterms = Set{AbstractTerm}(), Set{AbstractTerm}()
-        for nt in allntargs
-            push!(allyterm, nt.yterm)
-            !isempty(nt.xterms) && push!(allxterms, nt.xterms...)
-        end
-        return (allyterm...,), (allxterms...,)
-    else
-        return (allntargs[1].yterm,), allntargs[1].xterms
+    ys, xs = Set{AbstractTerm}(), Set{AbstractTerm}()
+    @inbounds for nt in allntargs
+        push!(ys, nt.yterm)
+        foreach(x->push!(xs, x), nt.xterms)
     end
+    return ys, xs
 end
 
 # Assume idx is sorted
@@ -218,11 +214,11 @@ function maketreatcols(data, treatname::Symbol, treatintterms::Terms,
         weightname::Union{Symbol, Nothing}, weights::AbstractWeights,
         esample::BitVector, tr_rows::BitVector,
         cohortinteracted::Bool, fetol::Real, femaxiter::Int,
-        ::Type{DynamicTreatment{SharpDesign}}, time::Symbol, exc::Set{<:Integer})
+        ::Type{DynamicTreatment{SharpDesign}}, time::Symbol, exc::IdDict{Int,Int})
 
     nobs = sum(esample)
     tnames = (time, treatname, termvars(treatintterms)...)
-    kept = tr_rows .& .!(getcolumn(data, time).-getcolumn(data, treatname).∈(exc,))
+    kept = tr_rows .& .!(haskey.(Ref(exc), getcolumn(data, time).-getcolumn(data, treatname)))
     ikept = findall(kept)
     # Obtain a fast row iterator without copying (after _getsubcolumns)
     trows = Table(_getsubcolumns(data, tnames, kept))
@@ -281,8 +277,18 @@ transformed(::MakeTreatCols, @nospecialize(nt::NamedTuple)) =
 combinedargs(step::MakeTreatCols, allntargs) =
     combinedargs(step, allntargs, typeof(allntargs[1].tr))
 
-combinedargs(::MakeTreatCols, allntargs, ::Type{DynamicTreatment{SharpDesign}}) =
-    (Set(intersect((nt.tr.exc for nt in allntargs)...)),)
+# Obtain the relative time periods excluded by all tr in allntargs
+function combinedargs(::MakeTreatCols, allntargs, ::Type{DynamicTreatment{SharpDesign}})
+    count = IdDict{Int,Int}()
+    @inbounds for nt in allntargs
+        foreach(x->_count!(count, x), nt.tr.exc)
+    end
+    nnt = length(allntargs)
+    @inbounds for (k, v) in count
+        v == nnt || delete!(count, k)
+    end
+    return (count,)
+end
 
 """
     solveleastsquares!(args...)
@@ -377,7 +383,8 @@ function estvcov(data, esample::BitVector, vce::CovarianceEstimator, coef::Vecto
     has_intercept = has_intercept || has_fe_intercept
     df_F = max(1, Vcov.df_FStat(vce_data, concrete_vce, has_intercept))
     p = fdistccdf(max(length(coef) - has_intercept, 1), df_F, F)
-    return (vcov_mat=vcov_mat, vce=concrete_vce, dof_resid=dof_resid, F=F, p=p)
+    return (vcov_mat=vcov_mat::Symmetric{Float64,Array{Float64,2}},
+        vce=concrete_vce, dof_resid=dof_resid::Int, F=F::Float64, p=p::Float64)
 end
 
 """
