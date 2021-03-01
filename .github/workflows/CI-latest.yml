@@ -39,7 +39,7 @@ jobs:
             ${{ runner.os }}-test-${{ env.cache-name }}-
             ${{ runner.os }}-test-
             ${{ runner.os }}-
-      - name: Install latest dependencies
-        run: julia --project=. -e 'using Pkg; pkg"add DiffinDiffsBase#master"; Pkg.instantiate()'
       - uses: julia-actions/julia-buildpkg@v1
+      - name: Install latest dependencies
+        run: julia --project=. -e 'using Pkg; Pkg.add(name="DiffinDiffsBase", rev="master"); Pkg.instantiate()'
       - uses: julia-actions/julia-runtest@v1
