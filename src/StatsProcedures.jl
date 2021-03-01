@@ -163,15 +163,6 @@ function show(io::IO, ::MIME"text/plain", p::AbstractStatsProcedure{A,T}) where 
 end
 
 """
-    _get_default(p::AbstractStatsProcedure, ntargs::NamedTuple)
-
-Obtain default values for arguments of each [`StatsStep`](@ref) in procedure `p`
-and then merge any default value for arguments not found in `ntargs` into `ntargs`.
-"""
-_get_default(p::AbstractStatsProcedure, @nospecialize(ntargs::NamedTuple)) =
-    merge((default(s) for s in p)..., ntargs)
-
-"""
     SharedStatsStep
 
 A [`StatsStep`](@ref) that is possibly shared by
@@ -469,7 +460,7 @@ becomes an element in the returned `Vector` for each [`StatsSpec`](@ref).
 When either `keep` or `keepall` is specified,
 a `NamedTuple` with additional objects is formed for each [`StatsSpec`](@ref).
 """
-function proceed(sps::AbstractVector{<:StatsSpec};
+function proceed(sps::Vector{<:StatsSpec};
         verbose::Bool=false, keep=nothing, keepall::Bool=false, pause::Int=0)
     nsps = length(sps)
     nsps == 0 && throw(ArgumentError("expect a nonempty vector"))
@@ -583,24 +574,24 @@ function _parse!(options::Expr, args)
     return false
 end
 
-function _spec_walker1(x, parsers, formatters, ntargs_set)
+function _spec_walker1(x, parsers, formatters, args_set)
     @capture(x, spec_(formatter_(parser_(rawargs__))...)(;o__)) || return x
     # spec may be a GlobalRef
     name = spec isa Symbol ? spec : spec.name
     name == :StatsSpec || return x
     push!(parsers, parser)
     push!(formatters, formatter)
-    return :(push!($ntargs_set, $parser($(rawargs...))))
+    return :(push!($args_set, $parser($(rawargs...))))
 end
 
-function _spec_walker2(x, parsers, formatters, ntargs_set)
+function _spec_walker2(x, parsers, formatters, args_set)
     @capture(x, spec_(formatter_(parser_(rawargs__))...)) || return x
     # spec may be a GlobalRef
     name = spec isa Symbol ? spec : spec.name
     name == :StatsSpec || return x
     push!(parsers, parser)
     push!(formatters, formatter)
-    return :(push!($ntargs_set, $parser($(rawargs...))))
+    return :(push!($args_set, $parser($(rawargs...))))
 end
 
 """
@@ -647,7 +638,7 @@ The following options are available for altering the behavior of `@specset`:
 macro specset(args...)
     nargs = length(args)
     nargs == 0 && throw(ArgumentError("no argument is found for @specset"))
-    options = :(Dict{Symbol, Any}())
+    options = :(Dict{Symbol,Any}())
     noproceed = false
     default_args = nothing
     if nargs > 1
@@ -663,9 +654,9 @@ macro specset(args...)
         throw(ArgumentError("last argument to @specset must be begin/end block or for loop"))
 
     # parser and formatter may be GlobalRef
-    parsers, formatters, ntargs_set = [], [], NamedTuple[]
-    walked = postwalk(x->_spec_walker1(x, parsers, formatters, ntargs_set), specs)
-    walked = postwalk(x->_spec_walker2(x, parsers, formatters, ntargs_set), walked)
+    parsers, formatters, args_set = [], [], Dict{Symbol,Any}[]
+    walked = postwalk(x->_spec_walker1(x, parsers, formatters, args_set), specs)
+    walked = postwalk(x->_spec_walker2(x, parsers, formatters, args_set), walked)
     nparser = length(unique!(parsers))
     nparser == 1 ||
         throw(ArgumentError("found $nparser parsers from arguments while expecting one"))
@@ -675,17 +666,17 @@ macro specset(args...)
     
     parser, formatter = parsers[1], formatters[1]
     if default_args === nothing
-        defaults = :(NamedTuple())
+        defaults = :(Dict{Symbol,Any}())
     else
-        defaults = esc(:($parser($(default_args[1]...); $(default_args[2]...))))
+        defaults = esc(:($parser($(default_args[1]), $(default_args[2]))))
     end
 
     blk = quote
         $(esc(walked))
-        local nspec = length($ntargs_set)
+        local nspec = length($args_set)
         local sps = Vector{StatsSpec}(undef, nspec)
         for i in 1:nspec
-            sps[i] = StatsSpec($(esc(formatter))(merge($defaults, $ntargs_set[i]))...)
+            sps[i] = StatsSpec($(esc(formatter))(merge($defaults, $args_set[i]))...)
         end
     end
 

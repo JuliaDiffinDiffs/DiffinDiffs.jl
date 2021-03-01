@@ -1,10 +1,11 @@
 const testterm = treat(:g, TR, PR)
 
 function valid_didargs(d::Type{TestDID}, ::AbstractTreatment, ::AbstractParallel,
-        ntargs::NamedTuple)
-    name = haskey(ntargs, :name) ? ntargs.name : ""
-    ntargs = NamedTuple{(setdiff([keys(ntargs)...], [:name, :d])...,)}(ntargs)
-    return name, d, ntargs
+        args::Dict{Symbol,Any})
+    name = get(args, :name, "")
+    ns = (setdiff([keys(args)...], [:name, :d])...,)
+    args = NamedTuple{ns}(map(n->args[n], ns))
+    return name, d, args
 end
 
 @testset "DiffinDiffsEstimator" begin
@@ -29,45 +30,45 @@ end
     @test iterate(d, 3) === nothing
 end
 
-@testset "parse_didargs" begin
-    @test parse_didargs() == NamedTuple()
-    @test parse_didargs("test") == (name="test",)
+@testset "parse_didargs!" begin
+    @test parse_didargs!(Any["test"], Dict{Symbol,Any}()) == Dict{Symbol,Any}(:name=>"test")
 
-    ntargs = parse_didargs(TestDID, TR, PR, a=1, b=2)
-    @test ntargs ≊ (d=TestDID, tr=TR, pr=PR, a=1, b=2)
+    args = parse_didargs!([TestDID, TR, PR], Dict{Symbol,Any}(:a=>1, :b=>2))
+    @test args == Dict{Symbol,Any}(pairs((d=TestDID, tr=TR, pr=PR, a=1, b=2)))
 
-    ntargs = parse_didargs("test", testterm, TestDID)
-    @test ntargs ≊ (d=TestDID, tr=TR, pr=PR, name="test", treatname=:g)
+    args = parse_didargs!(["test", testterm, TestDID], Dict{Symbol,Any}())
+    @test args == Dict{Symbol,Any}(pairs((d=TestDID, tr=TR, pr=PR, name="test", treatname=:g)))
 
-    ntargs0 = parse_didargs(TestDID, term(:y) ~ testterm, "test")
-    @test ntargs0 ≊ (d=TestDID, tr=TR, pr=PR, name="test", yterm=term(:y), treatname=:g)
+    args0 = parse_didargs!([TestDID, term(:y) ~ testterm, "test"], Dict{Symbol,Any}())
+    @test args0 == Dict{Symbol,Any}(pairs((d=TestDID, tr=TR, pr=PR, name="test", yterm=term(:y), treatname=:g)))
 
-    ntargs1 = parse_didargs(TestDID, "test", @formula(y ~ treat(g, ttreat(t, 0), tpara(0))))
-    @test ntargs1 ≊ ntargs0
+    args1 = parse_didargs!([TestDID, "test", @formula(y ~ treat(g, ttreat(t, 0), tpara(0)))],
+        Dict{Symbol,Any}())
+    @test args1 == args0
 
-    ntargs0 = parse_didargs(TestDID, term(:y) ~ testterm & term(:z) + term(:x))
-    @test ntargs0 ≊ (d=TestDID, tr=TR, pr=PR, yterm=term(:y), treatname=:g, treatintterms=(term(:z),), xterms=(term(:x),))
+    args0 = parse_didargs!([TestDID, term(:y) ~ testterm & term(:z) + term(:x)],
+        Dict{Symbol,Any}())
+    @test args0 == Dict{Symbol,Any}(pairs((d=TestDID, tr=TR, pr=PR, yterm=term(:y), treatname=:g, treatintterms=(term(:z),), xterms=(term(:x),))))
     
-    ntargs1 = parse_didargs(TestDID,
-        @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) & z + x))
-    @test ntargs1 ≊ ntargs0
+    args1 = parse_didargs!([TestDID,
+        @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) & z + x)], Dict{Symbol,Any}())
+    @test args1 == args0
 
-    @test_throws ArgumentError parse_didargs('a', :a, 1)
-    @test_throws ArgumentError parse_didargs(TestDID, DefaultDID)
-    @test_throws ArgumentError parse_didargs(TR, PR, TR)
+    @test_throws ArgumentError parse_didargs!(['a', :a, 1], Dict{Symbol,Any}())
+    @test parse_didargs!(Any[TestDID, DefaultDID], Dict{Symbol,Any}()) == Dict{Symbol,Any}(:d=>DefaultDID)
 end
 
 @testset "valid_didargs" begin
-    nt = (d=TestDID, tr=TR, pr=PR)
-    @test valid_didargs(nt) == ("", TestDID, (tr=TR, pr=PR))
-    nt = (d=TestDID, tr=TR, pr=PR, name="name")
-    @test valid_didargs(nt) == ("name", TestDID, (tr=TR, pr=PR))
-    nt = (d=TestDID, tr=TR, a=1)
-    @test_throws ArgumentError valid_didargs(nt)
-    nt = (tr=TR, pr=PR)
-    @test_throws ErrorException valid_didargs(nt)
-    nt = (d=NotImplemented, tr=TR, pr=PR)
-    @test_throws ErrorException valid_didargs(nt)
+    arg = Dict{Symbol,Any}(pairs((d=TestDID, tr=TR, pr=PR)))
+    @test valid_didargs(arg) == ("", TestDID, (tr=TR, pr=PR))
+    arg = Dict{Symbol,Any}(pairs((name="name", d=TestDID, tr=TR, pr=PR)))
+    @test valid_didargs(arg) == ("name", TestDID, (tr=TR, pr=PR))
+    arg = Dict{Symbol,Any}(pairs((d=TestDID, tr=TR, a=1)))
+    @test_throws ArgumentError valid_didargs(arg)
+    arg = Dict{Symbol,Any}(pairs((tr=TR, pr=PR)))
+    @test_throws ErrorException valid_didargs(arg)
+    arg = Dict{Symbol,Any}(pairs((d=NotImplemented, tr=TR, pr=PR)))
+    @test_throws ErrorException valid_didargs(arg)
 end
 
 @testset "StatsSpec" begin
@@ -148,9 +149,9 @@ end
     sp7 = didspec(TestDID, term(:y) ~ testterm & term(:z) + term(:x))
     sp8 = didspec(TestDID, @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) & z + x))
     @test sp7 ≊ sp6
-    @test sp8 === sp7
-    @test sp6 === @did [noproceed] TestDID term(:y) ~ testterm & term(:z) + term(:x)
-    @test sp6 === @did [noproceed] TestDID @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) & z + x)
+    @test sp8 ≊ sp7
+    @test sp6 ≊ @did [noproceed] TestDID term(:y) ~ testterm & term(:z) + term(:x)
+    @test sp6 ≊ @did [noproceed] TestDID @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) & z + x)
 end
 
 @testset "_treatnames" begin
@@ -235,8 +236,6 @@ end
     @test_throws ArgumentError did(TestDID)
     @test_throws ArgumentError @did TestDID TR
     @test_throws ArgumentError did(TestDID, TR)
-    @test_throws ArgumentError @did TestDID TR PR PR
-    @test_throws ArgumentError did(TestDID, TR, PR, PR)
     @test_throws ArgumentError @did TestDID TR PR 1
     @test_throws ArgumentError did(TestDID, TR, PR, 1)
     @test_throws ErrorException @did NotImplemented TR PR

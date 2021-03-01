@@ -96,16 +96,22 @@ end
 """
     _args_kwargs(exprs)
 
-Partition a collection of expressions into two arrays
-such that all expressions in the second array has `head` being `:(=)`.
-This function is useful for separating out expressions
-for positional arguments and those for keyword arguments.
+Return an expression of `Vector{Any}` and an expression of `Dict{Symbol,Any}`
+where the latter collect any `Expr` in `exprs` with `head` being `:(=)`
+and the former collects the rest.
+This function is useful for preparing arguments for [`parse_didargs!`](@ref)
+inside a macro such as [`@did`](@ref).
 """
 function _args_kwargs(exprs)
-    args = []
-    kwargs = []
+    args = :(Any[])
+    kwargs = :(Dict{Symbol,Any}())
     for expr in exprs
-        (expr isa Expr && expr.head==:(=)) ? push!(kwargs, expr) : push!(args, expr)
+        if expr isa Expr && expr.head==:(=)
+            key = Expr(:quote, expr.args[1])
+            push!(kwargs.args, Expr(:call, :(=>), key, expr.args[2]))
+        else
+            push!(args.args, expr)
+        end
     end
     return args, kwargs
 end

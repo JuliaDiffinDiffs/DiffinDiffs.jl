@@ -12,16 +12,16 @@ Default difference-in-differences estimator selected based on the context.
 """
 const DefaultDID = DiffinDiffsEstimator{:DefaultDID, Tuple{}}
 
-_argpair(arg::Type{<:DiffinDiffsEstimator}) = :d => arg
-_argpair(arg::AbstractString) = :name => String(arg)
-_argpair(arg::AbstractTreatment) = :tr => arg
-_argpair(arg::AbstractParallel) = :pr => arg
-_argpair(::Any) = throw(ArgumentError("unacceptable positional arguments"))
+_key(::Type{<:DiffinDiffsEstimator}) = :d
+_key(::AbstractString) = :name
+_key(::AbstractTreatment) = :tr
+_key(::AbstractParallel) = :pr
+_key(::Any) = throw(ArgumentError("unacceptable positional arguments"))
 
 """
-    parse_didargs(args...; kwargs...)
+    parse_didargs!(args::Vector{Any}, kwargs::Dict{Symbol,Any})
 
-Return a `NamedTuple` that is suitable for being passed to
+Return a `Dict` that is suitable for being passed to
 [`valid_didargs`](@ref) for further processing.
 
 Any [`TreatmentTerm`](@ref) or [`FormulaTerm`](@ref) in `args` is decomposed.
@@ -31,53 +31,49 @@ The order of positional arguments is irrelevant.
 
 This function is required for `@specset` to work properly.
 """
-function parse_didargs(args...; kwargs...)
-    pargs = Pair{Symbol,Any}[kwargs...]
+function parse_didargs!(args::Vector{Any}, kwargs::Dict{Symbol,Any})
     for arg in args
         if arg isa FormulaTerm
             treat, intacts, xs = parse_treat(arg)
-            push!(pargs, _argpair(treat.tr), _argpair(treat.pr))
-            push!(pargs, :yterm => arg.lhs, :treatname => treat.sym)
-            intacts==() || push!(pargs, :treatintterms => intacts)
-            xs==() || push!(pargs, :xterms => xs)
+            kwargs[_key(treat.tr)] = treat.tr
+            kwargs[_key(treat.pr)] = treat.pr
+            kwargs[:yterm] = arg.lhs
+            kwargs[:treatname] = treat.sym
+            intacts==() || (kwargs[:treatintterms] = intacts)
+            xs==() || (kwargs[:xterms] = xs)
         elseif arg isa TreatmentTerm
-            push!(pargs, _argpair(arg.tr), _argpair(arg.pr))
-            push!(pargs, :treatname => arg.sym)
+            kwargs[_key(arg.tr)] = arg.tr
+            kwargs[_key(arg.pr)] = arg.pr
+            kwargs[:treatname] = arg.sym
         else
-            push!(pargs, _argpair(arg))
+            kwargs[_key(arg)] = arg
         end
     end
-    keyargs = first.(pargs)
-    length(keyargs) != length(unique(keyargs)) &&
-        throw(ArgumentError("redundant arguments encountered"))
-    ntargs = (; pargs...)
-    return ntargs
+    return kwargs
 end
 
 """
-    valid_didargs(ntargs::NamedTuple)
+    valid_didargs(args::Dict{Symbol,Any})
 
 Return a tuple of objects that can be accepted by
 the constructor of [`StatsSpec`](@ref).
-If no [`DiffinDiffsEstimator`](@ref) is found in `ntargs`,
+If no [`DiffinDiffsEstimator`](@ref) is found in `args`,
 try to select one based on other information.
 
 This function is required for `@specset` to work properly.
 """
-function valid_didargs(ntargs::NamedTuple)
-    if haskey(ntargs, :tr) && haskey(ntargs, :pr)
-        d = haskey(ntargs, :d) ? ntargs.d : DefaultDID
-        return valid_didargs(d, ntargs.tr, ntargs.pr, ntargs)
+function valid_didargs(args::Dict{Symbol,Any})
+    if haskey(args, :tr) && haskey(args, :pr)
+        d = pop!(args, :d, DefaultDID)
+        return valid_didargs(d, args[:tr], args[:pr], args)
     else
         throw(ArgumentError("not all required arguments are specified"))
     end
 end
 
 valid_didargs(d::Type{<:DiffinDiffsEstimator},
-    tr::AbstractTreatment, pr::AbstractParallel, ::NamedTuple) =
+    tr::AbstractTreatment, pr::AbstractParallel, ::Dict{Symbol,Any}) =
         error(d.instance, " is not implemented for $(typeof(tr)) and $(typeof(pr))")
-
-_didargs(args...; kwargs...) = valid_didargs(parse_didargs(args...; kwargs...))
 
 """
     didspec(args...; kwargs...)
@@ -85,7 +81,14 @@ _didargs(args...; kwargs...) = valid_didargs(parse_didargs(args...; kwargs...))
 Construct a [`StatsSpec`](@ref) for difference-in-differences
 with the specified arguments.
 """
-didspec(args...; kwargs...) = StatsSpec(_didargs(args...; kwargs...)...)
+function didspec(args...; kwargs...)
+    args = Any[args...]
+    kwargs = Dict{Symbol,Any}(kwargs...)
+    return didspec(args, kwargs)
+end
+
+didspec(args::Vector{Any}, kwargs::Dict{Symbol,Any}) =
+    StatsSpec(valid_didargs(parse_didargs!(args, kwargs))...)
 
 function _show_args(io::IO, sp::StatsSpec{<:DiffinDiffsEstimator})
     if haskey(sp.args, :tr) || haskey(sp.args, :pr)
@@ -96,7 +99,9 @@ function _show_args(io::IO, sp::StatsSpec{<:DiffinDiffsEstimator})
 end
 
 function did(args...; verbose::Bool=false, keep=nothing, keepall::Bool=false, kwargs...)
-    sp = didspec(args...; kwargs...)
+    args = Any[args...]
+    kwargs = Dict{Symbol,Any}(kwargs...)
+    sp = didspec(args, kwargs)
     return sp(verbose=verbose, keep=keep, keepall=keepall)
 end
 
@@ -109,7 +114,7 @@ The order of the arguments is irrelevant.
 # Arguments
 - `[option option=val ...]`: optional settings for @did including keyword arguments passed to an instance of [`StatsSpec`](@ref).
 - `name::AbstractString`: an optional name for the [`StatsSpec`](@ref).
-- `args... kwargs...`: a list of arguments to be processed by [`parse_didargs`](@ref) and [`valid_didargs`](@ref).
+- `args... kwargs...`: a list of arguments to be processed by [`parse_didargs!`](@ref) and [`valid_didargs`](@ref).
 
 # Notes
 When expanded outside [`@specset`](@ref),
@@ -151,9 +156,9 @@ macro did(args...)
     end
     dargs, dkwargs = _args_kwargs(didargs)
     if noproceed
-        return :(StatsSpec(valid_didargs(parse_didargs($(esc.(dargs)...); $(esc.(dkwargs)...)))...))
+        return :(StatsSpec(valid_didargs(parse_didargs!($(esc(dargs)), $(esc(dkwargs))))...))
     else
-        return :(StatsSpec(valid_didargs(parse_didargs($(esc.(dargs)...); $(esc.(dkwargs)...)))...)(; $(esc(options))...))
+        return :(StatsSpec(valid_didargs(parse_didargs!($(esc(dargs)), $(esc(dkwargs))))...)(; $(esc(options))...))
     end
 end
 

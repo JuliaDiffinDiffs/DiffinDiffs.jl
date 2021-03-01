@@ -97,7 +97,7 @@ function checkvars!(data, tr::AbstractTreatment, pr::AbstractParallel,
 
     overlap!(esample, tr_rows, tr, pr, treatname, data)
     sum(esample) == 0 && error("no nonmissing data")
-    return (esample=esample, tr_rows=tr_rows)
+    return (esample=esample, tr_rows=tr_rows::BitVector)
 end
 
 """

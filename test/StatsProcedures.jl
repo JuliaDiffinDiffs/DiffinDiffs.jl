@@ -1,4 +1,4 @@
-using DiffinDiffsBase: _f, _get, groupargs, _get_default,
+using DiffinDiffsBase: _f, _get, groupargs,
     _sharedby, _show_args, _args_kwargs, _parse!, pool, proceed
 import DiffinDiffsBase: required, default, transformed, combinedargs, copyargs
 
@@ -123,12 +123,6 @@ const ap = AP()
         NullProcedure (TestProcedure with 0 step)"""
 end
 
-@testset "_get_default" begin
-    @test _get_default(rp, NamedTuple()) == (a="a", b="b")
-    @test _get_default(rp, (a="a1",)) == (a="a1", b="b")
-    @test _get_default(rp, (c="c",)) == (a="a", b="b", c="c")
-end
-
 @testset "SharedStatsStep" begin
     s1 = SharedStatsStep(TestRegStep(), 1)
     s2 = SharedStatsStep(TestRegStep(), [3,2])
@@ -250,17 +244,17 @@ end
     @test _show_args(stdout, s1) === nothing
 end
 
-function testparser(args...; kwargs...)
-    pargs = Pair{Symbol,Any}[kwargs...]
+function testparser(args, kwargs)
+    kwargs = Dict{Symbol,Any}(kwargs...)
     for arg in args
         if arg isa Type{<:AbstractStatsProcedure}
-            push!(pargs, :p=>arg)
+            kwargs[:p] = arg
         end
     end
-    return (; pargs...)
+    return kwargs
 end
 
-testformatter(nt::NamedTuple) = (haskey(nt, :name) ? nt.name : "", nt.p, (a=nt.a, b=nt.b))
+testformatter(arg::Dict{Symbol,Any}) = (get(arg, :name, ""), arg[:p], (a=arg[:a], b=arg[:b]))
 
 @testset "proceed" begin
     s1 = StatsSpec("s1", RP, (a="a", b="b"))
@@ -328,77 +322,77 @@ end
 
 @testset "@specset" begin
     s = @specset [noproceed=true] a="a0" begin
-        StatsSpec(testformatter(testparser(RP; a="a1", b="b"))...)(;) end
+        StatsSpec(testformatter(testparser(Any[RP], Dict{Symbol,Any}(:a=>"a1", :b=>"b")))...)(;) end
     @test s == StatsSpec[StatsSpec("", RP, (a="a1", b="b"))]
     @test proceed(s) == ["a1a1b"]
     
     s = @specset [noproceed] a="a0" begin
-        StatsSpec(testformatter(testparser(RP; b="b"))...)(;) end
+        StatsSpec(testformatter(testparser(Any[RP], Dict{Symbol,Any}(:b=>"b")))...)(;) end
     @test s == StatsSpec[StatsSpec("", RP, (a="a0", b="b"))]
     @test proceed(s) == ["a0a0b"]
 
     s = @specset [noproceed] a="a0" b="b0" begin
-        StatsSpec(testformatter(testparser(RP))...)
-        StatsSpec(testformatter(testparser(RP; a="a1", b="b1"))...)(;)
+        StatsSpec(testformatter(testparser(Any[RP], Dict{Symbol,Any}()))...)
+        StatsSpec(testformatter(testparser(Any[RP], Dict{Symbol,Any}(:a=>"a1", :b=>"b1")))...)(;)
     end
     @test s == StatsSpec[StatsSpec("", RP, (a="a0", b="b0")), StatsSpec("", RP, (a="a1", b="b1"))]
     @test proceed(s) == ["a0a0b0", "a1a1b1"]
 
     s = @specset [noproceed] a="a0" b="b0" begin
-        StatsSpec(testformatter(testparser(RP))...)(;)
-        StatsSpec(testformatter(testparser(RP; a="a1", c="c"))...)
+        StatsSpec(testformatter(testparser(Any[RP], Dict{Symbol,Any}()))...)(;)
+        StatsSpec(testformatter(testparser(Any[RP], Dict{Symbol,Any}(:a=>"a1", :c=>"c")))...)
     end
     @test s == StatsSpec[StatsSpec("", RP, (a="a0", b="b0")), StatsSpec("", RP, (a="a1", b="b0"))]
     @test proceed(s) == ["a0a0b0", "a1a1b0"]
 
     a = "a0"
     r = @specset [verbose keepall] a=a begin
-        StatsSpec(testformatter(testparser(RP; b="b"))...) end
+        StatsSpec(testformatter(testparser(Any[RP], Dict{Symbol,Any}(:b=>"b")))...) end
     @test r == [(a="a0", b="b", c="a0b", result="a0a0b")]
 
     r = @specset [verbose keep=:a] a=a begin
-        StatsSpec(testformatter(testparser(RP; b="b"))...) end
+        StatsSpec(testformatter(testparser(Any[RP], Dict{Symbol,Any}(:b=>"b")))...) end
     @test r == [(a="a0", result="a0a0b")]
 
     r = @specset [verbose keep=[:a]] a=a begin
-        StatsSpec(testformatter(testparser(RP; b="b"))...) end
+        StatsSpec(testformatter(testparser(Any[RP], Dict{Symbol,Any}(:b=>"b")))...) end
     @test r == [(a="a0", result="a0a0b")]
 
     r = @specset [verbose pause=1] a=a begin
-        StatsSpec(testformatter(testparser(RP; b="b"))...) end
+        StatsSpec(testformatter(testparser(Any[RP], Dict{Symbol,Any}(:b=>"b")))...) end
     @test r == ["b"]
     
     s0 = @specset [noproceed] for i in 1:3
         a = "a"*string(i)
-        StatsSpec(testformatter(testparser(RP; a=a, b="b"))...)(;)
-        StatsSpec(testformatter(testparser(RP; a=a, b="b1"))...)(;)
+        StatsSpec(testformatter(testparser(Any[RP], Dict{Symbol,Any}(:a=>a, :b=>"b")))...)(;)
+        StatsSpec(testformatter(testparser(Any[RP], Dict{Symbol,Any}(:a=>a, :b=>"b1")))...)(;)
     end
     @test proceed(s0) == ["a1a1b", "a1a1b1", "a2a2b", "a2a2b1", "a3a3b", "a3a3b1"]
 
     s1 = @specset [noproceed] begin
         i = 1
         a = "a"*string(i)
-        StatsSpec(testformatter(testparser(RP; a=a, b="b"))...)(;)
-        StatsSpec(testformatter(testparser(RP; a=a, b="b1"))...)(;)
+        StatsSpec(testformatter(testparser(Any[RP], Dict{Symbol,Any}(:a=>a, :b=>"b")))...)(;)
+        StatsSpec(testformatter(testparser(Any[RP], Dict{Symbol,Any}(:a=>a, :b=>"b1")))...)(;)
         for i in 2:3
             a = "a"*string(i)
-            StatsSpec(testformatter(testparser(RP; a=a, b="b"))...)(;)
-            StatsSpec(testformatter(testparser(RP; a=a, b="b1"))...)(;)
+            StatsSpec(testformatter(testparser(Any[RP], Dict{Symbol,Any}(:a=>a, :b=>"b")))...)(;)
+            StatsSpec(testformatter(testparser(Any[RP], Dict{Symbol,Any}(:a=>a, :b=>"b1")))...)(;)
         end
     end
     @test s1 == s0
 
     r = @specset for i in 1:3
         a = "a"*string(i)
-        StatsSpec(testformatter(testparser(RP; a=a, b="b"))...)(;)
-        StatsSpec(testformatter(testparser(RP; a=a, b="b1"))...)(;)
+        StatsSpec(testformatter(testparser(Any[RP], Dict{Symbol,Any}(:a=>a, :b=>"b")))...)(;)
+        StatsSpec(testformatter(testparser(Any[RP], Dict{Symbol,Any}(:a=>a, :b=>"b1")))...)(;)
     end
     @test r == ["a1a1b", "a1a1b1", "a2a2b", "a2a2b1", "a3a3b", "a3a3b1"]
 
     r = @specset RP a="a1" begin
-        StatsSpec(testformatter(testparser(; b="b"))...)(;)
+        StatsSpec(testformatter(testparser(Any[], Dict{Symbol,Any}(:b=>"b")))...)(;)
         for i in 2:3
-            StatsSpec(testformatter(testparser(; a="a"*"$i", b="b"))...)(;)
+            StatsSpec(testformatter(testparser(Any[], Dict{Symbol,Any}(:a=>"a"*"$i", :b=>"b")))...)(;)
         end
     end
     @test r == ["a1a1b", "a2a2b", "a3a3b"]
