@@ -22,11 +22,11 @@ tpara(c::ConstantTerm) = TestParallel{ParallelCondition,ParallelStrength}(c.n)
 
 teststep(tr::AbstractTreatment, pr::AbstractParallel) =
     (str=sprint(show, tr), spr=sprint(show, pr))
-const TestStep = StatsStep{:TestStep, typeof(teststep)}
+const TestStep = StatsStep{:TestStep, typeof(teststep), true}
 required(::TestStep) = (:tr, :pr)
 
 testnextstep(::AbstractTreatment, str::String) = (next="next"*str,)
-const TestNextStep = StatsStep{:TestNextStep, typeof(testnextstep)}
+const TestNextStep = StatsStep{:TestNextStep, typeof(testnextstep), true}
 required(::TestNextStep) = (:tr, :str)
 
 const TestDID = DiffinDiffsEstimator{:TestDID, Tuple{TestStep,TestNextStep}}

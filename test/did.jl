@@ -31,6 +31,10 @@ end
 end
 
 @testset "parse_didargs!" begin
+    args = Dict{Symbol,Any}(:xterms=>(term(:x),))
+    _totermset!(args, :xterms)
+    @test args[:xterms] == TermSet(term(:x)=>nothing)
+
     @test parse_didargs!(Any["test"], Dict{Symbol,Any}()) == Dict{Symbol,Any}(:name=>"test")
 
     args = parse_didargs!([TestDID, TR, PR], Dict{Symbol,Any}(:a=>1, :b=>2))
@@ -40,7 +44,7 @@ end
     @test args == Dict{Symbol,Any}(pairs((d=TestDID, tr=TR, pr=PR, name="test", treatname=:g)))
 
     args0 = parse_didargs!([TestDID, term(:y) ~ testterm, "test"], Dict{Symbol,Any}())
-    @test args0 == Dict{Symbol,Any}(pairs((d=TestDID, tr=TR, pr=PR, name="test", yterm=term(:y), treatname=:g)))
+    @test args0 == Dict{Symbol,Any}(pairs((d=TestDID, tr=TR, pr=PR, name="test", yterm=term(:y), treatname=:g, treatintterms=TermSet(), xterms=TermSet())))
 
     args1 = parse_didargs!([TestDID, "test", @formula(y ~ treat(g, ttreat(t, 0), tpara(0)))],
         Dict{Symbol,Any}())
@@ -48,7 +52,9 @@ end
 
     args0 = parse_didargs!([TestDID, term(:y) ~ testterm & term(:z) + term(:x)],
         Dict{Symbol,Any}())
-    @test args0 == Dict{Symbol,Any}(pairs((d=TestDID, tr=TR, pr=PR, yterm=term(:y), treatname=:g, treatintterms=(term(:z),), xterms=(term(:x),))))
+    @test args0 == Dict{Symbol,Any}(pairs((d=TestDID, tr=TR, pr=PR, yterm=term(:y),
+        treatname=:g, treatintterms=TermSet(term(:z)=>nothing),
+        xterms=TermSet(term(:x)=>nothing))))
     
     args1 = parse_didargs!([TestDID,
         @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) & z + x)], Dict{Symbol,Any}())
@@ -144,8 +150,8 @@ end
     @test sp5 ≊ sp4
     @test sp4 ≊ @did [noproceed] TestDID testterm "name"
 
-    sp6 = StatsSpec("", TestDID, (tr=TR, pr=PR, 
-        yterm=term(:y), treatname=:g, treatintterms=(term(:z),), xterms=(term(:x),)))
+    sp6 = StatsSpec("", TestDID, (tr=TR, pr=PR, yterm=term(:y), treatname=:g,
+        treatintterms=TermSet(term(:z)=>nothing), xterms=TermSet(term(:x)=>nothing)))
     sp7 = didspec(TestDID, term(:y) ~ testterm & term(:z) + term(:x))
     sp8 = didspec(TestDID, @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) & z + x))
     @test sp7 ≊ sp6
@@ -212,14 +218,15 @@ end
     @test did(TestDID, testterm; keepall=true) == d
 
     d0 = @did [keepall] TestDID term(:y) ~ testterm
-    @test d0 ≊ merge(d, (yterm=term(:y),))
+    @test d0 ≊ merge(d, (yterm=term(:y), treatintterms=TermSet(), xterms=TermSet()))
     @test did(TestDID, term(:y) ~ testterm; keepall=true) == d0
     d1 = @did [keepall] TestDID @formula(y ~ treat(g, ttreat(t, 0), tpara(0))) "test"
     @test d1 ≊ d0
     @test did(TestDID, @formula(y ~ treat(g, ttreat(t, 0), tpara(0))); keepall=true) == d1
 
     d0 = @did [keepall] TestDID term(:y) ~ testterm & term(:z) + term(:x)
-    @test d0 ≊ merge(d, (yterm=term(:y), treatintterms=(term(:z),), xterms=(term(:x),)))
+    @test d0 ≊ merge(d, (yterm=term(:y), treatintterms=TermSet(term(:z)=>nothing),
+        xterms=TermSet(term(:x)=>nothing)))
     @test did(TestDID, term(:y) ~ testterm & term(:z) + term(:x); keepall=true) == d0
     d1 = @did [keepall] "test" TestDID @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) & z + x)
     @test d1 ≊ d0
@@ -274,7 +281,8 @@ end
         @did [noproceed] TestDID @formula(y ~ treat(g, ttreat(t, 0), tpara(0)))
     end
     @test s[1] ≊ didspec(TestDID, TR, PR; treatname=:g)
-    @test s[2] ≊ didspec(TestDID, TR, PR; yterm=term(:y), treatname=:g)
+    @test s[2] ≊ didspec(TestDID, TR, PR; yterm=term(:y), treatname=:g,
+        treatintterms=TermSet(), xterms=TermSet())
 
     s = @specset [noproceed] for i in 1:2
         @did "name"*"$i" TestDID TR PR a=i

@@ -18,6 +18,14 @@ _key(::AbstractTreatment) = :tr
 _key(::AbstractParallel) = :pr
 _key(::Any) = throw(ArgumentError("unacceptable positional arguments"))
 
+function _totermset!(args::Dict{Symbol,Any}, s::Symbol)
+    if haskey(args, s) && !(args[s] isa TermSet)
+        ts = TermSet()
+        foreach(t->setindex!(ts, nothing, t), args[s])
+        args[s] = ts
+    end
+end
+
 """
     parse_didargs!(args::Vector{Any}, kwargs::Dict{Symbol,Any})
 
@@ -25,6 +33,7 @@ Return a `Dict` that is suitable for being passed to
 [`valid_didargs`](@ref) for further processing.
 
 Any [`TreatmentTerm`](@ref) or [`FormulaTerm`](@ref) in `args` is decomposed.
+Any collection of terms is converted to `TermSet`.
 Keys are assigned to all positional arguments based on their types.
 An optional `name` for [`StatsSpec`](@ref) can be included in `args` as a string.
 The order of positional arguments is irrelevant.
@@ -39,8 +48,8 @@ function parse_didargs!(args::Vector{Any}, kwargs::Dict{Symbol,Any})
             kwargs[_key(treat.pr)] = treat.pr
             kwargs[:yterm] = arg.lhs
             kwargs[:treatname] = treat.sym
-            intacts==() || (kwargs[:treatintterms] = intacts)
-            xs==() || (kwargs[:xterms] = xs)
+            kwargs[:treatintterms] = intacts
+            kwargs[:xterms] = xs
         elseif arg isa TreatmentTerm
             kwargs[_key(arg.tr)] = arg.tr
             kwargs[_key(arg.pr)] = arg.pr
@@ -49,6 +58,7 @@ function parse_didargs!(args::Vector{Any}, kwargs::Dict{Symbol,Any})
             kwargs[_key(arg)] = arg
         end
     end
+    foreach(n->_totermset!(kwargs, n), (:treatintterms, :xterms))
     return kwargs
 end
 

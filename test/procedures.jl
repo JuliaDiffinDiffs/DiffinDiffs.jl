@@ -4,7 +4,7 @@
         nt = (data=hrs, subset=nothing, weightname=nothing)
         @test checkdata(nt...) == (esample=trues(size(hrs,1)),)
         
-        nt = merge(nt, (weightname=:rwthh, subset=hrs.male))
+        nt = merge(nt, (weightname=:rwthh, subset=hrs.male.==1))
         @test checkdata(nt...) == (esample=BitArray(hrs.male),)
         
         nt = merge(nt, (data=rand(10,10),))
@@ -30,13 +30,29 @@
         @test CheckData()((data=hrs,)) == (data=hrs, esample=trues(size(hrs,1)))
         @test_throws ErrorException CheckData()()
     end
-end 
+end
+
+@testset "GroupTerms" begin
+    @testset "groupterms" begin
+        nt = (treatintterms=TermSet(), xterms=TermSet(term(:x)=>nothing))
+        @test groupterms(nt...) == nt
+    end
+
+    @testset "StatsStep" begin
+        @test sprint(show, GroupTerms()) == "GroupTerms"
+        @test sprint(show, MIME("text/plain"), GroupTerms()) ==
+            "GroupTerms (StatsStep that calls DiffinDiffsBase.groupterms)"
+        @test _byid(GroupTerms()) == false
+        nt = (treatintterms=TermSet(), xterms=TermSet(term(:x)=>nothing))
+        @test GroupTerms()(nt) == nt 
+    end
+end
 
 @testset "CheckVars" begin
     @testset "checkvars!" begin
         hrs = exampledata("hrs")
         nt = (data=hrs, tr=dynamic(:wave, -1), pr=nevertreated(11), yterm=term(:oop_spend),
-            treatname=:wave_hosp, esample=trues(size(hrs,1)), treatintterms=(), xterms=())
+            treatname=:wave_hosp, esample=trues(size(hrs,1)), treatintterms=TermSet(), xterms=TermSet())
         @test checkvars!(nt...) == (esample=trues(size(hrs,1)),
             tr_rows=hrs.wave_hosp.!=11)
         
@@ -49,8 +65,8 @@ end
             (esample=.!(hrs.wave_hosp.∈(10,)).& .!(hrs.wave.∈((10,11),)),
             tr_rows=(.!(hrs.wave_hosp.∈((10,11),)).& .!(hrs.wave.∈((10,11),))))
         
-        nt = merge(nt, (pr=nevertreated(11), treatintterms=(term(:male),),
-            xterms=(term(:white),), esample=trues(size(hrs,1))))
+        nt = merge(nt, (pr=nevertreated(11), treatintterms=TermSet(term(:male)=>nothing),
+            xterms=TermSet(term(:white)=>nothing), esample=trues(size(hrs,1))))
         @test checkvars!(nt...) == (esample=trues(size(hrs,1)),
             tr_rows=hrs.wave_hosp.!=11)
         
@@ -80,7 +96,8 @@ end
 
         hrs = exampledata("hrs")
         nt = (data=hrs, tr=dynamic(:wave, -1), pr=nevertreated(11), yterm=term(:oop_spend),
-            treatname=:wave_hosp, treatintterms=(), xterms=(), esample=trues(size(hrs,1)))
+            treatname=:wave_hosp, treatintterms=TermSet(), xterms=TermSet(),
+            esample=trues(size(hrs,1)))
         gargs = groupargs(CheckVars(), nt)
         @test gargs[copyargs(CheckVars())...] == nt.esample
         

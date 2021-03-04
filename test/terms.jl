@@ -46,13 +46,13 @@ end
         f = @formula(y ~ x)
         @test_throws ArgumentError parse_treat(f)
 
-        f = @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) + x & z + lag(x,1))
+        f = @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) + x & z)
         t = parse_treat(f)
-        @test t == (t1, (), (@formula(y ~ x & z + lag(x,1))).rhs)
+        @test t == (t1, TermSet(), TermSet(term(:x)&term(:z)=>nothing))
 
         f = @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) & x & z)
         t = parse_treat(f)
-        @test t == (t1, (term(:x), term(:z)), ())
+        @test t == (t1, TermSet((term(:x), term(:z)).=>nothing), TermSet())
 
         f = @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) & treat(g, ttreat(t, 0), tpara(0)))
         @test_throws ArgumentError parse_treat(f)
@@ -77,11 +77,11 @@ end
 
         f = term(:y) ~ treat(:g, TR, PR) + term(:x) & term(:z) + lag(term(:x),1)
         t = parse_treat(f)
-        @test t == (t1, (), term(:x) & term(:z) + lag(term(:x),1))
+        @test t == (t1, TermSet(), TermSet((term(:x) & term(:z) + lag(term(:x),1).=>nothing)))
 
         f = term(:y) ~ treat(:g, TR, PR) & term(:x) & term(:z)
         t = parse_treat(f)
-        @test t == (t1, (term(:x), term(:z)), ())
+        @test t == (t1, TermSet((term(:x), term(:z)).=>nothing), TermSet())
 
         f = term(:y) ~ treat(:g, TR, PR) & treat(:g, TR, PR)
         @test_throws ArgumentError parse_treat(f)
@@ -102,17 +102,21 @@ end
     end
 end
 
-@testset "parse_intercept" begin
-    @test hasintercept(()) == false
-    @test omitsintercept(()) == false
+@testset "parse_intercept!" begin
     @test isintercept(term(1))
     @test isomitsintercept(term(0))
     @test isomitsintercept(term(-1))
 
-    @test parse_intercept(()) == ()
-    @test parse_intercept((term(:x),)) == (term(:x),)
-    @test parse_intercept((term(1),)) == (InterceptTerm{true}(),)
-    @test parse_intercept((term(0), term(-1))) == (InterceptTerm{false}(),)
-    @test parse_intercept((term(1), term(0), term(:x))) ==
-        (term(:x), InterceptTerm{false}(), InterceptTerm{true}())
+    @test parse_intercept!(TermSet()) == (false, false)
+    @test parse_intercept!(TermSet(term(:x)=>nothing)) == (false, false)
+    ts = TermSet(term(1)=>nothing)
+    @test parse_intercept!(ts) == (true, false)
+    @test collect(keys(ts))[1] == InterceptTerm{true}()
+    ts = TermSet((term(0), term(-1)).=>nothing)
+    @test parse_intercept!(ts) == (false, true)
+    @test collect(keys(ts))[1] == InterceptTerm{false}()
+    ts = TermSet((term(1), term(0), term(:x)).=>nothing)
+    @test parse_intercept!(ts) == (true, true)
+    @test haskey(ts, term(:x)) && haskey(ts, InterceptTerm{false}()) &&
+        haskey(ts, InterceptTerm{true}())
 end

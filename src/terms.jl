@@ -1,4 +1,5 @@
 const Terms{N} = NTuple{N, AbstractTerm} where N
+const TermSet = IdDict{AbstractTerm, Nothing}
 
 """
     eachterm(t)
@@ -68,72 +69,95 @@ Extract terms related to treatment specifications from `formula`.
 
 # Returns
 - `TreatmentTerm`: the unique `TreatmentTerm` contained in the `formula`.
-- `Terms`: a tuple of any term that is interacted with the `TreatmentTerm`.
-- `Terms`: a tuple of remaining terms in `formula.rhs`.
+- `TermSet`: a set of terms that are interacted with the `TreatmentTerm`.
+- `TermSet`: a set of remaining terms in `formula.rhs`.
 
 Error will be raised if either existence or uniqueness of the `TreatmentTerm` is violated.
 """
 function parse_treat(@nospecialize(formula::FormulaTerm))
-    # Use Array for detecting duplicate terms
-    treats = Pair{TreatmentTerm,Tuple}[]
+    mettreat = false
+    treatterm = nothing
+    ints = TermSet()
+    xterms = TermSet()
     for term in eachterm(formula.rhs)
-        if hastreat(term)
-            if term isa TreatmentTerm
-                push!(treats, term=>())
-            elseif term isa FunctionTerm
-                push!(treats, treat(term.args_parsed...)=>())
-            elseif term isa InteractionTerm
-                trs = []
-                ints = []
+        if term isa TreatmentTerm
+            if !mettreat
+                mettreat = true
+                treatterm = term
+            else
+                throw(ArgumentError("cannot accept more than one TreatmentTerm"))
+            end
+        elseif term isa FunctionTerm{typeof(treat)}
+            if !mettreat
+                mettreat = true
+                treatterm = treat(term.args_parsed...)
+            else
+                throw(ArgumentError("cannot accept more than one TreatmentTerm"))
+            end
+        elseif term isa InteractionTerm
+            if hastreat(term)
+                !mettreat ||
+                    throw(ArgumentError("cannot accept more than one TreatmentTerm"))
                 for t in term.terms
-                    if hastreat(t)
-                        if t isa TreatmentTerm
-                            push!(trs, t)
-                        elseif t isa FunctionTerm
-                            push!(trs, treat(t.args_parsed...))
+                    if t isa TreatmentTerm
+                        if !mettreat
+                            mettreat = true
+                            treatterm = t
+                        else
+                            throw(ArgumentError("cannot accept more than one TreatmentTerm"))
+                        end
+                    elseif t isa FunctionTerm{typeof(treat)}
+                        if !mettreat
+                            mettreat = true
+                            treatterm = treat(t.args_parsed...)
+                        else
+                            throw(ArgumentError("cannot accept more than one TreatmentTerm"))
                         end
                     else
-                        push!(ints, t)
+                        ints[t] = nothing
                     end
                 end
-                if length(trs)!=1
-                    throw(ArgumentError("invlid term $term in formula.
-                        An interaction term may contain at most one instance of `TreatmentTerm`."))
-                else
-                    push!(treats, trs[1]=>Tuple(ints))
-                end
+            else
+                xterms[term] = nothing
             end
+        else
+            xterms[term] = nothing
         end
     end
-    length(treats)>1 &&
-        throw(ArgumentError("cannot accept more than one `TreatmentTerm`."))
-    isempty(treats) &&
-        throw(ArgumentError("no `TreatmentTerm` is found."))
-    xterms = Tuple(term for term in eachterm(formula.rhs) if !hastreat(term))
-    return treats[1][1], treats[1][2], xterms
+    mettreat || throw(ArgumentError("no TreatmentTerm is found"))
+    return treatterm::TreatmentTerm, ints, xterms
 end
-
-# A tentative solution to changes made in StatsModels v0.6.21
-hasintercept(::Tuple{}) = false
-omitsintercept(::Tuple{}) = false
 
 isintercept(t::AbstractTerm) = t in (InterceptTerm{true}(), ConstantTerm(1))
 isomitsintercept(t::AbstractTerm) =
     t in (InterceptTerm{false}(), ConstantTerm(0), ConstantTerm(-1))
 
 """
-    parse_intercept(ts::Terms)
+    parse_intercept(ts::TermSet)
 
-Convert any `ConstantTerm` to `InterceptTerm` and add them to the end of the tuple.
-This is useful for obtaining a unique way of specifying the intercept
+Convert any `ConstantTerm` to `InterceptTerm`
+and return Boolean values indicating whether terms explictly requiring
+including/excluding the intercept exist.
+
+This function is useful for obtaining a unique way of specifying the intercept
 before going through the `schema`--`apply_schema` pipeline defined in `StatsModels`.
 """
-function parse_intercept(@nospecialize(ts::Terms))
-    out = AbstractTerm[t for t in ts if !(isintercept(t) || isomitsintercept(t))]
-    omitsintercept(ts) && push!(out, InterceptTerm{false}())
-    # This order is assumed by InteractionWeightedDIDs.Fstat
-    hasintercept(ts) && push!(out, InterceptTerm{true}())
-    return (out...,)
+function parse_intercept!(ts::TermSet)
+    hasintercept = false
+    hasomitsintercept = false
+    for t in keys(ts)
+        if isintercept(t)
+            delete!(ts, t)
+            hasintercept = true
+        end
+        if isomitsintercept(t)
+            delete!(ts, t)
+            hasomitsintercept = true
+        end
+    end
+    hasintercept && (ts[InterceptTerm{true}()] = nothing)
+    hasomitsintercept && (ts[InterceptTerm{false}()] = nothing)
+    return hasintercept, hasomitsintercept
 end
 
-termvars(::Tuple{}) = Symbol[]
+termvars(ts::TermSet) = mapreduce(termvars, union, keys(ts), init=Symbol[])

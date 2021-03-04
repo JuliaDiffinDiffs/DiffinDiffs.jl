@@ -4,7 +4,7 @@
 Check `data` is a `Table` and find valid rows for options `subset` and `weightname`.
 See also [`CheckData`](@ref).
 """
-function checkdata(data, subset::Union{AbstractVector, Nothing},
+function checkdata(data, subset::Union{BitVector, Nothing},
         weightname::Union{Symbol, Nothing})
 
     istable(data) ||
@@ -13,7 +13,7 @@ function checkdata(data, subset::Union{AbstractVector, Nothing},
     if subset !== nothing
         length(subset) != size(data, 1) &&
             throw(DimensionMismatch("`data` of $(size(data, 1)) rows
-                cannot be matched with `subset` vector of $(length(subset)) elements"))
+                cannot be matched with subset vector of $(length(subset)) elements"))
         esample = .!ismissing.(subset) .& subset
     else
         esample = trues(size(data, 1))
@@ -34,10 +34,33 @@ end
 Call [`DiffinDiffsBase.checkdata`](@ref)
 for some preliminary checks of the input data.
 """
-const CheckData = StatsStep{:CheckData, typeof(checkdata)}
+const CheckData = StatsStep{:CheckData, typeof(checkdata), true}
 
 required(::CheckData) = (:data,)
 default(::CheckData) = (subset=nothing, weightname=nothing)
+
+"""
+    groupterms(args...)
+
+Return the arguments for allowing later comparisons based on object-id.
+See also [`GroupTerms`](@ref).
+"""
+groupterms(treatintterms::TermSet, xterms::TermSet) =
+    (treatintterms = treatintterms, xterms = xterms)
+
+"""
+    GroupTerms <: StatsStep
+
+Call [`DiffinDiffsBase.groupterms`](@ref)
+to obtain one of the instances of `treatintterms` and `xterms`
+that have been grouped by `==`
+for allowing later comparisons based on object-id.
+
+This step is only useful when working with [`@specset`](@ref) and [`proceed`](@ref).
+"""
+const GroupTerms = StatsStep{:GroupTerms, typeof(groupterms), false}
+
+required(::GroupTerms) = (:treatintterms, :xterms)
 
 function _overlaptime(tr::DynamicTreatment, tr_rows::BitVector, data)
     control_time = Set(view(getcolumn(data, tr.time), .!tr_rows))
@@ -76,7 +99,7 @@ See also [`CheckVars`](@ref).
 """
 function checkvars!(data, tr::AbstractTreatment, pr::AbstractParallel,
         yterm::AbstractTerm, treatname::Symbol, esample::BitVector,
-        treatintterms::Terms, xterms::Terms)
+        treatintterms::TermSet, xterms::TermSet)
 
     treatvars = union([treatname], (termvars(t) for t in (tr, pr, treatintterms))...)
     for v in treatvars
@@ -105,10 +128,10 @@ end
 
 Call [`DiffinDiffsBase.checkvars!`](@ref) to exclude invalid rows for relevant variables.
 """
-const CheckVars = StatsStep{:CheckVars, typeof(checkvars!)}
+const CheckVars = StatsStep{:CheckVars, typeof(checkvars!), true}
 
 required(::CheckVars) = (:data, :tr, :pr, :yterm, :treatname, :esample)
-default(::CheckVars) = (treatintterms=(), xterms=())
+default(::CheckVars) = (treatintterms=TermSet(), xterms=TermSet())
 copyargs(::CheckVars) = (6,)
 
 """
@@ -133,7 +156,7 @@ end
 
 Call [`DiffinDiffsBase.makeweights`](@ref) to create a generic `Weights` vector.
 """
-const MakeWeights = StatsStep{:MakeWeights, typeof(makeweights)}
+const MakeWeights = StatsStep{:MakeWeights, typeof(makeweights), true}
 
 required(::MakeWeights) = (:data, :esample)
 default(::MakeWeights) = (weightname=nothing,)

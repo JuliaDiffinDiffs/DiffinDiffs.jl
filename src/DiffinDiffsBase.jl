@@ -12,7 +12,7 @@ using Tables: istable, getcolumn, columntable, columnnames
 import Base: ==, show, union
 import Base: eltype, firstindex, lastindex, getindex, iterate, length, sym_in
 import StatsBase: coef, vcov, responsename, coefnames, weights, nobs, dof_residual
-import StatsModels: termvars, hasintercept, omitsintercept
+import StatsModels: termvars
 
 const TimeType = Int
 
@@ -46,7 +46,7 @@ export cb,
        notyettreated,
        istreated,
 
-       Terms,
+       TermSet,
        eachterm,
        TreatmentTerm,
        treat,
@@ -60,6 +60,7 @@ export cb,
        @specset,
 
        CheckData,
+       GroupTerms,
        CheckVars,
        MakeWeights,
 

@@ -1,5 +1,5 @@
 """
-    StatsStep{Alias, F<:Function}
+    StatsStep{Alias, F<:Function, ById}
 
 Specify the function for moving a step in an [`AbstractStatsProcedure`](@ref).
 An instance of `StatsStep` is callable.
@@ -7,6 +7,7 @@ An instance of `StatsStep` is callable.
 # Parameters
 - `Alias::Symbol`: alias of the type for pretty-printing.
 - `F<:Function`: type of the function to be called by `StatsStep`.
+- `ById::Bool`: whether arguments from multiple [`StatsSpec`](@ref)s should be grouped by `object-id` or `isequal`.
 
 # Methods
     (step::StatsStep{A,F})(ntargs::NamedTuple; verbose::Bool=false)
@@ -23,9 +24,10 @@ in case both are specified.
 ## Returns
 - `NamedTuple`: named intermediate results.
 """
-struct StatsStep{Alias, F<:Function} end
+struct StatsStep{Alias, F<:Function, ById} end
 
 _f(::StatsStep{A,F}) where {A,F} = F.instance
+_byid(::StatsStep{A,F,I}) where {A,F,I} = I
 
 """
     required(s::StatsStep)
@@ -184,6 +186,7 @@ end
 
 _sharedby(s::SharedStatsStep) = s.ids
 _f(s::SharedStatsStep) = _f(s.step)
+_byid(s::SharedStatsStep) = _byid(s.step)
 groupargs(s::SharedStatsStep, @nospecialize(ntargs::NamedTuple)) = groupargs(s.step, ntargs)
 combinedargs(s::SharedStatsStep, v::AbstractArray) = combinedargs(s.step, v)
 copyargs(s::SharedStatsStep) = copyargs(s.step)
@@ -476,17 +479,19 @@ function proceed(sps::Vector{<:StatsSpec};
     end
     
     steps = pool((p for p in keys(gids))...)
-    tasks = IdDict{Tuple, Vector{Int}}()
+    tasks_byid = IdDict{Tuple, Vector{Int}}()
+    tasks_byeq = Dict{Tuple, Vector{Int}}()
     ntask_total = 0
     step_count = 0
     paused = false
     @inbounds for step in steps
+        tasks = _byid(step) ? tasks_byid : tasks_byeq
         ntask = 0
         verbose && print("Running ", step, "...")
-        # Group arguments by ===
+        # Group arguments by objectid or isequal
         for i in _sharedby(step)
-            taskids = gids[steps.procs[i]]
-            for j in taskids
+            traceids = gids[steps.procs[i]]
+            for j in traceids
                 push!(get!(Vector{Int}, tasks, groupargs(step, traces[j])), j)
             end
         end

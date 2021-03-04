@@ -3,29 +3,29 @@ using DiffinDiffsBase: _f, _get, groupargs,
 import DiffinDiffsBase: required, default, transformed, combinedargs, copyargs
 
 testvoidstep(a::String) = NamedTuple()
-const TestVoidStep = StatsStep{:TestVoidStep, typeof(testvoidstep)}
+const TestVoidStep = StatsStep{:TestVoidStep, typeof(testvoidstep), true}
 required(::TestVoidStep) = (:a,)
 
 testregstep(a::String, b::String) = (c=a*b,)
-const TestRegStep = StatsStep{:TestRegStep, typeof(testregstep)}
+const TestRegStep = StatsStep{:TestRegStep, typeof(testregstep), true}
 default(::TestRegStep) = (a="a", b="b")
 
 testlaststep(a::String, c::String) = (result=a*c,)
-const TestLastStep = StatsStep{:TestLastStep, typeof(testlaststep)}
+const TestLastStep = StatsStep{:TestLastStep, typeof(testlaststep), true}
 default(::TestLastStep) = (a="a",)
 transformed(::TestLastStep, ntargs::NamedTuple) = (ntargs.c,)
 
 testcombinestep(a::String, bs::String...) = (c=collect(bs),)
-const TestCombineStep = StatsStep{:TestCombineStep, typeof(testcombinestep)}
+const TestCombineStep = StatsStep{:TestCombineStep, typeof(testcombinestep), true}
 default(::TestCombineStep) = (a="a",)
 combinedargs(::TestCombineStep, ntargs) = [nt.b for nt in ntargs]
 
 testarraystep(a::String, c::Array) = (result=c,)
-const TestArrayStep = StatsStep{:TestArrayStep, typeof(testarraystep)}
+const TestArrayStep = StatsStep{:TestArrayStep, typeof(testarraystep), true}
 required(::TestArrayStep) = (:a, :c)
 copyargs(::TestArrayStep) = (2,)
 
-const TestUnnamedStep = StatsStep{:TestUnnamedStep, typeof(testregstep)}
+const TestUnnamedStep = StatsStep{:TestUnnamedStep, typeof(testregstep), true}
 
 @testset "StatsStep" begin
     @testset "_get" begin

@@ -3,9 +3,9 @@ using DiffinDiffsBase
 
 using DataFrames
 using DiffinDiffsBase: @fieldequal, unpack, @unpack, hastreat, parse_treat,
-    hasintercept, omitsintercept, isintercept, isomitsintercept, parse_intercept,
-    _f, groupargs, copyargs, pool, checkdata, checkvars!, makeweights,
-    _getsubcolumns, parse_didargs!, _treatnames
+    isintercept, isomitsintercept, parse_intercept!,
+    _f, _byid, groupargs, copyargs, pool, checkdata, groupterms, checkvars!, makeweights,
+    _getsubcolumns, _totermset!, parse_didargs!, _treatnames
 using StatsBase: Weights, UnitWeights
 using StatsModels: termvars
 using TypedTables: Table
