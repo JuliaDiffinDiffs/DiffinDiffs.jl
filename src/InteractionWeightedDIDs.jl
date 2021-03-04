@@ -3,9 +3,9 @@ module InteractionWeightedDIDs
 using Base: Callable
 using Dictionaries: Dictionary
 using FixedEffectModels: FixedEffectTerm, Combination,
-    fe, parse_fixedeffect, basecol, isnested, nunique
+    fe, _parse_fixedeffect, basecol, isnested, nunique
 using FixedEffects
-using LinearAlgebra: Factorization, Symmetric, cholesky!
+using LinearAlgebra: Cholesky, Factorization, Symmetric, cholesky!
 using Reexport
 using SplitApplyCombine: group, mapview
 using StatsBase: AbstractWeights, CovarianceEstimator, UnitWeights, PValue, TestStat, NoQuote
@@ -15,7 +15,7 @@ using Tables: getcolumn, columnnames
 using TypedTables: Table
 using Vcov
 @reexport using DiffinDiffsBase
-using DiffinDiffsBase: termvars, hasintercept, omitsintercept, isintercept, parse_intercept,
+using DiffinDiffsBase: termvars, isintercept, parse_intercept!,
     _getsubcolumns, _treatnames
 
 import Base: show

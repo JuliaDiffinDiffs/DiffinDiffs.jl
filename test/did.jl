@@ -16,7 +16,7 @@
     @test nobs(r) == 2624
     
     @test sprint(show, r) == "Regression-based DID result"
-    pv = VERSION < v"1.7.0-DEV" ? " <1e-5" : "<1e-05" 
+    pv = VERSION < v"1.7.0-DEV" ? " <1e-5" : "<1e-05"
     @test sprint(show, MIME("text/plain"), r) == """
         ──────────────────────────────────────────────────────────────────────
         Summary of results: Regression-based DID
@@ -29,7 +29,7 @@
         Number of cohorts:              3    Interactions within cohorts:    0
         Relative time periods:          5    Excluded periods:              -1
         ──────────────────────────────────────────────────────────────────────
-        Fixed effects: fe_wave fe_hhidpn
+        Fixed effects: fe_hhidpn fe_wave
         ──────────────────────────────────────────────────────────────────────
         Converged:                   true    Singletons dropped:             0
         ──────────────────────────────────────────────────────────────────────"""
@@ -55,19 +55,19 @@ end
 @testset "@specset" begin
     hrs = exampledata("hrs")
     # The first two specs are identical hence no repetition of steps should occur
-    # The third spec should only share the first two steps with the others
+    # The third spec should only share the first three steps with the others
     r = @specset [verbose] begin
         @did(Reg, dynamic(:wave, -1), notyettreated([11]), data=hrs,
             yterm=term(:oop_spend), treatname=:wave_hosp, treatintterms=(),
             xterms=(fe(:wave)+fe(:hhidpn)))
         @did(Reg, dynamic(:wave, -1), notyettreated([11]), data=hrs,
-            yterm=term(:oop_spend), treatname=:wave_hosp, treatintterms=(),
-            xterms=(fe(:wave)+fe(:hhidpn)))
+            yterm=term(:oop_spend), treatname=:wave_hosp, treatintterms=[],
+            xterms=[fe(:hhidpn), fe(:wave)])
         @did(Reg, dynamic(:wave, -1), nevertreated([11]), data=hrs,
             yterm=term(:oop_spend), treatname=:wave_hosp, treatintterms=(),
             xterms=(fe(:wave)+fe(:hhidpn)))
     end
     @test r[1] == didspec(Reg, dynamic(:wave, -1), notyettreated([11]), data=hrs,
         yterm=term(:oop_spend), treatname=:wave_hosp, treatintterms=(),
-        xterms=(fe(:wave)+fe(:hhidpn)))()
+        xterms=TermSet(fe(:wave)=>nothing, fe(:hhidpn)=>nothing))()
 end

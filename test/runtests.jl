@@ -6,8 +6,8 @@ using Dictionaries
 using DiffinDiffsBase: required, default, transformed, combinedargs, valid_didargs, @fieldequal
 using FixedEffectModels: Combination, nunique
 using FixedEffects
-using InteractionWeightedDIDs: checkvcov!, checkfes!, makefesolver,
-    _feresiduals!, makeyxcols, maketreatcols, solveleastsquares!, estvcov
+using InteractionWeightedDIDs: parse_fixedeffect!, checkvcov!, checkfes!, makefesolver,
+    _feresiduals!, makeyxcols, maketreatcols, _getname, solveleastsquares!, estvcov
 using LinearAlgebra
 using StatsBase: Weights, uweights
 using StatsModels: ConstantTerm, ContinuousTerm, schema, apply_schema
@@ -23,6 +23,7 @@ import Base: ==
 @fieldequal RegressionBasedDIDResult
 
 const tests = [
+    "utils",
     "procedures",
     "did"
 ]

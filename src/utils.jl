@@ -1,3 +1,30 @@
+function parse_fixedeffect!(data, ts::TermSet)
+    fes = FixedEffect[]
+    ids = Symbol[]
+    has_fe_intercept = false
+    for term in keys(ts)
+        result = _parse_fixedeffect(data, term)
+        if result !== nothing
+            push!(fes, result[1])
+            push!(ids, result[2])
+            delete!(ts, term)
+        end
+    end
+    order = sortperm(ids)
+    fes .= fes[order]
+    ids .= ids[order]
+    if !isempty(fes)
+        if any(fe->fe.interaction isa UnitWeights, fes)
+            has_fe_intercept = true
+            for t in keys(ts)
+                t isa Union{ConstantTerm,InterceptTerm} && delete!(ts, t)
+            end
+            ts[InterceptTerm{false}()] = nothing
+        end
+    end
+    return fes, ids, has_fe_intercept
+end
+
 # Count the number of singletons dropped
 function drop_singletons!(esample, fe::FixedEffect)
     cache = zeros(Int, fe.n)

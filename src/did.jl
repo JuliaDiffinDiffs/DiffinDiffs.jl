@@ -4,7 +4,7 @@
 Estimation procedure for regression-based difference-in-differences.
 """
 const RegressionBasedDID = DiffinDiffsEstimator{:RegressionBasedDID,
-    Tuple{CheckData, CheckVcov, CheckVars, CheckFEs, MakeWeights, MakeFESolver,
+    Tuple{CheckData, GroupTerms, CheckVcov, CheckVars, CheckFEs, MakeWeights, MakeFESolver,
     MakeYXCols, MakeTreatCols, SolveLeastSquares, EstVcov}}
 
 const Reg = RegressionBasedDID
@@ -12,15 +12,16 @@ const Reg = RegressionBasedDID
 function valid_didargs(d::Type{Reg}, ::DynamicTreatment{SharpDesign},
         ::TrendParallel{Unconditional, Exact}, args::Dict{Symbol,Any})
     name = get(args, :name, "")::String
-    ntargs = (data=args[:data], tr=args[:tr]::DynamicTreatment{SharpDesign},
+    ntargs = (data=args[:data],
+        tr=args[:tr]::DynamicTreatment{SharpDesign},
         pr=args[:pr]::TrendParallel{Unconditional, Exact},
-        yterm=args[:yterm]::Union{Term,FunctionTerm},
+        yterm=args[:yterm]::AbstractTerm,
         treatname=args[:treatname]::Symbol,
         subset=get(args, :subset, nothing)::Union{BitVector,Nothing},
         weightname=get(args, :weightname, nothing)::Union{Symbol,Nothing},
         vce=get(args, :vce, Vcov.RobustCovariance())::Vcov.CovarianceEstimator,
-        treatintterms=get(args, :treatintterms, ())::Terms,
-        xterms=get(args, :xterms, ())::Terms,
+        treatintterms=get(args, :treatintterms, TermSet())::TermSet,
+        xterms=get(args, :xterms, TermSet())::TermSet,
         drop_singletons=get(args, :drop_singletons, true)::Bool,
         nfethreads=get(args, :nfethreads, Threads.nthreads())::Int,
         contrasts=get(args, :contrasts, nothing)::Union{Dict{Symbol,Any},Nothing},

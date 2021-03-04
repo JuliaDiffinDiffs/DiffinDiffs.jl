@@ -18,7 +18,7 @@ end
 Call [`InteractionWeightedDIDs.checkvcov!`](@ref) to
 exclude rows that are invalid for variance-covariance estimator.
 """
-const CheckVcov = StatsStep{:CheckVcov, typeof(checkvcov!)}
+const CheckVcov = StatsStep{:CheckVcov, typeof(checkvcov!), true}
 
 required(::CheckVcov) = (:data, :esample)
 default(::CheckVcov) = (vce=Vcov.robust(),)
@@ -32,12 +32,10 @@ drop singleton observations for any fixed effect
 and determine whether intercept term should be omitted.
 See also [`CheckFEs`](@ref).
 """
-function checkfes!(data, esample::BitVector, xterms::Terms, drop_singletons::Bool)
-    fes, fenames, xterms = parse_fixedeffect(data, xterms)
-    has_fe_intercept = false
+function checkfes!(data, esample::BitVector, xterms::TermSet, drop_singletons::Bool)
+    fes, fenames, has_fe_intercept = parse_fixedeffect!(data, xterms)
     nsingle = 0
     if !isempty(fes)
-        has_fe_intercept = any(fe.interaction isa UnitWeights for fe in fes)
         if drop_singletons
             for fe in fes
                 nsingle += drop_singletons!(esample, fe)
@@ -56,11 +54,11 @@ Call [`InteractionWeightedDIDs.checkfes!`](@ref)
 to extract any `FixedEffectTerm` from `xterms`
 and drop singleton observations for any fixed effect.
 """
-const CheckFEs = StatsStep{:CheckFixedEffects, typeof(checkfes!)}
+const CheckFEs = StatsStep{:CheckFixedEffects, typeof(checkfes!), true}
 
-required(::CheckFEs) = (:data, :esample)
-default(::CheckFEs) = (xterms=(), drop_singletons=true)
-copyargs(::CheckFEs) = (2,)
+required(::CheckFEs) = (:data, :esample, :xterms)
+default(::CheckFEs) = (drop_singletons=true,)
+copyargs(::CheckFEs) = (2,3)
 
 """
     makefesolver(args...)
@@ -84,7 +82,7 @@ end
 
 Call [`InteractionWeightedDIDs.makefesolver`](@ref) to construct the fixed effect solver.
 """
-const MakeFESolver = StatsStep{:MakeFESolver, typeof(makefesolver)}
+const MakeFESolver = StatsStep{:MakeFESolver, typeof(makefesolver), true}
 
 required(::MakeFESolver) = (:fes, :weights, :esample)
 default(::MakeFESolver) = (nfethreads=Threads.nthreads(),)
@@ -108,11 +106,11 @@ See also [`MakeYXCols`](@ref).
 function makeyxcols(data, weights::AbstractWeights, esample::BitVector,
         feM::Union{AbstractFixedEffectSolver, Nothing}, has_fe_intercept::Bool,
         contrasts::Union{Dict, Nothing}, fetol::Real, femaxiter::Int,
-        allyterm::Set{AbstractTerm}, allxterms::Set{AbstractTerm})
+        allyterm::TermSet, allxterms::TermSet)
     
     yxcols = Dict{AbstractTerm, VecOrMat{Float64}}()
-    allyterm = (allyterm...,)
-    allxterms = (allxterms...,)
+    # Need to fix the order for pairing with concrete_yterms
+    allyterm = (keys(allyterm)...,)
     yxnames = union(termvars(allyterm), termvars(allxterms))
     yxdata = _getsubcolumns(data, yxnames, esample)
     concrete_yterms = apply_schema(allyterm, schema(allyterm, yxdata), StatisticalModel)
@@ -125,12 +123,13 @@ function makeyxcols(data, weights::AbstractWeights, esample::BitVector,
     end
 
     # Standardize how an intercept or omitsintercept is represented
-    allxterms = parse_intercept(allxterms)
+    has_intercept, _ = parse_intercept!(allxterms)
 
     # Add an intercept if not already having one
-    has_fe_intercept || hasintercept(allxterms) ||
-        (allxterms = (allxterms..., InterceptTerm{true}()))
+    has_fe_intercept || has_intercept || (allxterms[InterceptTerm{true}()] = nothing)
 
+    # Need to fix the order for pairing with concrete_xterms
+    allxterms = (keys(allxterms)...,)
     # Any term other than InterceptTerm{true}() that represents the intercept
     # will be replaced by InterceptTerm{true}()
     # Need to take such changes into account when creating X matrix
@@ -167,16 +166,16 @@ end
 Call [`InteractionWeightedDIDs.makeyxcols`](@ref) to obtain
 residualized outcome variables and covariates.
 """
-const MakeYXCols = StatsStep{:MakeYXCols, typeof(makeyxcols)}
+const MakeYXCols = StatsStep{:MakeYXCols, typeof(makeyxcols), true}
 
 required(::MakeYXCols) = (:data, :weights, :esample, :feM, :has_fe_intercept)
 default(::MakeYXCols) = (contrasts=nothing, fetol=1e-8, femaxiter=10000)
 
 function combinedargs(::MakeYXCols, allntargs)
-    ys, xs = Set{AbstractTerm}(), Set{AbstractTerm}()
+    ys, xs = TermSet(), TermSet()
     @inbounds for nt in allntargs
-        push!(ys, nt.yterm)
-        foreach(x->push!(xs, x), nt.xterms)
+        ys[nt.yterm] = nothing
+        foreach(t->setindex!(xs, nothing, t), keys(nt.xterms))
     end
     return ys, xs
 end
@@ -209,7 +208,7 @@ Construct residualized binary columns that capture treatment effects
 and obtain cell-level weight sums and observation counts.
 See also [`MakeTreatCols`](@ref).
 """
-function maketreatcols(data, treatname::Symbol, treatintterms::Terms,
+function maketreatcols(data, treatname::Symbol, treatintterms::TermSet,
         feM::Union{AbstractFixedEffectSolver, Nothing},
         weightname::Union{Symbol, Nothing}, weights::AbstractWeights,
         esample::BitVector, tr_rows::BitVector,
@@ -243,7 +242,7 @@ function maketreatcols(data, treatname::Symbol, treatintterms::Terms,
     cellcounts = map(length, itreats)
     cellweights = weights isa UnitWeights ? cellcounts :
         map(x->_gencellweight(x, data, weightname), itreats)
-    
+
     if feM !== nothing
         M = Combination(values(treatcols)...)
         _feresiduals!(M, feM, fetol, femaxiter)
@@ -266,7 +265,7 @@ Call [`InteractionWeightedDIDs.maketreatcols`](@ref) to obtain
 residualized binary columns that capture treatment effects
 and obtain cell-level weight sums and observation counts.
 """
-const MakeTreatCols = StatsStep{:MakeTreatCols, typeof(maketreatcols)}
+const MakeTreatCols = StatsStep{:MakeTreatCols, typeof(maketreatcols), true}
 
 required(::MakeTreatCols) = (:data, :treatname, :treatintterms, :feM,
     :weightname, :weights, :esample, :tr_rows)
@@ -290,6 +289,8 @@ function combinedargs(::MakeTreatCols, allntargs, ::Type{DynamicTreatment{SharpD
     return (count,)
 end
 
+_getname(x, terms::AbstractDict{AbstractTerm}) = coefnames(terms[x])
+
 """
     solveleastsquares!(args...)
 
@@ -297,15 +298,18 @@ Solve the least squares problem for regression coefficients and residuals.
 See also [`SolveLeastSquares`](@ref).
 """
 function solveleastsquares!(tr::DynamicTreatment{SharpDesign}, yterm::AbstractTerm,
-        xterms::Terms, yxterms::Dict, yxcols::Dict, treatcols::Dictionary,
+        xterms::TermSet, yxterms::Dict, yxcols::Dict, treatcols::Dictionary,
         has_fe_intercept::Bool)
     y = yxcols[yterm]
     ts = sort!([k for k in keys(treatcols) if !(k.rel in tr.exc)])
     # Be consistent with allxterms in makeyxcols
-    xterms = parse_intercept(xterms)
-    # Add an intercept if needed
-    has_fe_intercept || hasintercept(xterms) ||
-        omitsintercept(xterms) || (xterms = (xterms..., InterceptTerm{true}()))
+    has_intercept, has_omitsintercept = parse_intercept!(xterms)
+    has_intercept && delete!(xterms, InterceptTerm{true}())
+    has_omitsintercept && delete!(xterms, InterceptTerm{false}())
+    xterms = AbstractTerm[keys(xterms)...]
+    sort!(xterms, by=x->_getname(x, yxterms))
+    # Add back an intercept to the last position if needed
+    has_fe_intercept || has_omitsintercept || push!(xterms, InterceptTerm{true}())
     
     X = hcat((treatcols[k] for k in ts)...,
         (yxcols[k] for k in xterms if width(yxterms[k])>0)...)
@@ -327,8 +331,9 @@ function solveleastsquares!(tr::DynamicTreatment{SharpDesign}, yterm::AbstractTe
 
     treatinds = Table(ts)
 
-    return (coef=coef, X=X, crossx=crossx, residuals=residuals, treatinds=treatinds,
-        xterms=xterms, basecols=basecols)
+    return (coef=coef, X=X, crossx=crossx::Cholesky{Float64,Matrix{Float64}},
+        residuals=residuals, treatinds=treatinds::Table,
+        xterms=xterms::Vector{AbstractTerm}, basecols=basecols::BitVector)
 end
 
 """
@@ -337,10 +342,11 @@ end
 Call [`InteractionWeightedDIDs.solveleastsquares!`](@ref) to
 solve the least squares problem for regression coefficients and residuals.
 """
-const SolveLeastSquares = StatsStep{:SolveLeastSquares, typeof(solveleastsquares!)}
+const SolveLeastSquares = StatsStep{:SolveLeastSquares, typeof(solveleastsquares!), true}
 
 required(::SolveLeastSquares) = (:tr, :yterm, :xterms, :yxterms, :yxcols, :treatcols,
     :has_fe_intercept)
+copyargs(::SolveLeastSquares) = (3,)
 
 function _vce(data, esample::BitVector,
         vce::Union{Vcov.SimpleCovariance,Vcov.RobustCovariance}, fes::Vector{FixedEffect})
@@ -371,7 +377,7 @@ See also [`EstVcov`](@ref).
 """
 function estvcov(data, esample::BitVector, vce::CovarianceEstimator, coef::Vector,
         X::Matrix, crossx::Factorization, residuals::Vector,
-        xterms::Terms, fes::Vector{FixedEffect}, has_fe_intercept::Bool)
+        xterms::Vector{AbstractTerm}, fes::Vector{FixedEffect}, has_fe_intercept::Bool)
     concrete_vce, dof_absorb = _vce(data, esample, vce, fes)
     dof_resid = max(1, sum(esample) - size(X,2) - dof_absorb)
     vce_data = Vcov.VcovData(X, crossx, residuals, dof_resid)
@@ -393,7 +399,7 @@ end
 Call [`InteractionWeightedDIDs.estvcov`](@ref) to
 estimate variance-covariance matrix and F-statistic.
 """
-const EstVcov = StatsStep{:EstVcov, typeof(estvcov)}
+const EstVcov = StatsStep{:EstVcov, typeof(estvcov), true}
 
 required(::EstVcov) = (:data, :esample, :vce, :coef, :X, :crossx, :residuals, :xterms,
     :fes, :has_fe_intercept)
