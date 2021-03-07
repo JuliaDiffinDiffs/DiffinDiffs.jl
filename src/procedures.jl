@@ -160,9 +160,3 @@ const MakeWeights = StatsStep{:MakeWeights, typeof(makeweights), true}
 
 required(::MakeWeights) = (:data, :esample)
 default(::MakeWeights) = (weightname=nothing,)
-
-_getsubcolumns(data, name::Symbol, idx=Colon()) =
-    columntable(NamedTuple{(name,)}((disallowmissing(view(getcolumn(data, name), idx)),)))
-
-_getsubcolumns(data, names, idx=Colon()) = columntable(NamedTuple{(names...,)}(
-    map(n->disallowmissing(view(getcolumn(data, n), idx)), names)))

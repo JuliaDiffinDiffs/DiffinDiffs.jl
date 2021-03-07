@@ -7,7 +7,8 @@ using Missings: disallowmissing
 using Reexport
 using StatsBase: Weights, uweights
 @reexport using StatsModels
-using Tables: istable, getcolumn, columntable, columnnames
+using Tables
+using Tables: istable, columnnames, getcolumn
 
 import Base: ==, show, union
 import Base: eltype, firstindex, lastindex, getindex, iterate, length, sym_in
@@ -51,6 +52,8 @@ export cb,
        TreatmentTerm,
        treat,
 
+       SubColumns,
+
        StatsStep,
        AbstractStatsProcedure,
        SharedStatsStep,
@@ -77,6 +80,7 @@ include("utils.jl")
 include("treatments.jl")
 include("parallels.jl")
 include("terms.jl")
+include("SubColumns.jl")
 include("StatsProcedures.jl")
 include("procedures.jl")
 include("did.jl")

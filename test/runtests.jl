@@ -5,7 +5,7 @@ using DataFrames
 using DiffinDiffsBase: @fieldequal, unpack, @unpack, hastreat, parse_treat,
     isintercept, isomitsintercept, parse_intercept!,
     _f, _byid, groupargs, copyargs, pool, checkdata, groupterms, checkvars!, makeweights,
-    _getsubcolumns, _totermset!, parse_didargs!, _treatnames
+    _totermset!, parse_didargs!, _treatnames
 using StatsBase: Weights, UnitWeights
 using StatsModels: termvars
 using TypedTables: Table
@@ -20,6 +20,7 @@ const tests = [
     "terms",
     "treatments",
     "parallels",
+    "SubColumns",
     "StatsProcedures",
     "procedures",
     "did"

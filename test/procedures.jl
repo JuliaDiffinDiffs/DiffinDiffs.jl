@@ -136,29 +136,3 @@ end
         @test r.weights isa UnitWeights && sum(r.weights) == size(hrs,1)
     end
 end
-
-@testset "_getsubcolumns" begin
-    hrs = exampledata("hrs")
-    df = DataFrame(hrs)
-    allowmissing!(df)
-    @test _getsubcolumns(df, :wave, falses(size(df,1))).wave == Int[]
-    cols = _getsubcolumns(df, :wave)
-    @test cols.wave == hrs.wave
-    @test eltype(cols.wave) == Int
-    @test _getsubcolumns(df, :wave, df.wave.==10).wave == hrs.wave[hrs.wave.==10]
-
-    df.male .= ifelse.(df.wave.==11, missing, df.male)
-    @test_throws MethodError _getsubcolumns(df, :male)
-    cols = _getsubcolumns(df, :male, df.wave.!=11)
-    @test cols.male == hrs.male[hrs.wave.!=11]
-    @test eltype(cols.male) == Int
-
-    cols = _getsubcolumns(df, (:wave, :oop_spend))
-    @test cols.oop_spend == hrs.oop_spend
-    @test eltype(cols.oop_spend) == Float64
-    @test_throws MethodError _getsubcolumns(df, (:wave, :male))
-    cols = _getsubcolumns(df, (:wave, :male), df.wave.!=11)
-    @test cols.wave == hrs.wave[hrs.wave.!=11]
-    @test eltype(cols.wave) == Int
-    @test _getsubcolumns(df, [:wave, :male], df.wave.!=11) == cols
-end
