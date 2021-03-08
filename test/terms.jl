@@ -111,12 +111,11 @@ end
     @test parse_intercept!(TermSet(term(:x)=>nothing)) == (false, false)
     ts = TermSet(term(1)=>nothing)
     @test parse_intercept!(ts) == (true, false)
-    @test collect(keys(ts))[1] == InterceptTerm{true}()
+    @test isempty(ts)
     ts = TermSet((term(0), term(-1)).=>nothing)
     @test parse_intercept!(ts) == (false, true)
-    @test collect(keys(ts))[1] == InterceptTerm{false}()
+    @test isempty(ts)
     ts = TermSet((term(1), term(0), term(:x)).=>nothing)
     @test parse_intercept!(ts) == (true, true)
-    @test haskey(ts, term(:x)) && haskey(ts, InterceptTerm{false}()) &&
-        haskey(ts, InterceptTerm{true}())
+    @test collect(keys(ts)) == [term(:x)]
 end

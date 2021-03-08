@@ -2,8 +2,10 @@ module DiffinDiffsBase
 
 using CSV: File
 using Combinatorics: combinations
+using DataAPI: refarray, refpool
 using MacroTools: @capture, isexpr, postwalk
 using Missings: disallowmissing
+using PooledArrays: _label
 using Reexport
 using StatsBase: Weights, uweights
 @reexport using StatsModels
@@ -54,6 +56,8 @@ export cb,
 
        SubColumns,
 
+       findcell,
+
        StatsStep,
        AbstractStatsProcedure,
        SharedStatsStep,
@@ -81,6 +85,7 @@ include("treatments.jl")
 include("parallels.jl")
 include("terms.jl")
 include("SubColumns.jl")
+include("operations.jl")
 include("StatsProcedures.jl")
 include("procedures.jl")
 include("did.jl")
