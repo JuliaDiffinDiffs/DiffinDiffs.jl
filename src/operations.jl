@@ -13,51 +13,45 @@ function _groupfind(container)
     return inds
 end
 
-# Convert the keys from refs to cells
-function _cellrows(cols::SubColumns, refrows::IdDict)
-    ncol = size(cols, 2)
-    cellrows = IdDict{Tuple, Vector{Int}}()
-    for rows in values(refrows)
-        cell = ntuple(n->cols[n][rows[1]], ncol)
-        cellrows[cell] = rows
-    end
-    return cellrows
-end
-
 """
-    findcell(cellnames, data, esample=Colon())
+    findcell(cols::VecColumnTable)
+    findcell(names, data, esample=Colon())
 
-Group the row indices of a subsample of `data` over `esample`
-so that the row-wise combinations of values from columns indexed by `cellnames`
+Group the row indices of a collection of data columns
+so that the combination of row values from these columns
 are the same within each group.
 
+Instead of directly providing the relevant portions of columns as
+[`VecColumnTable`](@ref)``,
+one may specify the `names` of columns from
+`data` of any Tables.jl-compatible table type
+over selected rows indicated by `esample`.
 Note that unless `esample` covers all rows of `data`,
 the row indices are those for the subsample selected based on `esample`
 rather than those for the full `data`.
 
 # Returns
-- `IdDict{Tuple, Vector{Int}}`: a map from row-wise combinations of values to row indices of these combinations.
+- `IdDict{Tuple, Vector{Int}}`: a map from unique row values to row indices.
 """
-function findcell(cellnames, data, esample=Colon())
-    cols = SubColumns(data, cellnames, esample)
+function findcell(cols::VecColumnTable)
     ncol = size(cols, 2)
-    ncol == 0 && throw(ArgumentError("no data column is found"))
+    isempty(cols) && throw(ArgumentError("no data column is found"))
     col = cols[1]
     refs = refarray(col)
     pool = refpool(col)
-    pooled = pool !== nothing
-    if !pooled
+    labeled = pool !== nothing && eltype(refs) <: Unsigned
+    if !labeled
         refs, invpool, pool = _label(col)
     end
     mult = length(pool)
     if ncol > 1
         # Make a copy to be used as cache
-        pooled && (refs = collect(refs))
+        labeled && (refs = collect(refs))
         @inbounds for n in 2:ncol
             col = cols[n]
             refsn = refarray(col)
             pool = refpool(col)
-            if pool === nothing
+            if pool === nothing || !(eltype(refsn) <: Unsigned)
                 refsn, invpool, pool = _label(col)
             end
             multn = length(pool)
@@ -65,6 +59,47 @@ function findcell(cellnames, data, esample=Colon())
             mult = mult * multn
         end
     end
-    cellrows = _cellrows(cols, _groupfind(refs))
-    return cellrows
+    return _groupfind(refs)
+end
+
+findcell(names, data, esample=Colon()) =
+    findcell(subcolumns(data, names, esample))
+
+"""
+    cellrows(cols::VecColumnTable, refrows::IdDict)
+
+A utility function for processing the object `refrows` returned by [`findcell`](@ref).
+Unique row values from `cols` corresponding to
+the keys in `refrows` are sorted lexicographically
+and stored as rows in a `Tables.MatrixTable`.
+Groups of row indices from the values of `refrows` are permuted to
+match the order of row values and collected in a `Vector`.
+
+# Returns
+- `cells::MatrixTable`: unique row values from columns in `cols`.
+- `rows::Vector{Vector{Int}}`: row indices for each combination.
+"""
+function cellrows(cols::VecColumnTable, refrows::IdDict)
+    isempty(refrows) && throw(ArgumentError("refrows is empty"))
+    isempty(cols) && throw(ArgumentError("no data column is found"))
+    ncol = length(cols)
+    ncell = length(refrows)
+    rows = Vector{Vector{Int}}(undef, ncell)
+    cache = Matrix{Any}(undef, ncell, ncol+1)
+    r = 0
+    @inbounds for (k, v) in refrows
+        r += 1
+        cache[r, end] = k
+        row1 = v[1]
+        for c in 1:ncol
+            cache[r, c] = cols[c][row1]
+        end
+    end
+    sorted = sortslices(cache, dims=1)
+    cells = table(sorted[:,1:ncol], header=columnnames(cols))
+    # Collect rows in the same order as cells
+    @inbounds for i in 1:ncell
+        rows[i] = refrows[sorted[i,end]]
+    end
+    return cells, rows
 end

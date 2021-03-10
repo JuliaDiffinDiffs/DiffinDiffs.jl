@@ -4,15 +4,19 @@ using DiffinDiffsBase
 using DataFrames
 using DiffinDiffsBase: @fieldequal, unpack, @unpack, hastreat, parse_treat,
     isintercept, isomitsintercept, parse_intercept!,
+    ncol, nrow,
     _f, _byid, groupargs, copyargs, pool, checkdata, groupterms, checkvars!, makeweights,
     _totermset!, parse_didargs!, _treatnames
 using PooledArrays: PooledArray
 using StatsBase: Weights, UnitWeights
 using StatsModels: termvars
+using Tables: table
 using TypedTables: Table
 
 import Base: ==, show
 import DiffinDiffsBase: required, valid_didargs, result
+
+@fieldequal Tables.MatrixTable
 
 include("testutils.jl")
 
@@ -21,7 +25,7 @@ const tests = [
     "terms",
     "treatments",
     "parallels",
-    "SubColumns",
+    "tables",
     "operations",
     "StatsProcedures",
     "procedures",
