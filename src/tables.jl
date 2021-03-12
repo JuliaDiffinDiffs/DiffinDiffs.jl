@@ -29,6 +29,18 @@ function VecColumnTable(columns::Vector{AbstractVector}, names::Vector{Symbol})
     return VecColumnTable(columns, names, lookup)
 end
 
+function VecColumnTable(data)
+    Tables.istable(data) || throw(ArgumentError("input data is not Tables.jl-compatible"))
+    names = collect(Tables.columnnames(data))
+    ncol = length(names)
+    columns = Vector{AbstractVector}(undef, ncol)
+    cols = Tables.columns(data)
+    @inbounds for i in keys(names)
+        columns[i] = Tables.getcolumn(cols, i)
+    end
+    return VecColumnTable(columns, names)
+end
+
 _columns(cols::VecColumnTable) = getfield(cols, :columns)
 _names(cols::VecColumnTable) = getfield(cols, :names)
 _lookup(cols::VecColumnTable) = getfield(cols, :lookup)
@@ -106,6 +118,7 @@ Tables.columnnames(cols::VecColumnTable) = _names(cols)
 
 Tables.schema(cols::VecColumnTable) =
     Tables.Schema{(_names(cols)...,), Tuple{(eltype(col) for col in _columns(cols))...}}()
+Tables.materializer(::VecColumnTable) = VecColumnTable
 
 Tables.columnindex(cols::VecColumnTable, n::Symbol) = _lookup(cols)[n]
 Tables.columntype(cols::VecColumnTable, n::Symbol) = eltype(cols[n])
@@ -121,13 +134,13 @@ By default, columns are converted to drop support for missing values.
 When possible, resulting columns share memory with original columns.
 """
 function subcolumns(data, names, rows=Colon(); nomissing=true)
-    Tables.istable(data) || throw(ArgumentError("data must support Tables.jl interface"))
+    Tables.istable(data) || throw(ArgumentError("input data is not Tables.jl-compatible"))
     names = names isa Vector{Symbol} ? names : Symbol[names...]
     ncol = length(names)
     columns = Vector{AbstractVector}(undef, ncol)
     lookup = Dict{Symbol,Int}()
     @inbounds for i in keys(names)
-        col = view(getcolumn(data, names[i]), rows)
+        col = view(Tables.getcolumn(data, names[i]), rows)
         nomissing && (col = disallowmissing(col))
         columns[i] = col
         lookup[names[i]] = i

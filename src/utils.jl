@@ -133,17 +133,16 @@ See https://discourse.julialang.org/t/check-equality-of-two-namedtuples-with-ord
 
 Return the names of available example datasets.
 """
-exampledata() =
-    [name[1:end-4] for name in readdir((@__DIR__)*"/../data")
-        if length(name)>4 && name[end-3:end]==".csv"]
+exampledata() = (:hrs, :nsw, :mpdta)
 
 """
     exampledata(name::Union{Symbol,String})
 
-Return a `CSV.File` by loading the example dataset with the specified name.
+Return a `CSV.File` containing the example dataset with the specified `name`.
 """
 function exampledata(name::Union{Symbol,String})
-    "$(name)" in exampledata() ||
-        throw(ArgumentError("example dataset $(name) is not found"))
-    return File((@__DIR__)*"/../data/$(name).csv")
+    Symbol(name) in exampledata() ||
+        throw(ArgumentError("example dataset $(name) does not exist"))
+    path = (@__DIR__)*"/../data/$(name).csv.gz"
+    return open(path) |> GzipDecompressorStream |> read |> CSV.File
 end

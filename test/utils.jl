@@ -22,6 +22,8 @@ end
 end
 
 @testset "exampledata" begin
-    @test exampledata() == ["hrs"]
-    @test size(exampledata(:hrs),1) == 3280
+    @test exampledata() == (:hrs, :nsw, :mpdta)
+    @test size(exampledata(:hrs)) == (3280,)
+    @test size(exampledata(:nsw)) == (32834,)
+    @test size(exampledata(:mpdta)) == (2500,)
 end

@@ -25,6 +25,9 @@
     @test length(cols) == 2
     @test isempty(cols) === false
 
+    cols2 = VecColumnTable(hrs)
+    @test size(cols2) == (3280, 11)
+
     @test cols[1] === hrs.wave
     @test cols[:] == cols[1:2] == cols[[1,2]] == cols[trues(2)] == [hrs.wave, hrs.oop_spend]
     @test cols[:wave] === cols[1]
@@ -69,6 +72,7 @@
     @test Tables.columnnames(cols) == [:wave, :oop_spend]
 
     @test Tables.schema(cols) == Tables.Schema{(:wave, :oop_spend), Tuple{Int, Float64}}()
+    @test Tables.materializer(cols) == VecColumnTable
 
     @test Tables.columnindex(cols, :wave) == 1
     @test Tables.columntype(cols, :wave) == Int

@@ -1,6 +1,7 @@
 module DiffinDiffsBase
 
-using CSV: File
+using CSV
+using CodecZlib: GzipDecompressorStream
 using Combinatorics: combinations
 using DataAPI: refarray, refpool
 using MacroTools: @capture, isexpr, postwalk
