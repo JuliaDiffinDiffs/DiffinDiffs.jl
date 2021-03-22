@@ -11,21 +11,18 @@ using PooledArrays: PooledArray
 using StatsBase: Weights, UnitWeights
 using StatsModels: termvars
 using Tables: table
-using TypedTables: Table
 
 import Base: ==, show
 import DiffinDiffsBase: required, valid_didargs, result
-
-@fieldequal Tables.MatrixTable
 
 include("testutils.jl")
 
 const tests = [
     "utils",
+    "tables",
     "terms",
     "treatments",
     "parallels",
-    "tables",
     "operations",
     "StatsProcedures",
     "procedures",

@@ -3,6 +3,10 @@
     cols = VecColumnTable(AbstractVector[], Symbol[], Dict{Symbol,Int}())
     cols1 = VecColumnTable(AbstractVector[], Symbol[])
     @test cols1 == cols
+    cols2 = VecColumnTable(cols1)
+    @test cols2 === cols1
+    cols3 = VecColumnTable(DataFrame())
+    @test cols3 == cols
     @test size(cols) == (0, 0)
     @test length(cols) == 0
     @test isempty(cols)
@@ -14,6 +18,15 @@
     @test size(cols) == (0, 1)
     @test length(cols) == 1
     @test isempty(cols)
+
+    cols = VecColumnTable((wave=hrs.wave,))
+    @test size(cols) == (3280, 1)
+    rows = collect(Tables.rows(cols))
+    @test hash(rows[2]) == hash(rows[6])
+    @test isequal(rows[2], rows[6])
+    @test !isequal(rows[1], rows[2])
+    @test isless(rows[1], rows[3])
+    @test !isless(rows[1], rows[2])
 
     cols = VecColumnTable(AbstractVector[hrs.wave, hrs.oop_spend], [:wave, :oop_spend],
         Dict(:wave=>1, :oop_spend=>2))
@@ -27,6 +40,13 @@
 
     cols2 = VecColumnTable(hrs)
     @test size(cols2) == (3280, 11)
+    cols3 = VecColumnTable(cols2)
+    @test cols3 === cols2
+    esample = hrs.wave.==7
+    cols3 = VecColumnTable(hrs, esample)
+    @test size(cols3) == (sum(esample), 11)
+    cols4 = VecColumnTable(cols2, esample)
+    @test cols4 == cols3
 
     @test cols[1] === hrs.wave
     @test cols[:] == cols[1:2] == cols[[1,2]] == cols[trues(2)] == [hrs.wave, hrs.oop_spend]
@@ -77,8 +97,46 @@
     @test Tables.columnindex(cols, :wave) == 1
     @test Tables.columntype(cols, :wave) == Int
     @test Tables.rowcount(cols) == 3280
-end
 
+    @test eltype(Tables.rows(cols)) == VecColsRow
+    rows0 = collect(Tables.rows(cols))
+    @test ncol(rows0[1]) == 2
+    @test hash(rows0[2]) != hash(rows0[6])
+    @test isequal(rows0[1], rows0[1])
+    @test isequal(rows0[1], rows0[2]) == false
+    @test isless(rows0[2], rows0[1])
+
+    # Same data but different parent tables
+    rows1 = collect(Tables.rows(cols1))
+    @test hash(rows0[1]) == hash(rows1[1])
+    @test isequal(rows0[1], rows1[1])
+    @test isless(rows0[2], rows1[1])
+
+    # Rows do not have the same length
+    @test !isequal(rows[1], rows0[1])
+    @test_throws ArgumentError isless(rows[1], rows0[1])
+
+    cols2 = VecColumnTable((wave=hrs.wave, male=hrs.male))
+    rows2 = collect(Tables.rows(cols2))
+    @test hash(rows2[2]) == hash(rows2[6])
+    @test isequal(rows2[2], rows2[6])
+
+    # Different column names but otherwise the same table
+    cols3 = VecColumnTable((wave1=hrs.wave, oop_spend1=hrs.oop_spend))
+    rows3 = collect(Tables.rows(cols3))
+    @test hash(rows0[2]) == hash(rows3[2])
+    @test isequal(rows0[2], rows3[2])
+    @test isless(rows0[2], rows3[1])
+
+    df = DataFrame(hrs)
+    @test sortperm(cols) == sortperm(rows0) == sortperm(df, [:wave, :oop_spend])
+    cols_sorted = sort(cols)
+    df_sorted = sort(df, [:wave, :oop_spend])
+    @test cols_sorted.oop_spend == df_sorted.oop_spend
+    sort!(cols)
+    @test cols.oop_spend == df_sorted.oop_spend
+end
+    
 @testset "subcolumns" begin
     hrs = exampledata("hrs")
     df = DataFrame(hrs)

@@ -1,5 +1,61 @@
+"""
+    TermSet <: AbstractSet{AbstractTerm}
+
+Wrapped `Set{AbstractTerm}` that specifies a collection of terms.
+Commonly used methods for `Set` work in the same way for `TermSet`.
+
+Compared with `StatsModels.TermOrTerms`,
+it does not maintain order of terms
+but is more suitable for dynamically constructed terms.
+"""
+struct TermSet <: AbstractSet{AbstractTerm}
+    terms::Set{AbstractTerm}
+    TermSet(set::Set{AbstractTerm}) = new(set)
+end
+
+"""
+    TermSet([itr])
+    TermSet(ts::Union{Int, Symbol, AbstractTerm}...)
+
+Construct a [`TermSet`](@ref) from a collection of terms.
+Instead of passing an iterable collection,
+one may pass the terms as arguments directly.
+In the latter case, any `Int` or `Symbol` will be converted to a `Term`.
+See also [`termset`](@ref), which is an alias for the constructor.
+"""
+TermSet() = TermSet(Set{AbstractTerm}())
+TermSet(ts) = TermSet(Set{AbstractTerm}(ts))
+TermSet(ts::Union{Int, Symbol, AbstractTerm}...) =
+    TermSet(Set{AbstractTerm}(t isa AbstractTerm ? t : term(t) for t in ts))
+
+"""
+    termset([itr])
+    termset(ts::Union{Int, Symbol, AbstractTerm}...)
+
+Construct a [`TermSet`](@ref) from a collection of terms.
+Instead of passing an iterable collection,
+one may pass the terms as arguments directly.
+In the latter case, any `Int` or `Symbol` will be converted to a `Term`.
+"""
+termset() = TermSet(Set{AbstractTerm}())
+termset(ts) = TermSet(Set{AbstractTerm}(ts))
+termset(ts::Union{Int, Symbol, AbstractTerm}...) =
+    TermSet(Set{AbstractTerm}(t isa AbstractTerm ? t : term(t) for t in ts))
+
+Base.isempty(ts::TermSet) = isempty(ts.terms)
+Base.length(ts::TermSet)  = length(ts.terms)
+Base.in(x, ts::TermSet) = in(x, ts.terms)
+Base.push!(ts::TermSet, x) = push!(ts.terms, x)
+Base.pop!(ts::TermSet, x) = pop!(ts.terms, x)
+Base.pop!(ts::TermSet, x, default) = pop!(ts.terms, x, default)
+Base.delete!(ts::TermSet, x) = delete!(ts.terms, x)
+Base.empty!(ts::TermSet) = empty!(ts.terms)
+
+Base.eltype(::Type{TermSet}) = AbstractTerm
+Base.iterate(ts::TermSet, i...) = iterate(ts.terms, i...)
+Base.emptymutable(::TermSet, ::Type{<:AbstractTerm}) = termset()
+
 const Terms{N} = NTuple{N, AbstractTerm} where N
-const TermSet = IdDict{AbstractTerm, Nothing}
 
 """
     eachterm(t)
@@ -114,14 +170,14 @@ function parse_treat(@nospecialize(formula::FormulaTerm))
                             throw(ArgumentError("cannot accept more than one TreatmentTerm"))
                         end
                     else
-                        ints[t] = nothing
+                        push!(ints, t)
                     end
                 end
             else
-                xterms[term] = nothing
+                push!(xterms, term)
             end
         else
-            xterms[term] = nothing
+            push!(xterms, term)
         end
     end
     mettreat || throw(ArgumentError("no TreatmentTerm is found"))
@@ -145,7 +201,7 @@ before going through the `schema`--`apply_schema` pipeline defined in `StatsMode
 function parse_intercept!(ts::TermSet)
     hasintercept = false
     hasomitsintercept = false
-    for t in keys(ts)
+    for t in ts
         if isintercept(t)
             delete!(ts, t)
             hasintercept = true
@@ -158,4 +214,13 @@ function parse_intercept!(ts::TermSet)
     return hasintercept, hasomitsintercept
 end
 
-termvars(ts::TermSet) = mapreduce(termvars, union, keys(ts), init=Symbol[])
+schema(ts::TermSet, data, hints=nothing) =
+    Schema(t=>concrete_term(t, VecColumnTable(data), hints) for t in ts)
+
+concrete_term(t::Term, dt::VecColumnTable, hint) =
+    concrete_term(t, getproperty(dt, t.sym), hint)
+concrete_term(t::Term, dt::VecColumnTable, hints::Dict{Symbol}) =
+    concrete_term(t, getproperty(dt, t.sym), get(hints, t.sym, nothing))
+concrete_term(::Term, ::VecColumnTable, hint::AbstractTerm) = hint
+
+termvars(ts::TermSet) = mapreduce(termvars, union, ts, init=Symbol[])

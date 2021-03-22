@@ -30,8 +30,8 @@ end
     @test_throws ArgumentError cellrows(cols0, rows_dict)
 
     cells, rows = cellrows(cols, rows_dict)
-    @test length(cells) == length(rows) == 20
-    @test getfield(cells, :matrix) ==
+    @test length(cells[1]) == length(rows) == 20
+    @test Tables.matrix(cells) ==
         sortslices(unique(hcat(hrs.wave, hrs.wave_hosp), dims=1), dims=1)
     @test propertynames(cells) == [:wave, :wave_hosp]
     @test rows[1] == intersect(findall(x->x==7, hrs.wave), findall(x->x==8, hrs.wave_hosp))

@@ -71,12 +71,12 @@ findcell(names, data, esample=Colon()) =
 A utility function for processing the object `refrows` returned by [`findcell`](@ref).
 Unique row values from `cols` corresponding to
 the keys in `refrows` are sorted lexicographically
-and stored as rows in a `Tables.MatrixTable`.
+and stored as rows in a new `VecColumnTable`.
 Groups of row indices from the values of `refrows` are permuted to
 match the order of row values and collected in a `Vector`.
 
 # Returns
-- `cells::MatrixTable`: unique row values from columns in `cols`.
+- `cells::VecColumnTable`: unique row values from columns in `cols`.
 - `rows::Vector{Vector{Int}}`: row indices for each combination.
 """
 function cellrows(cols::VecColumnTable, refrows::IdDict)
@@ -85,21 +85,26 @@ function cellrows(cols::VecColumnTable, refrows::IdDict)
     ncol = length(cols)
     ncell = length(refrows)
     rows = Vector{Vector{Int}}(undef, ncell)
-    cache = Matrix{Any}(undef, ncell, ncol+1)
+    columns = AbstractVector[Vector{eltype(c)}(undef, ncell) for c in cols]
+    refs = Vector{keytype(refrows)}(undef, ncell)
     r = 0
     @inbounds for (k, v) in refrows
         r += 1
-        cache[r, end] = k
         row1 = v[1]
+        refs[r] = k
         for c in 1:ncol
-            cache[r, c] = cols[c][row1]
+            columns[c][r] = cols[c][row1]
         end
     end
-    sorted = sortslices(cache, dims=1)
-    cells = table(sorted[:,1:ncol], header=columnnames(cols))
+    cells = VecColumnTable(columns, _names(cols), _lookup(cols))
+    p = sortperm(cells)
+    # Replace each column of cells with a new one in the sorted order
+    @inbounds for i in 1:ncol
+        columns[i] = cells[i][p]
+    end
     # Collect rows in the same order as cells
     @inbounds for i in 1:ncell
-        rows[i] = refrows[sorted[i,end]]
+        rows[i] = refrows[refs[p[i]]]
     end
     return cells, rows
 end

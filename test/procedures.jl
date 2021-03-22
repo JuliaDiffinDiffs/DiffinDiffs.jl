@@ -34,7 +34,7 @@ end
 
 @testset "GroupTerms" begin
     @testset "groupterms" begin
-        nt = (treatintterms=TermSet(), xterms=TermSet(term(:x)=>nothing))
+        nt = (treatintterms=TermSet(), xterms=TermSet(term(:x)))
         @test groupterms(nt...) == nt
     end
 
@@ -43,7 +43,7 @@ end
         @test sprint(show, MIME("text/plain"), GroupTerms()) ==
             "GroupTerms (StatsStep that calls DiffinDiffsBase.groupterms)"
         @test _byid(GroupTerms()) == false
-        nt = (treatintterms=TermSet(), xterms=TermSet(term(:x)=>nothing))
+        nt = (treatintterms=TermSet(), xterms=TermSet(term(:x)))
         @test GroupTerms()(nt) == nt 
     end
 end
@@ -65,8 +65,8 @@ end
             (esample=.!(hrs.wave_hosp.∈(10,)).& .!(hrs.wave.∈((10,11),)),
             tr_rows=(.!(hrs.wave_hosp.∈((10,11),)).& .!(hrs.wave.∈((10,11),))))
         
-        nt = merge(nt, (pr=nevertreated(11), treatintterms=TermSet(term(:male)=>nothing),
-            xterms=TermSet(term(:white)=>nothing), esample=trues(size(hrs,1))))
+        nt = merge(nt, (pr=nevertreated(11), treatintterms=TermSet(term(:male)),
+            xterms=TermSet(term(:white)), esample=trues(size(hrs,1))))
         @test checkvars!(nt...) == (esample=trues(size(hrs,1)),
             tr_rows=hrs.wave_hosp.!=11)
         

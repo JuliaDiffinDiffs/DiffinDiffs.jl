@@ -43,7 +43,7 @@ struct TestResult <: DIDResult
     yname::String
     coefnames::Vector{String}
     coefinds::Dict{String, Int}
-    treatinds::Table
+    treatcells::VecColumnTable
     weightname::Symbol
 end
 
@@ -55,8 +55,8 @@ function TestResult(n1::Int, n2::Int)
     tnames = ["rel: $a & c: $b" for a in 1:n1 for b in 1:n2]
     cnames = vcat(tnames, ["c"*string(i) for i in n1*n2+1:N])
     cinds = Dict(cnames .=> 1:N)
-    tinds = Table((rel=repeat(1:n1, inner=n2), c=repeat(1:n2, outer=n1)))
-    return TestResult(coef, coef.*coef', N, N-1, "y", cnames, cinds, tinds, :w)
+    tcells = VecColumnTable((rel=repeat(1:n1, inner=n2), c=repeat(1:n2, outer=n1)))
+    return TestResult(coef, coef.*coef', N, N-1, "y", cnames, cinds, tcells, :w)
 end
 
 function result(::Type{TestDID}, nt::NamedTuple)

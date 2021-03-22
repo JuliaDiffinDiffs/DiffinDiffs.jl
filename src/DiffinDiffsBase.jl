@@ -10,13 +10,14 @@ using PooledArrays: _label
 using Reexport
 using StatsBase: Weights, uweights
 @reexport using StatsModels
+using StatsModels: Schema
 using Tables
 using Tables: AbstractColumns, table, istable, columnnames, getcolumn
 
 import Base: ==, show, union
 import Base: eltype, firstindex, lastindex, getindex, iterate, length, sym_in
 import StatsBase: coef, vcov, responsename, coefnames, weights, nobs, dof_residual
-import StatsModels: termvars
+import StatsModels: concrete_term, schema, termvars
 
 const TimeType = Int
 
@@ -26,6 +27,10 @@ export coef, vcov, responsename, coefnames, weights, nobs, dof_residual
 export cb,
        ≊,
        exampledata,
+
+       VecColumnTable,
+       VecColsRow,
+       subcolumns,
 
        TreatmentSharpness,
        SharpDesign,
@@ -51,12 +56,10 @@ export cb,
        istreated,
 
        TermSet,
+       termset,
        eachterm,
        TreatmentTerm,
        treat,
-
-       VecColumnTable,
-       subcolumns,
 
        findcell,
        cellrows,
@@ -84,10 +87,10 @@ export cb,
        treatnames
 
 include("utils.jl")
+include("tables.jl")
 include("treatments.jl")
 include("parallels.jl")
 include("terms.jl")
-include("tables.jl")
 include("operations.jl")
 include("StatsProcedures.jl")
 include("procedures.jl")

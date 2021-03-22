@@ -29,16 +29,31 @@ function VecColumnTable(columns::Vector{AbstractVector}, names::Vector{Symbol})
     return VecColumnTable(columns, names, lookup)
 end
 
-function VecColumnTable(data)
+function VecColumnTable(data, esample::Union{BitVector, Nothing}=nothing)
     Tables.istable(data) || throw(ArgumentError("input data is not Tables.jl-compatible"))
     names = collect(Tables.columnnames(data))
     ncol = length(names)
     columns = Vector{AbstractVector}(undef, ncol)
     cols = Tables.columns(data)
-    @inbounds for i in keys(names)
-        columns[i] = Tables.getcolumn(cols, i)
+    if esample === nothing
+        @inbounds for i in keys(names)
+            columns[i] = Tables.getcolumn(cols, i)
+        end
+    else
+        @inbounds for i in keys(names)
+            columns[i] = view(Tables.getcolumn(cols, i), esample)
+        end
     end
     return VecColumnTable(columns, names)
+end
+
+function VecColumnTable(cols::VecColumnTable, esample::Union{BitVector, Nothing}=nothing)
+    esample === nothing && return cols
+    columns = similar(_columns(cols))
+    @inbounds for i in keys(columns)
+        columns[i] = view(cols[i], esample)
+    end
+    return VecColumnTable(columns, _names(cols), _lookup(cols))
 end
 
 _columns(cols::VecColumnTable) = getfield(cols, :columns)
@@ -150,3 +165,58 @@ end
 
 subcolumns(data, names::Symbol, rows=Colon(); nomissing=true) =
     subcolumns(data, [names], rows, nomissing=nomissing)
+
+const VecColsRow = Tables.ColumnsRow{VecColumnTable}
+
+ncol(r::VecColsRow) = length(r)
+
+_rowhash(cols::Tuple{AbstractVector}, r::Int, h::UInt=zero(UInt))::UInt =
+    hash(cols[1][r], h)
+
+function _rowhash(cols::Tuple{Vararg{AbstractVector}}, r::Int, h::UInt=zero(UInt))::UInt
+    h = hash(cols[1][r], h)
+    _rowhash(Base.tail(cols), r, h)
+end
+
+# hash is implemented following DataFrames.DataFrameRow for getting unique row values
+# Column names are not taken into account
+Base.hash(r::VecColsRow, h::UInt=zero(UInt)) =
+    _rowhash(ntuple(c->Tables.getcolumns(r)[c], ncol(r)), Tables.getrow(r), h)
+
+# Column names are not taken into account
+function Base.isequal(r1::VecColsRow, r2::VecColsRow)
+    length(r1) == length(r2) || return false
+    return all(((a, b),) -> isequal(a, b), zip(r1, r2))
+end
+
+# Column names are not taken into account
+function Base.isless(r1::VecColsRow, r2::VecColsRow)
+    length(r1) == length(r2) ||
+        throw(ArgumentError("compared VecColsRow do not have the same length"))
+    for (a, b) in zip(r1, r2)
+        isequal(a, b) || return isless(a, b)
+    end
+    return false
+end
+
+Base.sortperm(cols::VecColumnTable; @nospecialize(kwargs...)) =
+    sortperm(collect(Tables.rows(cols)); kwargs...)
+
+# names and lookup are not copied
+function Base.sort(cols::VecColumnTable; @nospecialize(kwargs...))
+    p = sortperm(cols; kwargs...)
+    columns = similar(_columns(cols))
+    i = 0
+    @inbounds for col in cols
+        i += 1
+        columns[i] = col[p]
+    end
+    return VecColumnTable(columns, _names(cols), _lookup(cols))
+end
+
+function Base.sort!(cols::VecColumnTable; @nospecialize(kwargs...))
+    p = sortperm(cols; kwargs...)
+    @inbounds for col in cols
+        col .= col[p]
+    end
+end

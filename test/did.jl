@@ -31,9 +31,11 @@ end
 end
 
 @testset "parse_didargs!" begin
-    args = Dict{Symbol,Any}(:xterms=>(term(:x),))
+    args = Dict{Symbol,Any}(:xterms=>(term(:x),), :treatintterms=>:z)
     _totermset!(args, :xterms)
-    @test args[:xterms] == TermSet(term(:x)=>nothing)
+    @test args[:xterms] == TermSet(term(:x))
+    _totermset!(args, :treatintterms)
+    @test args[:treatintterms] == TermSet(term(:z))
 
     @test parse_didargs!(Any["test"], Dict{Symbol,Any}()) == Dict{Symbol,Any}(:name=>"test")
 
@@ -53,8 +55,7 @@ end
     args0 = parse_didargs!([TestDID, term(:y) ~ testterm & term(:z) + term(:x)],
         Dict{Symbol,Any}())
     @test args0 == Dict{Symbol,Any}(pairs((d=TestDID, tr=TR, pr=PR, yterm=term(:y),
-        treatname=:g, treatintterms=TermSet(term(:z)=>nothing),
-        xterms=TermSet(term(:x)=>nothing))))
+        treatname=:g, treatintterms=TermSet(term(:z)), xterms=TermSet(term(:x)))))
     
     args1 = parse_didargs!([TestDID,
         @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) & z + x)], Dict{Symbol,Any}())
@@ -151,7 +152,7 @@ end
     @test sp4 ≊ @did [noproceed] TestDID testterm "name"
 
     sp6 = StatsSpec("", TestDID, (tr=TR, pr=PR, yterm=term(:y), treatname=:g,
-        treatintterms=TermSet(term(:z)=>nothing), xterms=TermSet(term(:x)=>nothing)))
+        treatintterms=TermSet(term(:z)), xterms=TermSet(term(:x))))
     sp7 = didspec(TestDID, term(:y) ~ testterm & term(:z) + term(:x))
     sp8 = didspec(TestDID, @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) & z + x))
     @test sp7 ≊ sp6
@@ -161,10 +162,10 @@ end
 end
 
 @testset "_treatnames" begin
-    t = Table((rel=[1, 2],))
+    t = VecColumnTable((rel=[1, 2],))
     @test _treatnames(t) == ["rel: 1", "rel: 2"]
     r = TestResult(2, 2)
-    @test _treatnames(r.treatinds) == ["rel: $a & c: $b" for a in 1:2 for b in 1:2]
+    @test _treatnames(r.treatcells) == ["rel: $a & c: $b" for a in 1:2 for b in 1:2]
 end
 
 @testset "DIDResult" begin
@@ -178,6 +179,8 @@ end
     @test coef(r, 5:-1:3) == [5.0, 4.0, 3.0]
     @test coef(r, (1, :c5, "rel: 1 & c: 1")) == [1.0, 5.0, 1.0]
     @test coef(r, [1 "rel: 1 & c: 1" :c5]) == [1.0 1.0 5.0]
+    @test coef(r, :rel=>x->x==1) == [1.0, 2.0]
+    @test coef(r, :rel=>x->x==1, :c=>x->x==1) == [1.0]
     @test coef(x->true, r) == collect(Float64, 1:4)
     @test coef(x->x.rel==1, r) == [1.0, 2.0]
 
@@ -191,6 +194,8 @@ end
     @test vcov(r, 5:-1:3) == r.vcov[5:-1:3, 5:-1:3]
     @test vcov(r, (1, :c5, "rel: 1 & c: 1")) == r.vcov[[1,5,1], [1,5,1]]
     @test vcov(r, [1 :c5 "rel: 1 & c: 1"]) == r.vcov[[1,5,1], [1,5,1]]
+    @test vcov(r, :rel=>x->x==1) == r.vcov[[1,2], [1,2]]
+    @test vcov(r, :rel=>x->x==1, :c=>x->x==1) == reshape([1.0], 1, 1)
     @test vcov(x->true, r) == r.vcov[1:4, 1:4]
     @test vcov(x->x.rel==1, r) == r.vcov[1:2, 1:2]
 
@@ -225,8 +230,8 @@ end
     @test did(TestDID, @formula(y ~ treat(g, ttreat(t, 0), tpara(0))); keepall=true) == d1
 
     d0 = @did [keepall] TestDID term(:y) ~ testterm & term(:z) + term(:x)
-    @test d0 ≊ merge(d, (yterm=term(:y), treatintterms=TermSet(term(:z)=>nothing),
-        xterms=TermSet(term(:x)=>nothing)))
+    @test d0 ≊ merge(d, (yterm=term(:y), treatintterms=TermSet(term(:z)),
+        xterms=TermSet(term(:x))))
     @test did(TestDID, term(:y) ~ testterm & term(:z) + term(:x); keepall=true) == d0
     d1 = @did [keepall] "test" TestDID @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) & z + x)
     @test d1 ≊ d0
