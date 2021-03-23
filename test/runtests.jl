@@ -2,15 +2,14 @@ using Test
 using InteractionWeightedDIDs
 
 using DataFrames
-using Dictionaries
-using DiffinDiffsBase: required, default, transformed, combinedargs, valid_didargs, @fieldequal
+using DiffinDiffsBase: TimeType, @fieldequal,
+    required, default, transformed, combinedargs, valid_didargs
 using FixedEffectModels: Combination, nunique
 using FixedEffects
 using InteractionWeightedDIDs: parse_fixedeffect!, checkvcov!, checkfes!, makefesolver,
-    _feresiduals!, makeyxcols, maketreatcols, _getname, solveleastsquares!, estvcov
+    _feresiduals!, makeyxcols, maketreatcols, solveleastsquares!, estvcov
 using LinearAlgebra
 using StatsBase: Weights, uweights
-using StatsModels: ConstantTerm, ContinuousTerm, schema, apply_schema
 
 import Base: ==
 

@@ -1,18 +1,19 @@
 @testset "RegressionBasedDID" begin
     hrs = exampledata("hrs")
 
-    r = @did(Reg, data=hrs, dynamic(:wave, -1), notyettreated([11]),
+    r = @did(Reg, data=hrs, dynamic(:wave, -1), notyettreated(11),
         vce=Vcov.cluster(:hhidpn), yterm=term(:oop_spend), treatname=:wave_hosp,
         treatintterms=(), xterms=(fe(:wave)+fe(:hhidpn)))
-    @test coef(r, "rel: -3 & wave_hosp: 10") ≈ 591.04639 atol=1e-5
-    @test coef(r, "rel: -2 & wave_hosp: 9") ≈ 298.97735 atol=1e-5
-    @test coef(r, "rel: -2 & wave_hosp: 10") ≈ 410.58102 atol=1e-5
-    @test coef(r, "rel: 0 & wave_hosp: 8") ≈ 2825.5659 atol=1e-4
-    @test coef(r, "rel: 0 & wave_hosp: 9") ≈ 3030.8408 atol=1e-4
-    @test coef(r, "rel: 0 & wave_hosp: 10") ≈ 3091.5084 atol=1e-4
-    @test coef(r, "rel: 1 & wave_hosp: 8") ≈ 825.14585 atol=1e-5
-    @test coef(r, "rel: 1 & wave_hosp: 9") ≈ 106.83785 atol=1e-5
-    @test coef(r, "rel: 2 & wave_hosp: 8") ≈ 800.10647 atol=1e-5
+    @test coef(r, "wave_hosp: 8 & rel: 0") ≈ 2825.5659 atol=1e-4
+    @test coef(r, "wave_hosp: 8 & rel: 1") ≈ 825.14585 atol=1e-5
+    @test coef(r, "wave_hosp: 8 & rel: 2") ≈ 800.10647 atol=1e-5
+    @test coef(r, "wave_hosp: 9 & rel: -2") ≈ 298.97735 atol=1e-5
+    @test coef(r, "wave_hosp: 9 & rel: 0") ≈ 3030.8408 atol=1e-4
+    @test coef(r, "wave_hosp: 9 & rel: 1") ≈ 106.83785 atol=1e-5
+    @test coef(r, "wave_hosp: 10 & rel: -3") ≈ 591.04639 atol=1e-5
+    @test coef(r, "wave_hosp: 10 & rel: -2") ≈ 410.58102 atol=1e-5
+    @test coef(r, "wave_hosp: 10 & rel: 0") ≈ 3091.5084 atol=1e-4
+
     @test nobs(r) == 2624
     
     @test sprint(show, r) == "Regression-based DID result"
@@ -57,17 +58,17 @@ end
     # The first two specs are identical hence no repetition of steps should occur
     # The third spec should only share the first three steps with the others
     r = @specset [verbose] begin
-        @did(Reg, dynamic(:wave, -1), notyettreated([11]), data=hrs,
+        @did(Reg, dynamic(:wave, -1), notyettreated(11), data=hrs,
             yterm=term(:oop_spend), treatname=:wave_hosp, treatintterms=(),
             xterms=(fe(:wave)+fe(:hhidpn)))
-        @did(Reg, dynamic(:wave, -1), notyettreated([11]), data=hrs,
+        @did(Reg, dynamic(:wave, -1), notyettreated(11), data=hrs,
             yterm=term(:oop_spend), treatname=:wave_hosp, treatintterms=[],
             xterms=[fe(:hhidpn), fe(:wave)])
-        @did(Reg, dynamic(:wave, -1), nevertreated([11]), data=hrs,
+        @did(Reg, dynamic(:wave, -1), nevertreated(11), data=hrs,
             yterm=term(:oop_spend), treatname=:wave_hosp, treatintterms=(),
             xterms=(fe(:wave)+fe(:hhidpn)))
     end
-    @test r[1] == didspec(Reg, dynamic(:wave, -1), notyettreated([11]), data=hrs,
+    @test r[1] == didspec(Reg, dynamic(:wave, -1), notyettreated(11), data=hrs,
         yterm=term(:oop_spend), treatname=:wave_hosp, treatintterms=(),
-        xterms=TermSet(fe(:wave)=>nothing, fe(:hhidpn)=>nothing))()
+        xterms=TermSet(fe(:wave), fe(:hhidpn)))()
 end

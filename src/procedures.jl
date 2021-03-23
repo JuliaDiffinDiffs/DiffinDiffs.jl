@@ -87,6 +87,16 @@ const MakeFESolver = StatsStep{:MakeFESolver, typeof(makefesolver), true}
 required(::MakeFESolver) = (:fes, :weights, :esample)
 default(::MakeFESolver) = (nfethreads=Threads.nthreads(),)
 
+function _makeyxcols!(yxterms::Dict, yxcols::Dict, yxschema, data, t::AbstractTerm)
+    ct = apply_schema(t, yxschema, StatisticalModel)
+    yxterms[t] = ct
+    if width(ct) > 0
+        tcol = convert(Array{Float64}, modelcols(ct, data))
+        all(isfinite, tcol) || error("data for term $ct contain NaN or Inf")
+        yxcols[ct] = tcol
+    end
+end
+
 function _feresiduals!(M::AbstractArray, feM::AbstractFixedEffectSolver,
         tol::Real, maxiter::Integer)
     _, iters, convs = solve_residuals!(M, feM; tol=tol, maxiter=maxiter, progress_bar=false)
@@ -105,44 +115,23 @@ See also [`MakeYXCols`](@ref).
 """
 function makeyxcols(data, weights::AbstractWeights, esample::BitVector,
         feM::Union{AbstractFixedEffectSolver, Nothing}, has_fe_intercept::Bool,
-        contrasts::Union{Dict, Nothing}, fetol::Real, femaxiter::Int,
-        allyterm::TermSet, allxterms::TermSet)
+        contrasts::Union{Dict, Nothing}, fetol::Real, femaxiter::Int, allyxterms::TermSet)
     
-    yxcols = Dict{AbstractTerm, VecOrMat{Float64}}()
-    # Need to fix the order for pairing with concrete_yterms
-    allyterm = (keys(allyterm)...,)
-    yxnames = union(termvars(allyterm), termvars(allxterms))
-    yxdata = _getsubcolumns(data, yxnames, esample)
-    concrete_yterms = apply_schema(allyterm, schema(allyterm, yxdata), StatisticalModel)
+    # Standardize how an intercept or omitsintercept is represented
+    parse_intercept!(allyxterms)
+
+    yxdata = subcolumns(data, termvars(allyxterms), esample)
+    yxschema = StatsModels.FullRank(schema(allyxterms, yxdata, contrasts))
+    has_fe_intercept && push!(yxschema.already, InterceptTerm{true}())
+
     yxterms = Dict{AbstractTerm, AbstractTerm}()
-    for (t, ct) in zip(eachterm(allyterm), eachterm(concrete_yterms))
-        ycol = convert(Vector{Float64}, modelcols(ct, yxdata))
-        all(isfinite, ycol) || error("data for term $ct contain NaN or Inf")
-        yxcols[t] = ycol
-        yxterms[t] = ct
+    yxcols = Dict{AbstractTerm, VecOrMat{Float64}}()
+    for t in allyxterms
+        _makeyxcols!(yxterms, yxcols, yxschema, yxdata, t)
     end
 
-    # Standardize how an intercept or omitsintercept is represented
-    has_intercept, _ = parse_intercept!(allxterms)
-
-    # Add an intercept if not already having one
-    has_fe_intercept || has_intercept || (allxterms[InterceptTerm{true}()] = nothing)
-
-    # Need to fix the order for pairing with concrete_xterms
-    allxterms = (keys(allxterms)...,)
-    # Any term other than InterceptTerm{true}() that represents the intercept
-    # will be replaced by InterceptTerm{true}()
-    # Need to take such changes into account when creating X matrix
-    xschema = contrasts === nothing ? schema(allxterms, yxdata) :
-        schema(allxterms, yxdata, contrasts)
-    concrete_xterms = apply_schema(allxterms, xschema, StatisticalModel)
-    for (t, ct) in zip(eachterm(allxterms), eachterm(concrete_xterms))
-        if width(ct) > 0
-            xcols = convert(Matrix{Float64}, modelmatrix(ct, yxdata))
-            all(isfinite, xcols) || error("data for term $ct contain NaN or Inf")
-            yxcols[t] = xcols
-        end
-        yxterms[t] = ct
+    if !has_fe_intercept
+        yxcols[InterceptTerm{true}()] = ones(sum(esample))
     end
 
     iter, conv = nothing, nothing
@@ -157,7 +146,7 @@ function makeyxcols(data, weights::AbstractWeights, esample::BitVector,
         end
     end
 
-    return (yxcols=yxcols, yxterms=yxterms, nfeiterations=iter, feconverged=conv)
+    return (yxterms=yxterms, yxcols=yxcols, nfeiterations=iter, feconverged=conv)
 end
 
 """
@@ -172,34 +161,13 @@ required(::MakeYXCols) = (:data, :weights, :esample, :feM, :has_fe_intercept)
 default(::MakeYXCols) = (contrasts=nothing, fetol=1e-8, femaxiter=10000)
 
 function combinedargs(::MakeYXCols, allntargs)
-    ys, xs = TermSet(), TermSet()
+    yx = TermSet()
     @inbounds for nt in allntargs
-        ys[nt.yterm] = nothing
-        foreach(t->setindex!(xs, nothing, t), keys(nt.xterms))
+        push!(yx, nt.yterm)
+        foreach(x->push!(yx, x), nt.xterms)
     end
-    return ys, xs
+    return (yx,)
 end
-
-# Assume idx is sorted
-function _genindicator(idx::Vector{Int}, esample::BitVector, n::Int)
-    v = zeros(n)
-    iv, r = 1, 1
-    nr = length(idx)
-    @inbounds for i in eachindex(esample)
-        if esample[i]
-            if idx[r] == i
-                v[iv] = 1.0
-                r += 1
-            end
-            iv += 1
-        end
-        r > nr && break
-    end
-    return v
-end
-
-_gencellweight(idx::Vector{Int}, data, weightname::Symbol) =
-    sum(view(getcolumn(data, weightname), idx))
 
 """
     maketreatcols(args...)
@@ -210,38 +178,92 @@ See also [`MakeTreatCols`](@ref).
 """
 function maketreatcols(data, treatname::Symbol, treatintterms::TermSet,
         feM::Union{AbstractFixedEffectSolver, Nothing},
-        weightname::Union{Symbol, Nothing}, weights::AbstractWeights,
-        esample::BitVector, tr_rows::BitVector,
+        weights::AbstractWeights, esample::BitVector,
         cohortinteracted::Bool, fetol::Real, femaxiter::Int,
-        ::Type{DynamicTreatment{SharpDesign}}, time::Symbol, exc::IdDict{Int,Int})
+        ::Type{DynamicTreatment{SharpDesign}}, time::Symbol,
+        exc::IdDict{Int,Int}, notreat::IdDict{TimeType,Int})
 
     nobs = sum(esample)
-    tnames = (time, treatname, termvars(treatintterms)...)
-    kept = tr_rows .& .!(haskey.(Ref(exc), getcolumn(data, time).-getcolumn(data, treatname)))
-    ikept = findall(kept)
-    # Obtain a fast row iterator without copying (after _getsubcolumns)
-    trows = Table(_getsubcolumns(data, tnames, kept))
-    # Obtain row indices that take value one for each treatment indicator
-    itreats = group(trows, ikept)
+    # Putting treatname before time avoids sorting twice if cohortinteracted
+    cellnames = Symbol[treatname, time, sort!(termvars(treatintterms))...]
+    cols = subcolumns(data, cellnames, esample)
+    cells, rows = cellrows(cols, findcell(cols))
 
-    # Calculate relative time
+    rel = cells[2] .- cells[1]
+    kept = .!haskey.(Ref(exc), rel) .& .!haskey.(Ref(notreat), cells[1])
+    treatrows = rows[kept]
+    # Construct cells needed for treatment indicators
     if cohortinteracted
-        tnames = (:rel, treatname, termvars(treatintterms)...)
-        f = k -> NamedTuple{tnames}((getfield(k, time) - getfield(k, treatname),
-            getfield(k, treatname), (getfield(k, n) for n in termvars(treatintterms))...))
-        itreats = Dictionary(map(f, keys(itreats)), itreats)
+        ntcellcol = length(cellnames)
+        tcellcols = Vector{AbstractVector}(undef, ntcellcol)
+        tcellnames = Vector{Symbol}(undef, ntcellcol)
+        tcellcols[1] = view(cells[1], kept)
+        tcellnames[1] = cellnames[1]
+        tcellcols[2] = view(rel, kept)
+        tcellnames[2] = :rel
+        if ntcellcol > 2
+            @inbounds for i in 3:ntcellcol
+                tcellcols[i] = view(cells[i], kept)
+                tcellnames[i] = cellnames[i]
+            end
+        end
+        treatcells = VecColumnTable(tcellcols, tcellnames)
     else
-        tnames = (:rel, termvars(treatintterms)...)
-        byf = p -> NamedTuple{tnames}((getfield(p, time) - getfield(p, treatname),
-            (getfield(p, n) for n in termvars(treatintterms))...))
-        itreats = group(mapview(byf, keys(itreats)), itreats)
-        itreats = map(x->sort!(vcat(x...)), itreats)
+        ntcellcol = length(cellnames) - 1
+        tcellcols = Vector{AbstractVector}(undef, ntcellcol)
+        tcellnames = Vector{Symbol}(undef, ntcellcol)
+        tcellcols[1] = view(rel, kept)
+        tcellnames[1] = :rel
+        if ntcellcol > 1
+            @inbounds for i in 2:ntcellcol
+                tcellcols[i] = view(cells[i+1], kept)
+                tcellnames[i] = cellnames[i+1]
+            end
+        end
+        treatcells = VecColumnTable(tcellcols, tcellnames)
+        rowinds = Dict{VecColsRow, Int}()
+        cellinds = Vector{Int}()
+        trows = Vector{Vector{Int}}()
+        i = 0
+        @inbounds for row in Tables.rows(treatcells)
+            i += 1
+            r = get(rowinds, row, 0)
+            if r === 0
+                push!(cellinds, i)
+                rowinds[row] = length(cellinds)
+                push!(trows, copy(treatrows[i]))
+            else
+                append!(trows[r], treatrows[i])
+            end
+        end
+        for i in 1:ntcellcol
+            tcellcols[i] = view(tcellcols[i], cellinds)
+        end
+        # Need to sort the combined cells and rows
+        p = sortperm(treatcells)
+        @inbounds for i in 1:ntcellcol
+            tcellcols[i] = tcellcols[i][p]
+        end
+        treatrows = trows[p]
     end
 
-    treatcols = map(x->_genindicator(x, esample, nobs), itreats)
-    cellcounts = map(length, itreats)
-    cellweights = weights isa UnitWeights ? cellcounts :
-        map(x->_gencellweight(x, data, weightname), itreats)
+    # Generate treatment indicators
+    ntcells = length(treatrows)
+    treatcols = Vector{Vector{Float64}}(undef, ntcells)
+    cellweights = Vector{Float64}(undef, ntcells)
+    cellcounts = Vector{Int}(undef, ntcells)
+    @inbounds for i in 1:ntcells
+        rs = treatrows[i]
+        tcol = zeros(nobs)
+        tcol[rs] .= 1.0
+        treatcols[i] = tcol
+        cellcounts[i] = length(rs)
+        if weights isa UnitWeights
+            cellweights[i] = cellcounts[i]
+        else
+            cellweights[i] = sum(view(weights, rs))
+        end
+    end
 
     if feM !== nothing
         M = Combination(values(treatcols)...)
@@ -254,7 +276,9 @@ function maketreatcols(data, treatname::Symbol, treatintterms::TermSet,
         end
     end
 
-    return (itreats=itreats, treatcols=treatcols, cellweights=cellweights,
+    return (cells=cells::VecColumnTable, rows=rows::Vector{Vector{Int}},
+        treatcells=treatcells::VecColumnTable, treatrows=treatrows::Vector{Vector{Int}},
+        treatcols=treatcols::Vector{Vector{Float64}}, cellweights=cellweights,
         cellcounts=cellcounts)
 end
 
@@ -267,29 +291,30 @@ and obtain cell-level weight sums and observation counts.
 """
 const MakeTreatCols = StatsStep{:MakeTreatCols, typeof(maketreatcols), true}
 
-required(::MakeTreatCols) = (:data, :treatname, :treatintterms, :feM,
-    :weightname, :weights, :esample, :tr_rows)
+required(::MakeTreatCols) = (:data, :treatname, :treatintterms, :feM, :weights, :esample)
 default(::MakeTreatCols) = (cohortinteracted=true, fetol=1e-8, femaxiter=10000)
-transformed(::MakeTreatCols, @nospecialize(nt::NamedTuple)) =
-    (typeof(nt.tr), nt.tr.time)
+transformed(::MakeTreatCols, @nospecialize(nt::NamedTuple)) = (typeof(nt.tr), nt.tr.time)
 
 combinedargs(step::MakeTreatCols, allntargs) =
     combinedargs(step, allntargs, typeof(allntargs[1].tr))
 
 # Obtain the relative time periods excluded by all tr in allntargs
 function combinedargs(::MakeTreatCols, allntargs, ::Type{DynamicTreatment{SharpDesign}})
-    count = IdDict{Int,Int}()
+    exc = IdDict{Int,Int}()
+    notreat = IdDict{TimeType,Int}()
     @inbounds for nt in allntargs
-        foreach(x->_count!(count, x), nt.tr.exc)
+        foreach(x->_count!(exc, x), nt.tr.exc)
+        foreach(x->_count!(notreat, x), nt.pr.e)
     end
     nnt = length(allntargs)
-    @inbounds for (k, v) in count
-        v == nnt || delete!(count, k)
+    @inbounds for (k, v) in exc
+        v == nnt || delete!(exc, k)
     end
-    return (count,)
+    @inbounds for (k, v) in notreat
+        v == nnt || delete!(notreat, k)
+    end
+    return (exc, notreat)
 end
-
-_getname(x, terms::AbstractDict{AbstractTerm}) = coefnames(terms[x])
 
 """
     solveleastsquares!(args...)
@@ -297,43 +322,57 @@ _getname(x, terms::AbstractDict{AbstractTerm}) = coefnames(terms[x])
 Solve the least squares problem for regression coefficients and residuals.
 See also [`SolveLeastSquares`](@ref).
 """
-function solveleastsquares!(tr::DynamicTreatment{SharpDesign}, yterm::AbstractTerm,
-        xterms::TermSet, yxterms::Dict, yxcols::Dict, treatcols::Dictionary,
-        has_fe_intercept::Bool)
-    y = yxcols[yterm]
-    ts = sort!([k for k in keys(treatcols) if !(k.rel in tr.exc)])
-    # Be consistent with allxterms in makeyxcols
+function solveleastsquares!(tr::DynamicTreatment{SharpDesign}, pr::TrendParallel,
+        yterm::AbstractTerm, xterms::TermSet, yxterms::Dict, yxcols::Dict,
+        treatcells::VecColumnTable, treatcols::Vector,
+        cohortinteracted::Bool, has_fe_intercept::Bool)
+
+    y = yxcols[yxterms[yterm]]
+    if cohortinteracted
+        tinds = .!((treatcells[2] .∈ (tr.exc,)).| (treatcells[1] .∈ (pr.e,)))
+    else
+        tinds = .!(treatcells[1] .∈ (tr.exc,))
+    end
+    treatcells = VecColumnTable(treatcells, tinds)
+    tcols = view(treatcols, tinds)
+
     has_intercept, has_omitsintercept = parse_intercept!(xterms)
-    has_intercept && delete!(xterms, InterceptTerm{true}())
-    has_omitsintercept && delete!(xterms, InterceptTerm{false}())
-    xterms = AbstractTerm[keys(xterms)...]
-    sort!(xterms, by=x->_getname(x, yxterms))
+    xwidth = 0
+    xs = Vector{AbstractTerm}()
+    for x in xterms
+        cx = yxterms[x]
+        w = width(cx)
+        xwidth += w
+        w > 0 && push!(xs, cx)
+    end
+    sort!(xs, by=coefnames)
     # Add back an intercept to the last position if needed
-    has_fe_intercept || has_omitsintercept || push!(xterms, InterceptTerm{true}())
+    if !has_fe_intercept && !has_omitsintercept
+        push!(xs, InterceptTerm{true}())
+        xwidth += 1
+    end
+
+    X = hcat(tcols..., (yxcols[x] for x in xs)...)
     
-    X = hcat((treatcols[k] for k in ts)...,
-        (yxcols[k] for k in xterms if width(yxterms[k])>0)...)
-    
-    nts = length(ts)
+    ntcols = length(tcols)
     basecols = trues(size(X,2))
-    if size(X, 2) > nts
+    if size(X, 2) > ntcols
         basecols = basecol(X)
         # Do not drop any treatment indicator
-        sum(basecols[1:nts]) == nts ||
-            error("Covariates are collinear with treatment indicators")
+        sum(basecols[1:ntcols]) == ntcols ||
+            error("covariates are collinear with treatment indicators")
         sum(basecols) < size(X, 2) &&
             (X = X[:, basecols])
     end
-    
+
     crossx = cholesky!(Symmetric(X'X))
     coef = crossx \ (X'y)
     residuals = y - X * coef
 
-    treatinds = Table(ts)
-
-    return (coef=coef, X=X, crossx=crossx::Cholesky{Float64,Matrix{Float64}},
-        residuals=residuals, treatinds=treatinds::Table,
-        xterms=xterms::Vector{AbstractTerm}, basecols=basecols::BitVector)
+    return (coef=coef::Vector{Float64}, X=X::Matrix{Float64},
+        crossx=crossx::Cholesky{Float64,Matrix{Float64}},
+        residuals=residuals::Vector{Float64}, treatcells=treatcells::VecColumnTable,
+        xterms=xs::Vector{AbstractTerm}, basecols=basecols::BitVector)
 end
 
 """
@@ -344,9 +383,9 @@ solve the least squares problem for regression coefficients and residuals.
 """
 const SolveLeastSquares = StatsStep{:SolveLeastSquares, typeof(solveleastsquares!), true}
 
-required(::SolveLeastSquares) = (:tr, :yterm, :xterms, :yxterms, :yxcols, :treatcols,
-    :has_fe_intercept)
-copyargs(::SolveLeastSquares) = (3,)
+required(::SolveLeastSquares) = (:tr, :pr, :yterm, :xterms, :yxterms, :yxcols,
+    :treatcells, :treatcols, :cohortinteracted, :has_fe_intercept)
+copyargs(::SolveLeastSquares) = (4,)
 
 function _vce(data, esample::BitVector,
         vce::Union{Vcov.SimpleCovariance,Vcov.RobustCovariance}, fes::Vector{FixedEffect})
@@ -359,7 +398,7 @@ end
 
 function _vce(data, esample::BitVector, vce::Vcov.ClusterCovariance,
         fes::Vector{FixedEffect})
-    cludata = _getsubcolumns(data, vce.clusters, esample)
+    cludata = subcolumns(data, Vcov.names(vce), esample)
     concrete_vce = Vcov.materialize(cludata, vce)
     dof_absorb = 0
     for fe in fes

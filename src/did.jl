@@ -12,6 +12,8 @@ const Reg = RegressionBasedDID
 function valid_didargs(d::Type{Reg}, ::DynamicTreatment{SharpDesign},
         ::TrendParallel{Unconditional, Exact}, args::Dict{Symbol,Any})
     name = get(args, :name, "")::String
+    treatintterms = haskey(args, :treatintterms) ? args[:treatintterms] : TermSet()
+    xterms = haskey(args, :xterms) ? args[:xterms] : TermSet()
     ntargs = (data=args[:data],
         tr=args[:tr]::DynamicTreatment{SharpDesign},
         pr=args[:pr]::TrendParallel{Unconditional, Exact},
@@ -20,8 +22,8 @@ function valid_didargs(d::Type{Reg}, ::DynamicTreatment{SharpDesign},
         subset=get(args, :subset, nothing)::Union{BitVector,Nothing},
         weightname=get(args, :weightname, nothing)::Union{Symbol,Nothing},
         vce=get(args, :vce, Vcov.RobustCovariance())::Vcov.CovarianceEstimator,
-        treatintterms=get(args, :treatintterms, TermSet())::TermSet,
-        xterms=get(args, :xterms, TermSet())::TermSet,
+        treatintterms=treatintterms::TermSet,
+        xterms=xterms::TermSet,
         drop_singletons=get(args, :drop_singletons, true)::Bool,
         nfethreads=get(args, :nfethreads, Threads.nthreads())::Int,
         contrasts=get(args, :contrasts, nothing)::Union{Dict{Symbol,Any},Nothing},
@@ -47,9 +49,11 @@ struct RegressionBasedDIDResult{CohortInteracted} <: DIDResult
     yname::String
     coefnames::Vector{String}
     coefinds::Dict{String, Int}
-    treatinds::Table
-    yxterms::Dict{AbstractTerm, AbstractTerm}
+    treatcells::VecColumnTable
     treatname::Symbol
+    yxterms::Dict{AbstractTerm, AbstractTerm}
+    yterm::AbstractTerm
+    xterms::Vector{AbstractTerm}
     contrasts::Union{Dict{Symbol, Any}, Nothing}
     weightname::Union{Symbol, Nothing}
     fenames::Vector{Symbol}
@@ -59,18 +63,17 @@ struct RegressionBasedDIDResult{CohortInteracted} <: DIDResult
 end
 
 function result(::Type{Reg}, @nospecialize(nt::NamedTuple))
-    cellweights = [nt.cellweights[k] for k in nt.treatinds]
-    cellcounts = [nt.cellcounts[k] for k in nt.treatinds]
-    yname = coefnames(nt.yxterms[nt.yterm])
-    tnames = _treatnames(nt.treatinds)
-    cnames = [coefnames(nt.yxterms[x]) for x in nt.xterms if width(nt.yxterms[x])>0]
-    cnames = vcat(tnames, cnames)[nt.basecols]
+    yterm = nt.yxterms[nt.yterm]
+    yname = coefnames(yterm)
+    cnames = _treatnames(nt.treatcells)
+    cnames = append!(cnames, coefnames.(nt.xterms))[nt.basecols]
     coefinds = Dict(cnames .=> 1:length(cnames))
     didresult = RegressionBasedDIDResult{nt.cohortinteracted}(
-        nt.coef, nt.vcov_mat, nt.vce, nt.tr, nt.pr, cellweights, cellcounts,
+        nt.coef, nt.vcov_mat, nt.vce, nt.tr, nt.pr, nt.cellweights, nt.cellcounts,
         nt.esample, sum(nt.esample), nt.dof_resid, nt.F, nt.p,
-        yname, cnames, coefinds, nt.treatinds, nt.yxterms, nt.treatname, nt.contrasts,
-        nt.weightname, nt.fenames, nt.nfeiterations, nt.feconverged, nt.nsingle)
+        yname, cnames, coefinds, nt.treatcells, nt.treatname, nt.yxterms,
+        yterm, nt.xterms, nt.contrasts, nt.weightname,
+        nt.fenames, nt.nfeiterations, nt.feconverged, nt.nsingle)
     return merge(nt, (result=didresult,))
 end
 
@@ -88,20 +91,20 @@ _top_info(r::RegressionBasedDIDResult) = (
     "p-value" => PValue(r.p)
 )
 
-_nunique(t::Table, s::Symbol) = length(unique(getproperty(t, s)))
+_nunique(t, s::Symbol) = length(unique(getproperty(t, s)))
 
 _excluded_rel_str(tr::DynamicTreatment) =
     isempty(tr.exc) ? "none" : join(string.(tr.exc), " ")
 
 _treat_info(r::RegressionBasedDIDResult{true}, tr::DynamicTreatment) = (
-    "Number of cohorts" => _nunique(r.treatinds, r.treatname),
-    "Interactions within cohorts" => length(columnnames(r.treatinds)) - 2,
-    "Relative time periods" => _nunique(r.treatinds, :rel),
+    "Number of cohorts" => _nunique(r.treatcells, r.treatname),
+    "Interactions within cohorts" => length(columnnames(r.treatcells)) - 2,
+    "Relative time periods" => _nunique(r.treatcells, :rel),
     "Excluded periods" => NoQuote(_excluded_rel_str(tr))
 )
 
 _treat_info(r::RegressionBasedDIDResult{false}, tr::DynamicTreatment) = (
-    "Relative time periods" => _nunique(r.treatinds, :rel),
+    "Relative time periods" => _nunique(r.treatcells, :rel),
     "Excluded periods" => NoQuote(_excluded_rel_str(tr))
 )
 

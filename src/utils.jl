@@ -2,7 +2,7 @@ function parse_fixedeffect!(data, ts::TermSet)
     fes = FixedEffect[]
     ids = Symbol[]
     has_fe_intercept = false
-    for term in keys(ts)
+    for term in ts
         result = _parse_fixedeffect(data, term)
         if result !== nothing
             push!(fes, result[1])
@@ -16,10 +16,10 @@ function parse_fixedeffect!(data, ts::TermSet)
     if !isempty(fes)
         if any(fe->fe.interaction isa UnitWeights, fes)
             has_fe_intercept = true
-            for t in keys(ts)
+            for t in ts
                 t isa Union{ConstantTerm,InterceptTerm} && delete!(ts, t)
             end
-            ts[InterceptTerm{false}()] = nothing
+            push!(ts, InterceptTerm{false}())
         end
     end
     return fes, ids, has_fe_intercept

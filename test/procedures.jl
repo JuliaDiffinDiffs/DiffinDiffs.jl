@@ -11,33 +11,33 @@ end
 
 @testset "CheckFEs" begin
     hrs = exampledata("hrs")
-    nt = (data=hrs, esample=trues(size(hrs,1)), xterms=TermSet(term(:white)=>nothing), drop_singletons=true)
-    @test checkfes!(nt...) == (xterms=TermSet(term(:white)=>nothing),
+    nt = (data=hrs, esample=trues(size(hrs,1)), xterms=TermSet(term(:white)), drop_singletons=true)
+    @test checkfes!(nt...) == (xterms=TermSet(term(:white)),
         esample=trues(size(hrs,1)), fes=FixedEffect[], fenames=Symbol[],
         has_fe_intercept=false, nsingle=0)
-    nt = merge(nt, (xterms=TermSet(fe(:hhidpn)=>nothing),))
-    @test checkfes!(nt...) == (xterms=TermSet(InterceptTerm{false}()=>nothing),
+    nt = merge(nt, (xterms=TermSet(fe(:hhidpn)),))
+    @test checkfes!(nt...) == (xterms=TermSet(InterceptTerm{false}()),
         esample=trues(size(hrs,1)), fes=[FixedEffect(hrs.hhidpn)], fenames=[:fe_hhidpn],
         has_fe_intercept=true, nsingle=0)
     
     df = DataFrame(hrs)
     df = df[(df.wave.==7).|((df.wave.==8).&(df.wave_hosp.==8)), :]
     nobs = size(df, 1)
-    nt = merge(nt, (data=df, esample=trues(nobs), xterms=TermSet(fe(:hhidpn)=>nothing)))
+    nt = merge(nt, (data=df, esample=trues(nobs), xterms=TermSet(fe(:hhidpn))))
     kept = df.wave_hosp.==8
-    @test checkfes!(nt...) == (xterms=TermSet(InterceptTerm{false}()=>nothing), esample=kept,
+    @test checkfes!(nt...) == (xterms=TermSet(InterceptTerm{false}()), esample=kept,
         fes=[FixedEffect(df.hhidpn)], fenames=[:fe_hhidpn], has_fe_intercept=true,
         nsingle=nobs-sum(kept))
 
     df = df[df.wave.==7, :]
     nobs = size(df, 1)
-    nt = merge(nt, (data=df, esample=trues(nobs), xterms=TermSet(fe(:hhidpn)=>nothing)))
+    nt = merge(nt, (data=df, esample=trues(nobs), xterms=TermSet(fe(:hhidpn))))
     @test_throws ErrorException checkfes!(nt...)
 
     @test_throws ErrorException CheckFEs()(nt)
     nt = merge(nt, (drop_singletons=false, esample=trues(nobs),
-        xterms=TermSet(fe(:hhidpn)=>nothing)))
-    @test CheckFEs()(nt) == merge(nt, (xterms=TermSet(InterceptTerm{false}()=>nothing),
+        xterms=TermSet(fe(:hhidpn))))
+    @test CheckFEs()(nt) == merge(nt, (xterms=TermSet(InterceptTerm{false}()),
         fes=[FixedEffect(df.hhidpn)], fenames=[:fe_hhidpn], has_fe_intercept=true, nsingle=0))
 end
 
@@ -58,41 +58,38 @@ end
     hrs = exampledata("hrs")
     nobs = size(hrs, 1)
     t1 = InterceptTerm{true}()
-    nt = (data=hrs, weights=uweights(nobs), esample=trues(nobs), feM=nothing, has_fe_intercept=false, default(MakeYXCols())...)
-    ret = makeyxcols(nt..., TermSet(term(:oop_spend)=>nothing),
-        TermSet(term(1)=>nothing))
-    @test ret.yxcols == Dict(term(:oop_spend)=>hrs.oop_spend, t1=>ones(nobs, 1))
+    nt = (data=hrs, weights=uweights(nobs), esample=trues(nobs), feM=nothing,
+        has_fe_intercept=false, default(MakeYXCols())...)
+    ret = makeyxcols(nt..., TermSet(term(:oop_spend), term(1)))
     @test ret.yxterms[term(:oop_spend)] isa ContinuousTerm
-    @test ret.yxterms[t1] isa InterceptTerm{true}
+    @test ret.yxcols == Dict(ret.yxterms[term(:oop_spend)]=>hrs.oop_spend,
+        t1=>ones(nobs))
+    
     @test ret.nfeiterations === nothing
     @test ret.feconverged === nothing
 
     # Verify that an intercept will be added if not having one
-    ret1 = makeyxcols(nt..., TermSet(term(:oop_spend)=>nothing), TermSet())
+    ret1 = makeyxcols(nt..., TermSet(term(:oop_spend)))
     @test ret1 == ret
-    ret1 = makeyxcols(nt..., TermSet(term(:oop_spend)=>nothing),
-        TermSet(term(0)=>nothing))
+    ret1 = makeyxcols(nt..., TermSet(term(:oop_spend), term(0)))
+    @test collect(keys(ret1.yxterms)) == [term(:oop_spend)]
     @test ret1.yxcols == ret.yxcols
-    @test ret1.yxterms[t1] isa InterceptTerm{true}
 
     wt = Weights(hrs.rwthh)
     nt = merge(nt, (weights=wt,))
-    ret = makeyxcols(nt..., TermSet(term(:oop_spend)=>nothing, term(:riearnsemp)=>nothing),
-        TermSet(term(:male)=>nothing))
-    @test ret.yxcols == Dict(term(:oop_spend)=>hrs.oop_spend.*sqrt.(wt),
-        term(:riearnsemp)=>hrs.riearnsemp.*sqrt.(wt),
-        term(:male)=>reshape(hrs.male.*sqrt.(wt), nobs, 1),
-        t1=>reshape(sqrt.(wt), nobs, 1))
+    ret = makeyxcols(nt..., TermSet(term(:oop_spend), term(:riearnsemp), term(:male)))
+    @test ret.yxcols == Dict(ret.yxterms[term(:oop_spend)]=>hrs.oop_spend.*sqrt.(wt),
+        ret.yxterms[term(:riearnsemp)]=>hrs.riearnsemp.*sqrt.(wt),
+        ret.yxterms[term(:male)]=>reshape(hrs.male.*sqrt.(wt), nobs),
+        t1=>reshape(sqrt.(wt), nobs))
 
     df = DataFrame(hrs)
     df.riearnsemp[1] = NaN
     nt = merge(nt, (data=df,))
-    @test_throws ErrorException makeyxcols(nt..., TermSet(term(:riearnsemp)=>nothing),
-        TermSet(term(1)=>nothing))
+    @test_throws ErrorException makeyxcols(nt..., TermSet(term(:riearnsemp), term(1)))
     df.spouse = convert(Vector{Float64}, df.spouse)
     df.spouse[1] = Inf
-    @test_throws ErrorException makeyxcols(nt..., TermSet(term(:oop_spend)=>nothing),
-        TermSet(term(:spouse)=>nothing))
+    @test_throws ErrorException makeyxcols(nt..., TermSet(term(:oop_spend), term(:spouse)))
 
     df = DataFrame(hrs)
     x = randn(nobs)
@@ -101,12 +98,11 @@ end
     fes = [FixedEffect(df.hhidpn)]
     feM = AbstractFixedEffectSolver{Float64}(fes, wt, Val{:cpu}, Threads.nthreads())
     nt = merge(nt, (data=df, weights=wt, feM=feM, has_fe_intercept=true))
-    ret = makeyxcols(nt..., TermSet(term(:oop_spend)=>nothing),
-        TermSet(InterceptTerm{false}()=>nothing, term(:x)=>nothing))
+    ret = makeyxcols(nt..., TermSet(term(:oop_spend), InterceptTerm{false}(), term(:x)))
     resids = reshape(copy(df.oop_spend), nobs, 1)
     _feresiduals!(resids, feM, 1e-8, 10000)
     resids .*= sqrt.(wt)
-    @test ret.yxcols[term(:oop_spend)] == reshape(resids, nobs)
+    @test ret.yxcols[ret.yxterms[term(:oop_spend)]] == reshape(resids, nobs)
     # Verify input data are not modified
     @test df.oop_spend == hrs.oop_spend
     @test df.x == x
@@ -118,34 +114,29 @@ end
     fes = [FixedEffect(df.hhidpn[esample])]
     feM = AbstractFixedEffectSolver{Float64}(fes, wt, Val{:cpu}, Threads.nthreads())
     nt = merge(nt, (data=df, esample=esample, weights=wt, feM=feM, has_fe_intercept=true))
-    ret = makeyxcols(nt..., TermSet(term(:oop_spend)=>nothing),
-        TermSet(InterceptTerm{false}()=>nothing))
+    ret = makeyxcols(nt..., TermSet(term(:oop_spend), InterceptTerm{false}()))
     resids = reshape(df.oop_spend[esample], nobs, 1)
     _feresiduals!(resids, feM, 1e-8, 10000)
     resids .*= sqrt.(wt)
-    @test ret.yxcols == Dict(term(:oop_spend)=>reshape(resids, nobs))
+    @test ret.yxcols == Dict(ret.yxterms[term(:oop_spend)]=>reshape(resids, nobs))
     @test ret.nfeiterations isa Int
     @test ret.feconverged
     # Verify input data are not modified
     @test df.oop_spend == hrs.oop_spend
 
     allntargs = NamedTuple[(yterm=term(:oop_spend), xterms=TermSet())]
-    @test combinedargs(MakeYXCols(), allntargs) ==
-        (TermSet(term(:oop_spend)=>nothing), TermSet())
+    @test combinedargs(MakeYXCols(), allntargs) == (TermSet(term(:oop_spend)),)
     push!(allntargs, allntargs[1])
-    @test combinedargs(MakeYXCols(), allntargs) ==
-        (TermSet(term(:oop_spend)=>nothing), TermSet())
+    @test combinedargs(MakeYXCols(), allntargs) == (TermSet(term(:oop_spend)),)
     push!(allntargs, (yterm=term(:riearnsemp),
-        xterms=TermSet(InterceptTerm{false}()=>nothing)))
+        xterms=TermSet(InterceptTerm{false}())))
     @test combinedargs(MakeYXCols(), allntargs) ==
-        (TermSet(term(:oop_spend)=>nothing, term(:riearnsemp)=>nothing),
-        TermSet(InterceptTerm{false}()=>nothing))
-    push!(allntargs, (yterm=term(:riearnsemp), xterms=TermSet(term(:male)=>nothing)))
+        (TermSet(term(:oop_spend), term(:riearnsemp), InterceptTerm{false}()),)
+    push!(allntargs, (yterm=term(:riearnsemp), xterms=TermSet(term(:male))))
     @test combinedargs(MakeYXCols(), allntargs) ==
-        (TermSet(term(:oop_spend)=>nothing, term(:riearnsemp)=>nothing),
-        TermSet(InterceptTerm{false}()=>nothing, term(:male)=>nothing))
+        (TermSet(term(:oop_spend), term(:riearnsemp), InterceptTerm{false}(), term(:male)),)
     
-    nt = merge(nt, (data=df, yterm=term(:oop_spend), xterms=TermSet(InterceptTerm{false}()=>nothing)))
+    nt = merge(nt, (data=df, yterm=term(:oop_spend), xterms=TermSet(InterceptTerm{false}())))
     @test MakeYXCols()(nt) == merge(nt, ret)
 end
 
@@ -153,40 +144,77 @@ end
     hrs = exampledata("hrs")
     nobs = size(hrs, 1)
     tr = dynamic(:wave, -1)
+    pr = nevertreated(11)
     nt = (data=hrs, treatname=:wave_hosp, treatintterms=TermSet(), feM=nothing,
-        weightname=nothing, weights=uweights(nobs), esample=trues(nobs),
-        tr_rows=hrs.wave_hosp.!=11, default(MakeTreatCols())...)
-    ret = maketreatcols(nt..., typeof(tr), tr.time, IdDict(-1=>1))
-    @test length(ret.itreats) == 12
-    @test ret.itreats[(rel=0, wave_hosp=10)] ==
-        collect(1:nobs)[(hrs.wave_hosp.==10).&(hrs.wave.==10)]
-    col = convert(Vector{Float64}, (hrs.wave_hosp.==10).&(hrs.wave.==10))
-    @test ret.treatcols[(rel=0, wave_hosp=10)] == col
+        weights=uweights(nobs), esample=trues(nobs),
+        default(MakeTreatCols())...)
+    ret = maketreatcols(nt..., typeof(tr), tr.time, IdDict(-1=>1), IdDict{TimeType,Int}(11=>1))
+    @test size(ret.cells) == (20, 2)
+    @test length(ret.rows) == 20
+    @test size(ret.treatcells) == (12, 2)
+    @test length(ret.treatcols) == length(ret.treatrows) == 12
+    @test length(ret.cellweights) == length(ret.cellcounts) == length(ret.treatrows)
+    @test ret.cells.wave_hosp == repeat(8:11, inner=5)
+    @test ret.cells.wave == repeat(7:11, 4)
+    @test ret.rows[end] == findall((hrs.wave_hosp.==11).&(hrs.wave.==11))
+    @test ret.treatcells.wave_hosp == repeat(8:10, inner=4)
+    rel = ret.cells.wave .- ret.cells.wave_hosp
+    @test ret.treatcells.rel == rel[(rel.!=-1).&(ret.cells.wave_hosp.!=11)]
+    @test ret.treatrows[1] == findall((hrs.wave_hosp.==8).&(hrs.wave.==8))
+    col = convert(Vector{Float64}, (hrs.wave_hosp.==8).&(hrs.wave.==8))
+    @test ret.treatcols[1] == col
     @test ret.cellweights == ret.cellcounts
     w = ret.cellweights
-    @test all(x->x==252, getindices(w, filter(x->x.wave_hosp==8, keys(w))))
-    @test all(x->x==176, getindices(w, filter(x->x.wave_hosp==9, keys(w))))
-    @test all(x->x==163, getindices(w, filter(x->x.wave_hosp==10, keys(w))))
+    @test all(w[ret.treatcells.wave_hosp.==8].==252)
+    @test all(w[ret.treatcells.wave_hosp.==9].==176)
+    @test all(w[ret.treatcells.wave_hosp.==10].==163)
 
-    nt = merge(nt, (treatintterms=TermSet(term(:male)=>nothing),))
-    ret = maketreatcols(nt..., typeof(tr), tr.time, IdDict(-1=>1))
-    @test length(ret.itreats) == 24
-    @test ret.itreats[(rel=0, wave_hosp=10, male=1)] ==
-        collect(1:nobs)[(hrs.wave_hosp.==10).&(hrs.wave.==10).&(hrs.male.==1)]
+    nt = merge(nt, (treatintterms=TermSet(term(:male)),))
+    ret1 = maketreatcols(nt..., typeof(tr), tr.time, IdDict(-1=>1), IdDict{TimeType,Int}(11=>1))
+    @test size(ret1.cells) == (40, 3)
+    @test length(ret1.rows) == 40
+    @test size(ret1.treatcells) == (24, 3)
+    @test length(ret1.treatcols) == length(ret1.treatrows) == 24
+    @test length(ret1.cellweights) == length(ret1.cellcounts) == length(ret1.treatrows)
+    @test ret1.cells.wave_hosp == repeat(8:11, inner=10)
+    @test ret1.cells.wave == repeat(repeat(7:11, inner=2), 4)
+    @test ret1.cells.male == repeat(0:1, 20)
+    @test ret1.rows[end] == findall((hrs.wave_hosp.==11).&(hrs.wave.==11).&(hrs.male.==1))
+    @test ret1.treatcells.wave_hosp == repeat(8:10, inner=8)
+    rel = ret1.cells.wave .- ret1.cells.wave_hosp
+    @test ret1.treatcells.rel == rel[(rel.!=-1).&(ret1.cells.wave_hosp.!=11)]
+    @test ret1.treatrows[1] == findall((hrs.wave_hosp.==8).&(hrs.wave.==8).&(hrs.male.==0))
+    col1 = convert(Vector{Float64}, (hrs.wave_hosp.==8).&(hrs.wave.==8).&(hrs.male.==0))
+    @test ret1.treatcols[1] == col1
+    @test ret1.cellweights == ret1.cellcounts
 
     nt = merge(nt, (cohortinteracted=false, treatintterms=TermSet()))
-    ret = maketreatcols(nt..., typeof(tr), tr.time, IdDict(-1=>1))
-    @test length(ret.itreats) == 6
-    @test ret.itreats[(rel=0,)] ==
-        collect(1:nobs)[(hrs.wave_hosp.==hrs.wave).&(hrs.wave_hosp.!=11)]
-    col1 = convert(Vector{Float64}, (hrs.wave_hosp.==hrs.wave).&(hrs.wave_hosp.!=11))
-    @test ret.treatcols[(rel=0,)] == col1
+    ret2 = maketreatcols(nt..., typeof(tr), tr.time, IdDict(-1=>1), IdDict{TimeType,Int}(11=>1))
+    @test ret2.cells[1] == ret.cells[1]
+    @test ret2.cells[2] == ret.cells[2]
+    @test ret2.rows == ret.rows
+    @test size(ret2.treatcells) == (6, 1)
+    @test length(ret2.treatcols) == length(ret2.treatrows) == 6
+    @test length(ret2.cellweights) == length(ret2.cellcounts) == length(ret2.treatrows)
+    @test ret2.treatcells.rel == [-3, -2, 0, 1, 2, 3]
+    @test ret2.treatrows[1] == findall((hrs.wave.-hrs.wave_hosp.==-3).&(hrs.wave_hosp.!=11))
+    col2 = convert(Vector{Float64}, (hrs.wave.-hrs.wave_hosp.==-3).&(hrs.wave_hosp.!=11))
+    @test ret2.treatcols[1] == col2
+    @test ret2.cellweights == ret2.cellcounts
 
-    nt = merge(nt, (treatintterms=TermSet(term(:male)=>nothing),))
-    ret = maketreatcols(nt..., typeof(tr), tr.time, IdDict(-1=>1))
-    @test length(ret.itreats) == 12
-    @test ret.itreats[(rel=0, male=1)] ==
-        collect(1:nobs)[(hrs.wave_hosp.==hrs.wave).&(hrs.wave_hosp.!=11).&(hrs.male.==1)]
+    nt = merge(nt, (treatintterms=TermSet(term(:male)),))
+    ret3 = maketreatcols(nt..., typeof(tr), tr.time, IdDict(-1=>1), IdDict{TimeType,Int}(11=>1))
+    @test ret3.cells[1] == ret1.cells[1]
+    @test ret3.cells[2] == ret1.cells[2]
+    @test ret3.cells[3] == ret1.cells[3]
+    @test ret3.rows == ret1.rows
+    @test size(ret3.treatcells) == (12, 2)
+    @test length(ret3.treatcols) == length(ret3.treatrows) == 12
+    @test length(ret3.cellweights) == length(ret3.cellcounts) == length(ret3.treatrows)
+    @test ret3.treatcells.rel == repeat([-3, -2, 0, 1, 2, 3], inner=2)
+    @test ret3.treatcells.male == repeat(0:1, 6)
+    @test ret3.treatrows[1] ==
+        findall((hrs.wave.-hrs.wave_hosp.==-3).&(hrs.wave_hosp.!=11).&(hrs.male.==0))
 
     df = DataFrame(hrs)
     esample = df.rwthh.> 0
@@ -194,34 +222,36 @@ end
     wt = Weights(hrs.rwthh[esample])
     fes = [FixedEffect(df.hhidpn[esample])]
     feM = AbstractFixedEffectSolver{Float64}(fes, wt, Val{:cpu}, Threads.nthreads())
-    nt = merge(nt, (data=df, feM=feM, weightname=:rwthh, weights=wt, esample=esample,
+    nt = merge(nt, (data=df, feM=feM, weights=wt, esample=esample,
         treatintterms=TermSet(), cohortinteracted=true))
-    ret = maketreatcols(nt..., typeof(tr), tr.time, IdDict(-1=>1))
+    ret = maketreatcols(nt..., typeof(tr), tr.time, IdDict(-1=>1), IdDict{TimeType,Int}(11=>1))
     col = reshape(col[esample], nobs, 1)
     defaults = (default(MakeTreatCols())...,)
-    _feresiduals!(col, feM, defaults[[2,3]]...)
-    @test ret.treatcols[(rel=0, wave_hosp=10)] == (col.*sqrt.(wt))[:]
-    @test ret.cellcounts == w
-    @test ret.cellweights[(rel=0, wave_hosp=10)] == 881700
+    _feresiduals!(col, feM, defaults[2:3]...)
+    @test ret.treatcols[1] == (col.*sqrt.(wt))[:]
+    @test ret.cellcounts == [252, 252, 252, 251, 176, 176, 176, 175, 162, 160, 163, 162]
+    @test ret.cellweights[1] == 1776173
 
-    allntargs = NamedTuple[(tr=tr,)]
-    @test combinedargs(MakeTreatCols(), allntargs) == (IdDict(-1=>1),)
+    allntargs = NamedTuple[(tr=tr, pr=pr)]
+    @test combinedargs(MakeTreatCols(), allntargs) ==
+        (IdDict(-1=>1), IdDict{TimeType,Int}(11=>1))
     push!(allntargs, allntargs[1])
-    @test combinedargs(MakeTreatCols(), allntargs) == (IdDict(-1=>2),)
-    push!(allntargs, (tr=dynamic(:wave, [-1,-2]),))
-    @test combinedargs(MakeTreatCols(), allntargs) == (IdDict(-1=>3),)
-    push!(allntargs, (tr=dynamic(:wave, [-3]),))
-    @test combinedargs(MakeTreatCols(), allntargs) == (IdDict{Int,Int}(),)
+    @test combinedargs(MakeTreatCols(), allntargs) ==
+        (IdDict(-1=>2), IdDict{TimeType,Int}(11=>2))
+    push!(allntargs, (tr=dynamic(:wave, [-1,-2]), pr=nevertreated(10:11)))
+    @test combinedargs(MakeTreatCols(), allntargs) ==
+        (IdDict(-1=>3), IdDict{TimeType,Int}(11=>3))
+    push!(allntargs, (tr=dynamic(:wave, [-3]), pr=nevertreated(10)))
+    @test combinedargs(MakeTreatCols(), allntargs) ==
+        (IdDict{Int,Int}(), IdDict{TimeType,Int}())
 
-    nt = merge(nt, (tr=tr,))
-    @test MakeTreatCols()(nt) == merge(nt, (itreats=ret.itreats, treatcols=ret.treatcols,
+    nt = merge(nt, (tr=tr, pr=pr))
+    @test MakeTreatCols()(nt) == merge(nt, (cells=ret.cells, rows=ret.rows,
+        treatcells=ret.treatcells, treatrows=ret.treatrows, treatcols=ret.treatcols,
         cellweights=ret.cellweights, cellcounts=ret.cellcounts))
 end
 
 @testset "SolveLeastSquares" begin
-    terms = Dict{AbstractTerm,AbstractTerm}(term(1)=>InterceptTerm{true}())
-    @test _getname(term(1), terms) == "(Intercept)"
-
     hrs = exampledata("hrs")
     nobs = size(hrs, 1)
     df = DataFrame(hrs)
@@ -229,15 +259,18 @@ end
     t1 = InterceptTerm{true}()
     t0 = InterceptTerm{false}()
     tr = dynamic(:wave, -1)
+    pr = nevertreated(11)
     yxterms = Dict([x=>apply_schema(x, schema(x, df), StatisticalModel)
         for x in (term(:oop_spend), t1, term(:t2), t0, term(:male), term(:spouse))])
-    yxcols0 = Dict(term(:oop_spend)=>hrs.oop_spend, t1=>ones(nobs, 1),
-        term(:male)=>hrs.male, term(:spouse)=>hrs.spouse)
+    yxcols0 = Dict(yxterms[term(:oop_spend)]=>hrs.oop_spend, t1=>ones(nobs, 1),
+        yxterms[term(:male)]=>hrs.male, yxterms[term(:spouse)]=>hrs.spouse)
     col0 = convert(Vector{Float64}, (hrs.wave_hosp.==10).&(hrs.wave.==10))
     col1 = convert(Vector{Float64}, (hrs.wave_hosp.==10).&(hrs.wave.==11))
-    tcols0 = Dictionary([(rel=0, wave_hosp=10), (rel=1, wave_hosp=10)], [col0, col1])
-    nt = (tr=tr, yterm=term(:oop_spend), xterms=TermSet(term(1)=>nothing), yxterms=yxterms,
-        yxcols=yxcols0, treatcols=tcols0, has_fe_intercept=false)
+    treatcells0 = VecColumnTable((rel=[0, 1], wave_hosp=[10, 10]))
+    treatcols0 = [col0, col1]
+    nt = (tr=tr, pr=pr, yterm=term(:oop_spend), xterms=TermSet(term(1)), yxterms=yxterms,
+        yxcols=yxcols0, treatcells=treatcells0, treatcols=treatcols0,
+        cohortinteracted=true, has_fe_intercept=false)
     ret = solveleastsquares!(nt...)
     # Compare estimates with Stata
     # gen col0 = wave_hosp==10 & wave==10
@@ -246,41 +279,41 @@ end
     @test ret.coef[1] ≈ 2862.4141 atol=1e-4
     @test ret.coef[2] ≈ 490.44869 atol=1e-4
     @test ret.coef[3] ≈ 3353.6565 atol=1e-4
-    @test ret.basecols == trues(3)
-    @test ret.treatinds.rel == [0, 1]
-    @test ret.treatinds.wave_hosp == [10, 10]
+    @test ret.treatcells.wave_hosp == [10, 10]
+    @test ret.treatcells.rel == [0, 1]
     @test ret.xterms == AbstractTerm[t1]
+    @test ret.basecols == trues(3)
 
     # Verify that an intercept will only be added when needed
     nt1 = merge(nt, (xterms=TermSet(),))
     ret1 = solveleastsquares!(nt1...)
     @test ret1 == ret
-    nt1 = merge(nt, (xterms=TermSet(term(0)=>nothing),))
+    nt1 = merge(nt, (xterms=TermSet(term(0)),))
     ret1 = solveleastsquares!(nt1...)
     @test ret1.xterms == AbstractTerm[]
     @test size(ret1.X, 2) == 2
-    nt1 = merge(nt, (xterms=TermSet((term(:spouse), term(:male)).=>nothing),))
+    nt1 = merge(nt, (xterms=TermSet((term(:spouse), term(:male))),))
     ret1 = solveleastsquares!(nt1...)
-    @test ret1.xterms == AbstractTerm[term(:male), term(:spouse), InterceptTerm{true}()]
+    @test ret1.xterms == AbstractTerm[yxterms[term(:male)], yxterms[term(:spouse)],
+        InterceptTerm{true}()]
 
     # Test colliner xterms are handled
-    yxcols1 = Dict(term(:oop_spend)=>hrs.oop_spend, t1=>ones(nobs), term(:t2)=>df.t2)
-    nt1 = merge(nt, (xterms=TermSet(term(1)=>nothing, term(:t2)=>nothing), yxcols=yxcols1))
+    yxcols1 = Dict(yxterms[term(:oop_spend)]=>hrs.oop_spend, t1=>ones(nobs),
+        yxterms[term(:t2)]=>df.t2)
+    nt1 = merge(nt, (xterms=TermSet(term(1), term(:t2)), yxcols=yxcols1))
     ret1 = solveleastsquares!(nt1...)
     @test ret1.coef[1:2] == ret.coef[1:2]
     @test sum(ret1.basecols) == 3
 
-    insert!(tcols0, (rel=1, wave_hosp=0), ones(nobs))
-    insert!(tcols0, (rel=1, wave_hosp=1), ones(nobs))
+    treatcells1 = VecColumnTable((rel=[0, 1, 1, 1], wave_hosp=[10, 10, 0, 1]))
+    treatcols1 = push!(copy(treatcols0), ones(nobs), ones(nobs))
     # basecol is rather conservative in dropping collinear columns
     # If there are three constant columns, it may be that only one of them gets dropped
     # Also need to have at least one term in xterms for basecol to work
-    yxcols2 = Dict(term(:oop_spend)=>hrs.oop_spend, term(:male)=>hrs.male)
-    nt1 = merge(nt1, (xterms=TermSet(term(:male)=>nothing, term(0)=>nothing),
-        yxcols=yxcols2, treatcols=tcols0))
+    yxcols2 = Dict(yxterms[term(:oop_spend)]=>hrs.oop_spend, yxterms[term(:male)]=>hrs.male)
+    nt1 = merge(nt1, (xterms=TermSet(term(:male), term(0)), treatcells=treatcells1,
+        yxcols=yxcols2, treatcols=treatcols1))
     @test_throws ErrorException solveleastsquares!(nt1...)
-    delete!(tcols0, (rel=1, wave_hosp=0))
-    delete!(tcols0, (rel=1, wave_hosp=1))
     
     @test SolveLeastSquares()(nt) == merge(nt, ret)
 end
