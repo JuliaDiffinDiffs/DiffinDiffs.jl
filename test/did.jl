@@ -161,53 +161,6 @@ end
     @test sp6 ≊ @did [noproceed] TestDID @formula(y ~ treat(g, ttreat(t, 0), tpara(0)) & z + x)
 end
 
-@testset "_treatnames" begin
-    t = VecColumnTable((rel=[1, 2],))
-    @test _treatnames(t) == ["rel: 1", "rel: 2"]
-    r = TestResult(2, 2)
-    @test _treatnames(r.treatcells) == ["rel: $a & c: $b" for a in 1:2 for b in 1:2]
-end
-
-@testset "DIDResult" begin
-    r = TestResult(2, 2)
-
-    @test coef(r) == r.coef
-    @test coef(r, 1) == 1
-    @test coef(r, "rel: 1 & c: 1") == 1
-    @test coef(r, :c5) == 5
-    @test coef(r, 1:2) == [1.0, 2.0]
-    @test coef(r, 5:-1:3) == [5.0, 4.0, 3.0]
-    @test coef(r, (1, :c5, "rel: 1 & c: 1")) == [1.0, 5.0, 1.0]
-    @test coef(r, [1 "rel: 1 & c: 1" :c5]) == [1.0 1.0 5.0]
-    @test coef(r, :rel=>x->x==1) == [1.0, 2.0]
-    @test coef(r, :rel=>x->x==1, :c=>x->x==1) == [1.0]
-    @test coef(x->true, r) == collect(Float64, 1:4)
-    @test coef(x->x.rel==1, r) == [1.0, 2.0]
-
-    @test vcov(r) == r.vcov
-    @test vcov(r, 1) == 1
-    @test vcov(r, 1, 2) == 2
-    @test vcov(r, "rel: 1 & c: 1") == 1
-    @test vcov(r, :c5) == 25
-    @test vcov(r, "rel: 1 & c: 1", :c5) == 5
-    @test vcov(r, 1:2) == r.vcov[1:2, 1:2]
-    @test vcov(r, 5:-1:3) == r.vcov[5:-1:3, 5:-1:3]
-    @test vcov(r, (1, :c5, "rel: 1 & c: 1")) == r.vcov[[1,5,1], [1,5,1]]
-    @test vcov(r, [1 :c5 "rel: 1 & c: 1"]) == r.vcov[[1,5,1], [1,5,1]]
-    @test vcov(r, :rel=>x->x==1) == r.vcov[[1,2], [1,2]]
-    @test vcov(r, :rel=>x->x==1, :c=>x->x==1) == reshape([1.0], 1, 1)
-    @test vcov(x->true, r) == r.vcov[1:4, 1:4]
-    @test vcov(x->x.rel==1, r) == r.vcov[1:2, 1:2]
-
-    @test nobs(r) == 6
-    @test dof_residual(r) == 5
-    @test responsename(r) == "y"
-    @test outcomename(r) == responsename(r)
-    @test coefnames(r) == r.coefnames
-    @test treatnames(r) == r.coefnames[1:4]
-    @test weights(r) == :w
-end
-
 @testset "did @did" begin
     r = result(TestDID, NamedTuple()).result
     d0 = @did TestDID TR PR
@@ -304,4 +257,251 @@ end
     @test s[1] ≊ didspec("name", TestDID, TR, PR; a=0)
     @test s[2] ≊ didspec("name1", TestDID, TR, PR; a=1)
     @test s[3] ≊ didspec("name2", TestDID, TR, PR; a=2)
+end
+
+@testset "DIDResult" begin
+    r = TestResult(2, 2)
+
+    @test coef(r) == r.coef
+    @test coef(r, 1) == 1
+    @test coef(r, "rel: 1 & c: 1") == 1
+    @test coef(r, :c5) == 5
+    @test coef(r, 1:2) == [1.0, 2.0]
+    @test coef(r, 5:-1:3) == [5.0, 4.0, 3.0]
+    @test coef(r, (1, :c5, "rel: 1 & c: 1")) == [1.0, 5.0, 1.0]
+    @test coef(r, [1 "rel: 1 & c: 1" :c5]) == [1.0 1.0 5.0]
+    @test coef(r, :rel=>x->x==1) == [1.0, 2.0]
+    @test coef(r, :rel=>x->x==1, :c=>x->x==1) == [1.0]
+    @test coef(r, (:rel, :c)=>(x, y)->x==1) == [1.0, 2.0]
+
+    @test vcov(r) == r.vcov
+    @test vcov(r, 1) == 1
+    @test vcov(r, 1, 2) == 2
+    @test vcov(r, "rel: 1 & c: 1") == 1
+    @test vcov(r, :c5) == 25
+    @test vcov(r, "rel: 1 & c: 1", :c5) == 5
+    @test vcov(r, 1:2) == r.vcov[1:2, 1:2]
+    @test vcov(r, 5:-1:3) == r.vcov[5:-1:3, 5:-1:3]
+    @test vcov(r, (1, :c5, "rel: 1 & c: 1")) == r.vcov[[1,5,1], [1,5,1]]
+    @test vcov(r, [1 :c5 "rel: 1 & c: 1"]) == r.vcov[[1,5,1], [1,5,1]]
+    @test vcov(r, :rel=>x->x==1) == r.vcov[[1,2], [1,2]]
+    @test vcov(r, :rel=>x->x==1, :c=>x->x==1) == reshape([1.0], 1, 1)
+    @test vcov(r, (:rel, :c)=>(x, y)->x==1) == r.vcov[[1,2], [1,2]]
+
+    @test nobs(r) == 6
+    @test outcomename(r) == "y"
+    @test coefnames(r) == r.coefnames
+    @test treatnames(r) == r.coefnames[1:4]
+    @test treatcells(r) == r.treatcells
+    @test ntreatcoef(r) == 4
+    @test treatcoef(r) == r.coef[1:4]
+    @test treatvcov(r) == r.vcov[1:4, 1:4]
+    @test weights(r) == :w
+    @test_throws ErrorException parent(r)
+    @test responsename(r) == "y"
+    @test coefinds(r) == r.coefinds
+    @test dof_residual(r) == 5
+end
+
+@testset "_treatnames" begin
+    t = VecColumnTable((rel=[1, 2],))
+    @test _treatnames(t) == ["rel: 1", "rel: 2"]
+    r = TestResult(2, 2)
+    @test _treatnames(r.treatcells) == ["rel: $a & c: $b" for a in 1:2 for b in 1:2]
+end
+
+@testset "_bycells" begin
+    r = TestResult(2, 2)
+    bycells = _bycells(r, nothing, nothing)
+    @test size(bycells, 2) == 2
+    @test bycells.rel == r.treatcells.rel
+    @test bycells.c == r.treatcells.c
+
+    bycells = _bycells(r, (:rel,), nothing)
+    @test size(bycells, 2) == 1
+    @test bycells.rel == r.treatcells.rel
+    bycells = _bycells(r, (:rel,:c), nothing)
+    @test size(bycells, 2) == 2
+    @test bycells.c == r.treatcells.c
+
+    bycells = _bycells(r, nothing, :rel=>isodd)
+    @test size(bycells, 2) == 2
+    @test bycells.rel == isodd.(r.treatcells.rel)
+    bycells = _bycells(r, (:rel,), :rel=>isodd)
+    @test bycells.rel == isodd.(r.treatcells.rel)
+    bycells = _bycells(r, (:rel,), :rel=>:c=>isodd)
+    @test bycells.rel == isodd.(r.treatcells.c)
+    bycells = _bycells(r, (:rel,:c), :rel=>isodd)
+    @test size(bycells, 2) == 2
+    @test bycells.rel == isodd.(r.treatcells.rel)
+    @test bycells.c == r.treatcells.c
+    bycells = _bycells(r, (:rel,:c), (1=>isodd, 2=>1=>isodd))
+    @test size(bycells, 2) == 2
+    @test bycells.rel == isodd.(r.treatcells.rel)
+    @test bycells.c == isodd.(r.treatcells.rel)
+
+    @test_throws ArgumentError _bycells(r, (:rel,), (:rel,))
+end
+
+@testset "treatindex checktreatindex" begin
+    @test treatindex(10, :) == 1:10
+    @test treatindex(10, 1) == 1
+    @test length(treatindex(10, 11)) == 0
+    @test treatindex(10, 1:5) == 1:5
+    @test treatindex(10, collect(1:20)) == 1:10
+    @test treatindex(10, isodd.(1:20)) == isodd.(1:10)
+    @test_throws ArgumentError treatindex(10, :a)
+
+    @test checktreatindex([3,2,1,5,4], [1,2,3])
+    @test checktreatindex(1:10, 1:5)
+    @test_throws ArgumentError checktreatindex([3,2,1,5,4], [3,5])
+    @test_throws ArgumentError checktreatindex(10:-1:1, 1:5)
+    @test checktreatindex(trues(10), trues(5))
+    @test checktreatindex(:, 1:5)
+    @test checktreatindex(5, 1:0)
+end
+
+@testset "SubDIDResult" begin
+    r = TestResult(2, 2)
+    sr = view(r, :)
+    @test coef(sr) == coef(r)
+    @test vcov(sr) == vcov(r)
+    @test nobs(sr) == nobs(r)
+    @test outcomename(sr) == outcomename(r)
+    @test coefnames(sr) == coefnames(r)
+    @test treatnames(sr) == treatnames(r)
+    @test treatcells(sr) == treatcells(r)
+    @test ntreatcoef(sr) == ntreatcoef(r)
+    @test treatcoef(sr) == treatcoef(r)
+    @test treatvcov(sr) == treatvcov(r)
+    @test weights(sr) == weights(r)
+    @test parent(sr) === r
+    @test responsename(sr) == responsename(r)
+    @test coefinds(sr) == coefinds(r)
+    @test dof_residual(sr) == dof_residual(r)
+
+    sr = view(r, isodd.(1:6))
+    @test coef(sr) == coef(r)[[1,3,5]]
+    @test vcov(sr) == vcov(r)[[1,3,5],[1,3,5]]
+    @test nobs(sr) == nobs(r)
+    @test outcomename(sr) == outcomename(r)
+    @test coefnames(sr) == coefnames(r)[[1,3,5]]
+    @test treatnames(sr) == treatnames(r)[[1,3]]
+    @test treatcells(sr) == view(treatcells(r), [1,3])
+    @test ntreatcoef(sr) == 2
+    @test treatcoef(sr) == treatcoef(r)[[1,3]]
+    @test treatvcov(sr) == treatvcov(r)[[1,3],[1,3]]
+    @test weights(sr) == weights(r)
+    @test parent(sr) === r
+    @test responsename(sr) == responsename(r)
+    @test coefinds(sr) == Dict("rel: 1 & c: 1"=>1, "rel: 2 & c: 1"=>2, "c5"=>3)
+    @test dof_residual(sr) == dof_residual(r)
+
+    @test_throws BoundsError view(r, 1:7)
+    @test_throws ArgumentError view(r, [6,1])
+end
+
+@testset "TransformedDIDResult" begin
+    r = TestResult(2, 2)
+    m = reshape(1:36, 6, 6)
+    tr = TransformedDIDResult(r, m, copy(r.coef), copy(r.vcov))
+
+    @test coef(tr) === tr.coef
+    @test vcov(tr) === tr.vcov
+    @test nobs(tr) == nobs(r)
+    @test outcomename(tr) == outcomename(r)
+    @test coefnames(tr) === coefnames(r)
+    @test treatnames(tr) == treatnames(r)
+    @test treatcells(tr) === treatcells(r)
+    @test ntreatcoef(tr) == 4
+    @test treatcoef(tr) == tr.coef[1:4]
+    @test treatvcov(tr) == tr.vcov[1:4,1:4]
+    @test weights(tr) == weights(r)
+    @test parent(tr) === r
+    @test responsename(tr) == responsename(r)
+    @test coefinds(tr) === coefinds(r)
+    @test dof_residual(tr) == dof_residual(r)
+end
+
+@testset "TransSubDIDResult" begin
+    r = TestResult(2, 2)
+    m = reshape(1:18, 3, 6)
+    inds = [1,2,6]
+    tr = TransSubDIDResult(r, m, r.coef[inds], r.vcov[inds, inds], inds)
+
+    @test coef(tr) === tr.coef
+    @test vcov(tr) === tr.vcov
+    @test nobs(tr) == nobs(r)
+    @test outcomename(tr) == outcomename(r)
+    @test coefnames(tr) == coefnames(r)[inds]
+    @test treatnames(tr) == treatnames(r)
+    @test treatcells(tr) == view(treatcells(r), 1:2)
+    @test ntreatcoef(tr) == 2
+    @test treatcoef(tr) == tr.coef[1:2]
+    @test treatvcov(tr) == tr.vcov[1:2,1:2]
+    @test weights(tr) == weights(r)
+    @test parent(tr) === r
+    @test responsename(tr) == responsename(r)
+    @test coefinds(tr) === tr.coefinds
+    @test dof_residual(tr) == dof_residual(r)
+
+    @test_throws BoundsError TransSubDIDResult(r, m, r.coef[1:2], r.vcov[1:2,1:2], 1:7)
+    @test_throws ArgumentError TransSubDIDResult(r, m, r.coef[1:2], r.vcov[1:2,1:2], [6,1])
+end
+
+@testset "lincom" begin
+    r = TestResult(2, 2)
+    m = reshape(1:36, 6, 6)
+    tr = lincom(r, m)
+    @test coef(tr) == m * r.coef
+    @test vcov(tr) == m * r.vcov * m'
+
+    tr = lincom(r, m, nothing)
+    @test coef(tr) == m * r.coef
+    @test vcov(tr) == m * r.vcov * m'
+    @test tr isa TransformedDIDResult
+
+    m = reshape(1:18, 3, 6)
+    inds = [1,2,6]
+    tr = lincom(r, m, inds)
+    @test coef(tr) == m * r.coef
+    @test vcov(tr) == m * r.vcov * m'
+
+    m1 = reshape(1:15, 3, 5)
+    @test_throws DimensionMismatch lincom(r, m1)
+    @test_throws DimensionMismatch lincom(r, m1, 1:3)
+
+    @test_throws ArgumentError lincom(r, m)
+    @test_throws ArgumentError lincom(r, m, 1:6)
+end
+
+@testset "rescale" begin
+    r = TestResult(2, 2)
+    scale = fill(2, 6)
+    m = Diagonal(scale)
+    tr = rescale(r, scale)
+    @test coef(tr) == m * r.coef
+    @test vcov(tr) == m * r.vcov * m'
+
+    tr = rescale(r, scale, nothing)
+    @test coef(tr) == m * r.coef
+    @test vcov(tr) == m * r.vcov * m'
+    @test tr isa TransformedDIDResult
+
+    scale = fill(2, 3)
+    m = Diagonal(scale)
+    inds = [1,2,6]
+    tr = rescale(r, scale, inds)
+    @test coef(tr) == m * r.coef[inds]
+    @test vcov(tr) == m * r.vcov[inds,inds] * m'
+
+    tr = rescale(r, :rel=>identity)
+    @test coef(tr) == r.treatcells.rel.*r.coef[1:4]
+    m = Diagonal(r.treatcells.rel)
+    @test vcov(tr) == m * r.vcov[1:4,1:4] * m'
+
+    tr = rescale(r, :rel=>identity, 1:3)
+    @test coef(tr) == r.treatcells.rel[1:3].*r.coef[1:3]
+    m = Diagonal(r.treatcells.rel[1:3])
+    @test vcov(tr) == m * r.vcov[1:3,1:3] * m'
 end

@@ -29,29 +29,29 @@ function VecColumnTable(columns::Vector{AbstractVector}, names::Vector{Symbol})
     return VecColumnTable(columns, names, lookup)
 end
 
-function VecColumnTable(data, esample::Union{BitVector, Nothing}=nothing)
+function VecColumnTable(data, subset=nothing)
     Tables.istable(data) || throw(ArgumentError("input data is not Tables.jl-compatible"))
     names = collect(Tables.columnnames(data))
     ncol = length(names)
     columns = Vector{AbstractVector}(undef, ncol)
     cols = Tables.columns(data)
-    if esample === nothing
+    if subset === nothing
         @inbounds for i in keys(names)
             columns[i] = Tables.getcolumn(cols, i)
         end
     else
         @inbounds for i in keys(names)
-            columns[i] = view(Tables.getcolumn(cols, i), esample)
+            columns[i] = view(Tables.getcolumn(cols, i), subset)
         end
     end
     return VecColumnTable(columns, names)
 end
 
-function VecColumnTable(cols::VecColumnTable, esample::Union{BitVector, Nothing}=nothing)
-    esample === nothing && return cols
+function VecColumnTable(cols::VecColumnTable, subset=nothing)
+    subset === nothing && return cols
     columns = similar(_columns(cols))
     @inbounds for i in keys(columns)
-        columns[i] = view(cols[i], esample)
+        columns[i] = view(cols[i], subset)
     end
     return VecColumnTable(columns, _names(cols), _lookup(cols))
 end
@@ -110,6 +110,8 @@ function Base.:(==)(x::VecColumnTable, y::VecColumnTable)
     end
     return eq
 end
+
+Base.view(cols::VecColumnTable, I) = VecColumnTable(cols, I)
 
 Base.show(io::IO, cols::VecColumnTable) = print(io, nrow(cols), '×', ncol(cols), " VecColumnTable")
 
@@ -220,3 +222,113 @@ function Base.sort!(cols::VecColumnTable; @nospecialize(kwargs...))
         col .= col[p]
     end
 end
+
+"""
+    apply(d, by::Pair)
+    apply(d, bys::Pair...)
+
+Apply a function elementwise to the specified column(s)
+in a Tables.jl-compatical table `d` and return the result.
+
+Depending on the argument(s) accepted by a function `f`,
+it is specified with argument `by` as either `column_index => f` or `column_indices => f`
+where `column_index` is either a `Symbol` or `Int` for a column in `d`
+and `column_indices` is an iterable collection of such indices for multiple columns.
+`f` is applied elementwise to each specified column
+to obtain an array of returned values.
+If multiple `Pair`s are provided,
+only the first `Pair` is applied and the rest of them are ignored.
+"""
+apply(d, by::Pair{Symbol,<:Function}) = by[2].(Tables.getcolumn(d, by[1]))
+apply(d, by::Pair) = by[2].((Tables.getcolumn(d, c) for c in by[1])...)
+apply(d, bys::Pair...) = apply(d, bys[1])
+
+"""
+    apply_and!(inds::BitVector, d, by::Pair)
+    apply_and!(inds::BitVector, d, bys::Pair...)
+
+Apply a function that returns `true` or `false` elementwise
+to the specified column(s) in a Tables.jl-compatical table `d`
+and then update the elements in `inds` through bitwise `and` with the returned array.
+See also [`apply_and`](@ref).
+
+The way a function is specified is the same as how it is done with [`apply`](@ref).
+If multiple `Pair`s are provided,
+`inds` are updated for each returned array through bitwise `and`.
+"""
+function apply_and!(inds::BitVector, d, by::Pair{Symbol,<:Function})
+    inds .&= by[2].(Tables.getcolumn(d, by[1]))
+end
+
+function apply_and!(inds::BitVector, d, by::Pair)
+    inds .&= by[2].((Tables.getcolumn(d, c) for c in by[1])...)
+end
+
+function apply_and!(inds::BitVector, d, bys::Pair...)
+    for by in bys
+        apply_and!(inds, d, by)
+    end
+    return inds
+end
+
+"""
+    apply_and(d, by::Pair)
+    apply_and(d, bys::Pair...)
+
+Apply a function that returns `true` or `false` elementwise
+to the specified column(s) in a Tables.jl-compatical table `d` and return the result.
+See also [`apply_and!`](@ref).
+
+The way a function is specified is the same as how it is done with [`apply`](@ref).
+If multiple `Pair`s are provided,
+the returned array is obtained by combining
+arrays returned by each function through bitwise `and`.
+"""
+apply_and(d, by::Pair) = apply(d, by)
+
+function apply_and(d, bys::Pair...)
+    inds = apply(d, bys[1])
+    apply_and!(inds, d, bys[2:end]...)
+    return inds
+end
+
+"""
+    TableIndexedMatrix{T,M,R,C} <: AbstractMatrix{T}
+
+Matrix with row and column indices that can be selected
+based on row values in a Tables.jl-compatible table respectively.
+This is useful when how elements are stored into the matrix
+are determined by the rows of the tables.
+
+# Parameters
+- `T`: element type of the matrix.
+- `M`: type of the matrix.
+- `R`: type of the table paired with the row indices.
+- `C`: type of the table paired with the column indices.
+
+# Fields
+- `m::M`: the matrix that stores the elements.
+- `r::R`: a table with the same number of rows with `m`.
+- `c::C`: a table of which the number of rows is equal to the number of columns of `m`.
+"""
+struct TableIndexedMatrix{T,M,R,C} <: AbstractMatrix{T}
+    m::M
+    r::R
+    c::C
+    function TableIndexedMatrix(m::AbstractMatrix, r, c)
+        Tables.istable(r) ||
+            throw(ArgumentError("r is not Tables.jl-compatible"))
+        Tables.istable(c) ||
+            throw(ArgumentError("c is not Tables.jl-compatible"))
+        size(m, 1) == Tables.rowcount(r) ||
+            throw(DimensionMismatch("m and r do not have the same number of rows"))
+        size(m, 2) == Tables.rowcount(c) || throw(DimensionMismatch(
+            "the number of columns of m does not match the number of rows of c"))
+        return new{eltype(m), typeof(m), typeof(r), typeof(c)}(m, r, c)
+    end
+end
+
+Base.size(tm::TableIndexedMatrix) = size(tm.m)
+Base.getindex(tm::TableIndexedMatrix, i) = tm.m[i]
+Base.getindex(tm::TableIndexedMatrix, i, j) = tm.m[i,j]
+Base.IndexStyle(tm::TableIndexedMatrix) = IndexStyle(tm.m)

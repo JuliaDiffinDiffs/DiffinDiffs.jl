@@ -48,6 +48,10 @@
     cols4 = VecColumnTable(cols2, esample)
     @test cols4 == cols3
 
+    @test VecColumnTable(cols2, :) == view(cols2, :) == cols2
+    @test VecColumnTable(cols2, 1:3280) == view(cols2, 1:3280) == cols2
+    @test VecColumnTable(cols2, [2,1]) == view(cols2, [2,1])
+
     @test cols[1] === hrs.wave
     @test cols[:] == cols[1:2] == cols[[1,2]] == cols[trues(2)] == [hrs.wave, hrs.oop_spend]
     @test cols[:wave] === cols[1]
@@ -171,4 +175,43 @@ end
     @test cols.wave == hrs.wave[hrs.wave.!=11]
     @test eltype(cols.wave) == Int
     @test subcolumns(df, [:wave, :male], df.wave.!=11) == cols
+end
+
+@testset "apply apply_and" begin
+    cols = VecColumnTable((a=collect(1:10), b=collect(2:11)))
+    @test apply(cols, :a=>identity) == cols.a
+    @test apply(cols, 2=>identity) == cols.b
+    @test apply(cols, (:a,2)=>(x,y)->x+y) == cols.a .+ cols.b
+    @test apply(cols, :a=>identity, :b=>identity) == cols.a
+
+    inds = trues(10)
+    apply_and!(inds, cols, :a=>isodd)
+    @test inds == isodd.(cols.a)
+    inds = trues(10)
+    apply_and!(inds, cols, [1,:b]=>(x,y)->isodd(x)&&isodd(y))
+    @test inds == falses(10)
+    inds = trues(10)
+    apply_and!(inds, cols, :a=>isodd, :a=>isodd)
+    @test inds == isodd.(cols.a)
+    inds = trues(10)
+    apply_and!(inds, cols, :a=>isodd, :b=>isodd)
+    @test inds == falses(10)
+
+    @test apply_and(cols, :a=>isodd) == isodd.(cols.a)
+    @test apply_and(cols, :a=>isodd, :b=>isodd) == falses(10)
+end
+
+@testset "TableIndexedMatrix" begin
+    m = reshape(1:100, 10, 10)
+    r = VecColumnTable((a=collect(1:10),))
+    c = VecColumnTable((b=collect(1:10),))
+    tm = TableIndexedMatrix(m, r, c)
+    @test size(tm) == size(m)
+    @test tm[1] == 1
+    @test tm[1, 1] == 1
+    @test IndexStyle(tm) == IndexLinear()
+
+    @test_throws ArgumentError TableIndexedMatrix(m, 1:10, c)
+    r1 = VecColumnTable((a=collect(1:11),))
+    @test_throws DimensionMismatch TableIndexedMatrix(m, r1, c)
 end

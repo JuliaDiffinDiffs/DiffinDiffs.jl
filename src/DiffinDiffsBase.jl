@@ -1,9 +1,11 @@
 module DiffinDiffsBase
 
+using Base: @propagate_inbounds
 using CSV
 using CodecZlib: GzipDecompressorStream
 using Combinatorics: combinations
 using DataAPI: refarray, refpool
+using LinearAlgebra: Diagonal
 using MacroTools: @capture, isexpr, postwalk
 using Missings: disallowmissing
 using PooledArrays: _label
@@ -14,7 +16,7 @@ using StatsModels: Schema
 using Tables
 using Tables: AbstractColumns, table, istable, columnnames, getcolumn
 
-import Base: ==, show, union
+import Base: ==, show, parent, view
 import Base: eltype, firstindex, lastindex, getindex, iterate, length, sym_in
 import StatsBase: coef, vcov, responsename, coefnames, weights, nobs, dof_residual
 import StatsModels: concrete_term, schema, termvars
@@ -31,6 +33,10 @@ export cb,
        VecColumnTable,
        VecColsRow,
        subcolumns,
+       apply,
+       apply_and!,
+       apply_and,
+       TableIndexedMatrix,
 
        TreatmentSharpness,
        SharpDesign,
@@ -82,9 +88,21 @@ export cb,
        did,
        didspec,
        @did,
+       AbstractDIDResult,
        DIDResult,
+       AggregatedDIDResult,
        outcomename,
-       treatnames
+       treatnames,
+       treatcells,
+       ntreatcoef,
+       treatcoef,
+       treatvcov,
+       coefinds,
+       SubDIDResult,
+       TransformedDIDResult,
+       TransSubDIDResult,
+       lincom,
+       rescale
 
 include("utils.jl")
 include("tables.jl")
