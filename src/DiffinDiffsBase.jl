@@ -10,7 +10,8 @@ using MacroTools: @capture, isexpr, postwalk
 using Missings: disallowmissing
 using PooledArrays: _label
 using Reexport
-using StatsBase: Weights, uweights
+using StatsBase: CoefTable, Weights, stderror, uweights
+using StatsFuns: tdistccdf, tdistinvcdf
 @reexport using StatsModels
 using StatsModels: Schema
 using Tables
@@ -18,13 +19,15 @@ using Tables: AbstractColumns, table, istable, columnnames, getcolumn
 
 import Base: ==, show, parent, view
 import Base: eltype, firstindex, lastindex, getindex, iterate, length, sym_in
-import StatsBase: coef, vcov, responsename, coefnames, weights, nobs, dof_residual
+import StatsBase: coef, vcov, confint, nobs, dof_residual, responsename, coefnames, weights,
+    coeftable
 import StatsModels: concrete_term, schema, termvars
 
 const TimeType = Int
 
 # Reexport objects from StatsBase
-export coef, vcov, responsename, coefnames, weights, nobs, dof_residual
+export coef, vcov, stderror, confint, nobs, dof_residual, responsename, coefnames, weights,
+    coeftable
 
 export cb,
        ≊,
@@ -91,6 +94,7 @@ export cb,
        AbstractDIDResult,
        DIDResult,
        AggregatedDIDResult,
+       vce,
        outcomename,
        treatnames,
        treatcells,
@@ -98,6 +102,8 @@ export cb,
        treatcoef,
        treatvcov,
        coefinds,
+       ncovariate,
+       agg,
        SubDIDResult,
        TransformedDIDResult,
        TransSubDIDResult,

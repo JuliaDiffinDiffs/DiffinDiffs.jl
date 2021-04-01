@@ -6,7 +6,8 @@ using DiffinDiffsBase: @fieldequal, unpack, @unpack, hastreat, parse_treat,
     isintercept, isomitsintercept, parse_intercept!,
     ncol, nrow,
     _f, _byid, groupargs, copyargs, pool, checkdata, groupterms, checkvars!, makeweights,
-    _totermset!, parse_didargs!, _treatnames, _bycells, treatindex, checktreatindex
+    _totermset!, parse_didargs!, _treatnames, _parse_bycells!, _parse_subset, _nselected,
+    treatindex, checktreatindex
 using LinearAlgebra: Diagonal
 using PooledArrays: PooledArray
 using StatsBase: Weights, UnitWeights

@@ -38,6 +38,7 @@ const PR = TestParallel(0)
 struct TestResult <: DIDResult
     coef::Vector{Float64}
     vcov::Matrix{Float64}
+    vce::Nothing
     nobs::Int
     dof_residual::Int
     yname::String
@@ -56,7 +57,7 @@ function TestResult(n1::Int, n2::Int)
     cnames = vcat(tnames, ["c"*string(i) for i in n1*n2+1:N])
     cinds = Dict(cnames .=> 1:N)
     tcells = VecColumnTable((rel=repeat(1:n1, inner=n2), c=repeat(1:n2, outer=n1)))
-    return TestResult(coef, coef.*coef', N, N-1, "y", cnames, cinds, tcells, :w)
+    return TestResult(coef, coef.*coef', nothing, N, N-1, "y", cnames, cinds, tcells, :w)
 end
 
 function result(::Type{TestDID}, nt::NamedTuple)

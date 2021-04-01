@@ -180,22 +180,24 @@ collect estimation results for difference-in-differences.
 # Interface definition
 | Required methods | Default definition | Brief description |
 |---|---|---|
-| `coef(r)` | `r.coef` | Vector of point estimates for all treatment coefficients and covariates |
+| `coef(r)` | `r.coef` | Vector of point estimates for all coefficients including covariates |
 | `vcov(r)` | `r.vcov` | Variance-covariance matrix for estimates in `coef` |
+| `vce(r)` | `r.vce` | Covariance estimator |
 | `nobs(r)` | `r.nobs` | Number of observations (table rows) involved in estimation |
 | `outcomename(r)` | `r.yname` | Name of the outcome variable |
-| `coefnames(r)` | `r.coefnames` | Names (`Vector{String}`) of all treatment coefficients and covariates |
-| `treatnames(r)` | `coefnames(r)[1:ntreatcoef(r)]` | Names (`Vector{String}`) of treatment coefficients |
+| `coefnames(r)` | `r.coefnames` | Names (`Vector{String}`) of all coefficients including covariates |
 | `treatcells(r)` | `r.treatcells` | Tables.jl-compatible tabular description of treatment coefficients in the order of `coefnames` (without covariates) |
+| `weights(r)` | `r.weights` | Column name of the weight variable (if specified) |
 | `ntreatcoef(r)` | `size(treatcells(r), 1)` | Number of treatment coefficients |
 | `treatcoef(r)` | `view(coef(r), 1:ntreatcoef(r))` | A view of treatment coefficients |
 | `treatvcov(r)` | `(N = ntreatcoef(r); view(vcov(r), 1:N, 1:N))` | A view of variance-covariance matrix for treatment coefficients |
-| `weights(r)` | `r.weights` | Column name of the weight variable (if specified) |
+| `treatnames(r)` | `coefnames(r)[1:ntreatcoef(r)]` | Names (`Vector{String}`) of treatment coefficients |
 | **Optional methods** | | |
 | `parent(r)` | `r.parent` | Result object from which `r` is generated |
+| `dof_residual(r)` | `r.dof_residual` | Residual degrees of freedom |
 | `responsename(r)` | `outcomename(r)` | Name of the outcome variable |
 | `coefinds(r)` | `r.coefinds` | Lookup table (`Dict{String,Int}`) from `coefnames` to integer indices (for retrieving estimates by name) |
-| `dof_residual(r)` | `r.dof_residual` | Residual degrees of freedom |
+| `ncovariate(r)` | `length(coef(r)) - ntreatcoef(r)` | Number of covariate coefficients |
 """
 abstract type AbstractDIDResult <: StatisticalModel end
 
@@ -324,6 +326,27 @@ through bit-wise `and`.
 end
 
 """
+    vce(r::AbstractDIDResult)
+
+Return the covariance estimator used to estimate variance-covariance matrix.
+"""
+vce(r::AbstractDIDResult) = r.vce
+
+"""
+    confint(r::AbstractDIDResult; level::Real=0.95)
+
+Return a confidence interval for each coefficient estimate.
+The returned object is of type `Tuple{Vector{Float64}, Vector{Float64}}`
+where the first vector collects the lower bounds for all intervals
+and the second one collects the upper bounds.
+"""
+function confint(r::AbstractDIDResult; level::Real=0.95)
+    scale = tdistinvcdf(dof_residual(r), 1 - (1 - level) / 2)
+    se = stderror(r)
+    return coef(r) .- scale .* se, coef(r) .+ scale .* se
+end
+
+"""
     nobs(r::AbstractDIDResult)
 
 Return the number of observations (table rows) involved in estimation.
@@ -346,19 +369,20 @@ Return a vector of coefficient names.
 coefnames(r::AbstractDIDResult) = r.coefnames
 
 """
-    treatnames(r::AbstractDIDResult)
-
-Return a vector of names for treatment coefficients.
-"""
-treatnames(r::AbstractDIDResult) = coefnames(r)[1:ntreatcoef(r)]
-
-"""
     treatcells(r::AbstractDIDResult)
 
 Return a Tables.jl-compatible tabular description of treatment coefficients
 in the order of coefnames (without covariates).
 """
 treatcells(r::AbstractDIDResult) = r.treatcells
+
+"""
+    weights(r::AbstractDIDResult)
+
+Return the column name of the weight variable.
+Return `nothing` if `weights` is not specified for estimation.
+"""
+weights(r::AbstractDIDResult) = r.weightname
 
 """
     ntreatcoef(r::AbstractDIDResult)
@@ -382,12 +406,11 @@ Return a view of variance-covariance matrix for treatment coefficients.
 treatvcov(r::AbstractDIDResult) = (N = ntreatcoef(r); view(vcov(r), 1:N, 1:N))
 
 """
-    weights(r::AbstractDIDResult)
+    treatnames(r::AbstractDIDResult)
 
-Return the column name of the weight variable.
-Return `nothing` if `weights` is not specified for estimation.
+Return a vector of names for treatment coefficients.
 """
-weights(r::AbstractDIDResult) = r.weightname
+treatnames(r::AbstractDIDResult) = coefnames(r)[1:ntreatcoef(r)]
 
 """
     parent(r::AbstractDIDResult)
@@ -395,6 +418,13 @@ weights(r::AbstractDIDResult) = r.weightname
 Return the `AbstractDIDResult` from which `r` is generated.
 """
 parent(r::AbstractDIDResult) = r.parent
+
+"""
+    dof_residual(r::AbstractDIDResult)
+
+Return the residual degrees of freedom.
+"""
+dof_residual(r::AbstractDIDResult) = r.dof_residual
 
 """
     responsename(r::AbstractDIDResult)
@@ -413,11 +443,35 @@ for retrieving estimates by name.
 coefinds(r::AbstractDIDResult) = r.coefinds
 
 """
-    dof_residual(r::AbstractDIDResult)
+    ncovariate(r::AbstractDIDResult)
 
-Return the residual degrees of freedom.
+Return the number of covariate coefficients.
 """
-dof_residual(r::AbstractDIDResult) = r.dof_residual
+ncovariate(r::AbstractDIDResult) = length(coef(r)) - ntreatcoef(r)
+
+"""
+    agg(r::DIDResult)
+
+Aggregate difference-in-differences estimates
+and return a subtype of [`AggregatedDIDResult`](@ref).
+The implementation depends on the type of `r`.
+"""
+agg(r::DIDResult) = error("agg is not implemented for $(typeof(r))")
+
+function coeftable(r::AbstractDIDResult; level::Real=0.95)
+    cf = coef(r)
+    se = stderror(r)
+    zs = cf ./ se
+    pv = 2 .* tdistccdf.(dof_residual(r), abs.(zs))
+    cil, ciu = confint(r)
+    cnames = coefnames(r)
+    levstr = isinteger(level*100) ? string(Integer(level*100)) : string(level*100)
+    return CoefTable(Vector[cf, se, zs, pv, cil, ciu],
+        ["Estimate","Std. Error","t", "Pr(>|t|)", "Lower $levstr%", "Upper $levstr%"],
+        ["$(cnames[i])" for i = 1:length(cf)], 4, 3)
+end
+
+show(io::IO, r::AbstractDIDResult) = show(io, coeftable(r))
 
 """
     _treatnames(treatcells)
@@ -440,12 +494,13 @@ function _treatnames(treatcells)
     return names
 end
 
-function _parse_bys!(bycols::Vector, cells::VecColumnTable, by::Pair{Symbol})
+# Helper functions that parse the bys option for agg
+function _parse_bycells!(bycols::Vector, cells::VecColumnTable, by::Pair{Symbol})
     lookup = getfield(cells, :lookup)
-    _parse_bys!(bycols, cells, lookup[by[1]]=>by[2])
+    _parse_bycells!(bycols, cells, lookup[by[1]]=>by[2])
 end
 
-function _parse_bys!(bycols::Vector, cells::VecColumnTable, by::Pair{Int})
+function _parse_bycells!(bycols::Vector, cells::VecColumnTable, by::Pair{Int})
     if by[2] isa Function
         bycols[by[1]] = apply(cells, by[1]=>by[2])
     else
@@ -453,23 +508,38 @@ function _parse_bys!(bycols::Vector, cells::VecColumnTable, by::Pair{Int})
     end
 end
 
-function _parse_bys!(bycols::Vector, cells::VecColumnTable, bys)
+function _parse_bycells!(bycols::Vector, cells::VecColumnTable, bys)
     eltype(bys) <: Pair || throw(ArgumentError("unaccepted type of bys"))
     for by in bys
-        _parse_bys!(bycols, cells, by)
+        _parse_bycells!(bycols, cells, by)
     end
 end
 
-function _bycells(r::DIDResult, names, bys)
-    tcells = treatcells(r)
-    bynames = names === nothing ? getfield(tcells, :names) : collect(Symbol, names)
-    bycols = AbstractVector[getcolumn(tcells, n) for n in bynames]
-    bys === nothing || _parse_bys!(bycols, tcells, bys)
-    return VecColumnTable(bycols, bynames)
+_parse_bycells!(bycols::Vector, cells::VecColumnTable, bys::Nothing) = nothing
+
+# Helper function for _parse_subset
+function _fill_x!(r::AbstractDIDResult, inds::BitVector)
+    nx = ncovariate(r)
+    nx > 0 && push!(inds, (false for i in 1:nx)...)
 end
+
+# Helper functions for handling subset option that may involves Pairs
+_parse_subset(r::AbstractDIDResult, by::Pair, fill_x::Bool) =
+    (inds = apply(treatcells(r), by); fill_x && _fill_x!(r, inds); return inds)
+
+function _parse_subset(r::AbstractDIDResult, inds, fill_x::Bool)
+    eltype(inds) <: Pair || return inds
+    inds = apply_and(treatcells(r), inds...)
+    fill_x && _fill_x!(r, inds)
+    return inds
+end
+
+_parse_subset(r::AbstractDIDResult, ::Colon, fill_x::Bool) =
+    fill_x ? (1:length(coef(r))) : 1:ntreatcoef(r)
 
 # Count number of elements selected by indices `inds`
 _nselected(inds) = eltype(inds) == Bool ? sum(inds) : length(inds)
+_nselected(::Colon) = throw(ArgumentError("cannot accept Colon (:)"))
 
 """
     treatindex(ntcoef::Int, I)
@@ -536,17 +606,18 @@ from `r` at the given index or indices `inds` without constructing a copied subs
 
 coef(r::SubDIDResult) = view(coef(parent(r)), r.inds)
 vcov(r::SubDIDResult) = view(vcov(parent(r)), r.inds, r.inds)
+vce(r::SubDIDResult) = vce(parent(r))
 nobs(r::SubDIDResult) = nobs(parent(r))
 outcomename(r::SubDIDResult) = outcomename(parent(r))
 coefnames(r::SubDIDResult) = view(coefnames(parent(r)), r.inds)
-treatnames(r::SubDIDResult) = view(treatnames(parent(r)), r.treatinds)
 treatcells(r::SubDIDResult) = view(treatcells(parent(r)), r.treatinds)
+weights(r::SubDIDResult) = weights(parent(r))
 ntreatcoef(r::SubDIDResult) = _nselected(r.treatinds)
 treatcoef(r::SubDIDResult) = view(treatcoef(parent(r)), r.treatinds)
 treatvcov(r::SubDIDResult) = view(treatvcov(parent(r)), r.treatinds, r.treatinds)
-weights(r::SubDIDResult) = weights(parent(r))
-responsename(r::SubDIDResult) = responsename(parent(r))
+treatnames(r::SubDIDResult) = view(treatnames(parent(r)), r.treatinds)
 dof_residual(r::SubDIDResult) = dof_residual(parent(r))
+responsename(r::SubDIDResult) = responsename(parent(r))
 
 """
     TransformedDIDResult{P,M} <: AbstractDIDResult
@@ -607,19 +678,21 @@ end
 
 const TransOrTransSub = Union{TransformedDIDResult, TransSubDIDResult}
 
+vce(r::TransOrTransSub) = vce(parent(r))
 nobs(r::TransOrTransSub) = nobs(parent(r))
 outcomename(r::TransOrTransSub) = outcomename(parent(r))
 coefnames(r::TransformedDIDResult) = coefnames(parent(r))
 coefnames(r::TransSubDIDResult) = view(coefnames(parent(r)), r.inds)
-treatnames(r::TransOrTransSub) = treatnames(parent(r))
 treatcells(r::TransformedDIDResult) = treatcells(parent(r))
 treatcells(r::TransSubDIDResult) = view(treatcells(parent(r)), r.treatinds)
+weights(r::TransOrTransSub) = weights(parent(r))
 ntreatcoef(r::TransformedDIDResult) = ntreatcoef(parent(r))
 ntreatcoef(r::TransSubDIDResult) = _nselected(r.treatinds)
-weights(r::TransOrTransSub) = weights(parent(r))
+treatnames(r::TransformedDIDResult) = treatnames(parent(r))
+treatnames(r::TransSubDIDResult) = view(treatnames(parent(r)), r.treatinds)
+dof_residual(r::TransOrTransSub) = dof_residual(parent(r))
 responsename(r::TransOrTransSub) = responsename(parent(r))
 coefinds(r::TransformedDIDResult) = coefinds(parent(r))
-dof_residual(r::TransOrTransSub) = dof_residual(parent(r))
 
 """
     lincom(r::AbstractDIDResult, linmap::AbstractMatrix{<:Real}, subset=nothing)
@@ -643,13 +716,14 @@ function lincom(r::AbstractDIDResult, linmap::AbstractMatrix{<:Real}, subset::No
 end
 
 function lincom(r::AbstractDIDResult, linmap::AbstractMatrix{<:Real}, subset)
+    inds = _parse_subset(r, subset, true)
     nr, nc = size(linmap)
     length(coef(r)) == nc ||
         throw(DimensionMismatch("linmap must have $(length(coef(r))) columns"))
-    _nselected(subset) == nr || throw(ArgumentError("subset must select $nr elements"))
+    _nselected(inds) == nr || throw(ArgumentError("subset must select $nr elements"))
     cf = linmap * coef(r)
     v = linmap * vcov(r) * linmap'
-    return TransSubDIDResult(r, linmap, cf, v, subset)
+    return TransSubDIDResult(r, linmap, cf, v, inds)
 end
 
 """
@@ -684,21 +758,25 @@ function rescale(r::AbstractDIDResult, scale::AbstractVector{<:Real}, subset::No
 end
 
 function rescale(r::AbstractDIDResult, scale::AbstractVector{<:Real}, subset)
-    N1 = length(scale)
-    _nselected(subset) == N1 || throw(ArgumentError("subset must select $N1 elements"))
-    cf = scale .* view(coef(r), subset)
-    v = Matrix{Float64}(undef, N1, N1)
-    pv = view(vcov(r), subset, subset)
-    @inbounds for j in 1:N1
-        for i in 1:N1
+    inds = _parse_subset(r, subset, true)
+    N = length(scale)
+    _nselected(inds) == N || throw(ArgumentError("subset must select $N elements"))
+    cf = scale .* view(coef(r), inds)
+    v = Matrix{Float64}(undef, N, N)
+    pv = view(vcov(r), inds, inds)
+    @inbounds for j in 1:N
+        for i in 1:N
             v[i, j] = scale[i]*scale[j]*pv[i, j]
         end
     end
-    return TransSubDIDResult(r, Diagonal(scale), cf, v, subset)
+    return TransSubDIDResult(r, Diagonal(scale), cf, v, inds)
 end
 
 rescale(r::AbstractDIDResult, by::Pair, subset::Nothing=nothing) =
     rescale(r, apply(treatcells(r), by), 1:ntreatcoef(r))
 
-rescale(r::AbstractDIDResult, by::Pair, subset) =
-    rescale(r, apply(view(treatcells(r), subset), by), subset)
+function rescale(r::AbstractDIDResult, by::Pair, subset)
+    inds = _parse_subset(r, subset, true)
+    tinds = treatindex(ntreatcoef(r), inds)
+    return rescale(r, apply(view(treatcells(r), tinds), by), inds)
+end
