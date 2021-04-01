@@ -22,20 +22,20 @@ end
     
     df = DataFrame(hrs)
     df = df[(df.wave.==7).|((df.wave.==8).&(df.wave_hosp.==8)), :]
-    nobs = size(df, 1)
-    nt = merge(nt, (data=df, esample=trues(nobs), xterms=TermSet(fe(:hhidpn))))
+    N = size(df, 1)
+    nt = merge(nt, (data=df, esample=trues(N), xterms=TermSet(fe(:hhidpn))))
     kept = df.wave_hosp.==8
     @test checkfes!(nt...) == (xterms=TermSet(InterceptTerm{false}()), esample=kept,
         fes=[FixedEffect(df.hhidpn)], fenames=[:fe_hhidpn], has_fe_intercept=true,
-        nsingle=nobs-sum(kept))
+        nsingle=N-sum(kept))
 
     df = df[df.wave.==7, :]
-    nobs = size(df, 1)
-    nt = merge(nt, (data=df, esample=trues(nobs), xterms=TermSet(fe(:hhidpn))))
+    N = size(df, 1)
+    nt = merge(nt, (data=df, esample=trues(N), xterms=TermSet(fe(:hhidpn))))
     @test_throws ErrorException checkfes!(nt...)
 
     @test_throws ErrorException CheckFEs()(nt)
-    nt = merge(nt, (drop_singletons=false, esample=trues(nobs),
+    nt = merge(nt, (drop_singletons=false, esample=trues(N),
         xterms=TermSet(fe(:hhidpn))))
     @test CheckFEs()(nt) == merge(nt, (xterms=TermSet(InterceptTerm{false}()),
         fes=[FixedEffect(df.hhidpn)], fenames=[:fe_hhidpn], has_fe_intercept=true, nsingle=0))
@@ -43,27 +43,27 @@ end
 
 @testset "MakeFESolver" begin
     hrs = exampledata("hrs")
-    nobs = size(hrs, 1)
+    N = size(hrs, 1)
     fes = FixedEffect[FixedEffect(hrs.hhidpn)]
     fenames = [:fe_hhidpn]
-    nt = (fes=fes, weights=uweights(nobs), esample=trues(nobs), default(MakeFESolver())...)
-    ret = makefesolver(nt...)
+    nt = (fes=fes, weights=uweights(N), esample=trues(N), default(MakeFESolver())...)
+    ret = makefesolver!(nt...)
     @test ret.feM isa FixedEffects.FixedEffectSolverCPU{Float64}
     nt = merge(nt, (fes=FixedEffect[],))
-    @test makefesolver(nt...) == (feM=nothing,)
+    @test makefesolver!(nt...) == (feM=nothing, fes=FixedEffect[])
     @test MakeFESolver()(nt) == merge(nt, (feM=nothing,))
 end
 
 @testset "MakeYXCols" begin
     hrs = exampledata("hrs")
-    nobs = size(hrs, 1)
+    N = size(hrs, 1)
     t1 = InterceptTerm{true}()
-    nt = (data=hrs, weights=uweights(nobs), esample=trues(nobs), feM=nothing,
+    nt = (data=hrs, weights=uweights(N), esample=trues(N), feM=nothing,
         has_fe_intercept=false, default(MakeYXCols())...)
     ret = makeyxcols(nt..., TermSet(term(:oop_spend), term(1)))
     @test ret.yxterms[term(:oop_spend)] isa ContinuousTerm
     @test ret.yxcols == Dict(ret.yxterms[term(:oop_spend)]=>hrs.oop_spend,
-        t1=>ones(nobs))
+        t1=>ones(N))
     
     @test ret.nfeiterations === nothing
     @test ret.feconverged === nothing
@@ -80,8 +80,8 @@ end
     ret = makeyxcols(nt..., TermSet(term(:oop_spend), term(:riearnsemp), term(:male)))
     @test ret.yxcols == Dict(ret.yxterms[term(:oop_spend)]=>hrs.oop_spend.*sqrt.(wt),
         ret.yxterms[term(:riearnsemp)]=>hrs.riearnsemp.*sqrt.(wt),
-        ret.yxterms[term(:male)]=>reshape(hrs.male.*sqrt.(wt), nobs),
-        t1=>reshape(sqrt.(wt), nobs))
+        ret.yxterms[term(:male)]=>reshape(hrs.male.*sqrt.(wt), N),
+        t1=>reshape(sqrt.(wt), N))
 
     df = DataFrame(hrs)
     df.riearnsemp[1] = NaN
@@ -92,33 +92,33 @@ end
     @test_throws ErrorException makeyxcols(nt..., TermSet(term(:oop_spend), term(:spouse)))
 
     df = DataFrame(hrs)
-    x = randn(nobs)
+    x = randn(N)
     df.x = x
-    wt = uweights(nobs)
+    wt = uweights(N)
     fes = [FixedEffect(df.hhidpn)]
     feM = AbstractFixedEffectSolver{Float64}(fes, wt, Val{:cpu}, Threads.nthreads())
     nt = merge(nt, (data=df, weights=wt, feM=feM, has_fe_intercept=true))
     ret = makeyxcols(nt..., TermSet(term(:oop_spend), InterceptTerm{false}(), term(:x)))
-    resids = reshape(copy(df.oop_spend), nobs, 1)
+    resids = reshape(copy(df.oop_spend), N, 1)
     _feresiduals!(resids, feM, 1e-8, 10000)
     resids .*= sqrt.(wt)
-    @test ret.yxcols[ret.yxterms[term(:oop_spend)]] == reshape(resids, nobs)
+    @test ret.yxcols[ret.yxterms[term(:oop_spend)]] == reshape(resids, N)
     # Verify input data are not modified
     @test df.oop_spend == hrs.oop_spend
     @test df.x == x
 
     df = DataFrame(hrs)
     esample = df.rwthh.> 0
-    nobs = sum(esample)
+    N = sum(esample)
     wt = Weights(hrs.rwthh[esample])
     fes = [FixedEffect(df.hhidpn[esample])]
     feM = AbstractFixedEffectSolver{Float64}(fes, wt, Val{:cpu}, Threads.nthreads())
     nt = merge(nt, (data=df, esample=esample, weights=wt, feM=feM, has_fe_intercept=true))
     ret = makeyxcols(nt..., TermSet(term(:oop_spend), InterceptTerm{false}()))
-    resids = reshape(df.oop_spend[esample], nobs, 1)
+    resids = reshape(df.oop_spend[esample], N, 1)
     _feresiduals!(resids, feM, 1e-8, 10000)
     resids .*= sqrt.(wt)
-    @test ret.yxcols == Dict(ret.yxterms[term(:oop_spend)]=>reshape(resids, nobs))
+    @test ret.yxcols == Dict(ret.yxterms[term(:oop_spend)]=>reshape(resids, N))
     @test ret.nfeiterations isa Int
     @test ret.feconverged
     # Verify input data are not modified
@@ -142,12 +142,11 @@ end
 
 @testset "MakeTreatCols" begin
     hrs = exampledata("hrs")
-    nobs = size(hrs, 1)
+    N = size(hrs, 1)
     tr = dynamic(:wave, -1)
     pr = nevertreated(11)
     nt = (data=hrs, treatname=:wave_hosp, treatintterms=TermSet(), feM=nothing,
-        weights=uweights(nobs), esample=trues(nobs),
-        default(MakeTreatCols())...)
+        weights=uweights(N), esample=trues(N), default(MakeTreatCols())...)
     ret = maketreatcols(nt..., typeof(tr), tr.time, IdDict(-1=>1), IdDict{TimeType,Int}(11=>1))
     @test size(ret.cells) == (20, 2)
     @test length(ret.rows) == 20
@@ -218,14 +217,14 @@ end
 
     df = DataFrame(hrs)
     esample = df.rwthh.> 0
-    nobs = sum(esample)
+    N = sum(esample)
     wt = Weights(hrs.rwthh[esample])
     fes = [FixedEffect(df.hhidpn[esample])]
     feM = AbstractFixedEffectSolver{Float64}(fes, wt, Val{:cpu}, Threads.nthreads())
     nt = merge(nt, (data=df, feM=feM, weights=wt, esample=esample,
         treatintterms=TermSet(), cohortinteracted=true))
     ret = maketreatcols(nt..., typeof(tr), tr.time, IdDict(-1=>1), IdDict{TimeType,Int}(11=>1))
-    col = reshape(col[esample], nobs, 1)
+    col = reshape(col[esample], N, 1)
     defaults = (default(MakeTreatCols())...,)
     _feresiduals!(col, feM, defaults[2:3]...)
     @test ret.treatcols[1] == (col.*sqrt.(wt))[:]
@@ -253,16 +252,16 @@ end
 
 @testset "SolveLeastSquares" begin
     hrs = exampledata("hrs")
-    nobs = size(hrs, 1)
+    N = size(hrs, 1)
     df = DataFrame(hrs)
-    df.t2 = fill(2.0, nobs)
+    df.t2 = fill(2.0, N)
     t1 = InterceptTerm{true}()
     t0 = InterceptTerm{false}()
     tr = dynamic(:wave, -1)
     pr = nevertreated(11)
     yxterms = Dict([x=>apply_schema(x, schema(x, df), StatisticalModel)
         for x in (term(:oop_spend), t1, term(:t2), t0, term(:male), term(:spouse))])
-    yxcols0 = Dict(yxterms[term(:oop_spend)]=>hrs.oop_spend, t1=>ones(nobs, 1),
+    yxcols0 = Dict(yxterms[term(:oop_spend)]=>hrs.oop_spend, t1=>ones(N, 1),
         yxterms[term(:male)]=>hrs.male, yxterms[term(:spouse)]=>hrs.spouse)
     col0 = convert(Vector{Float64}, (hrs.wave_hosp.==10).&(hrs.wave.==10))
     col1 = convert(Vector{Float64}, (hrs.wave_hosp.==10).&(hrs.wave.==11))
@@ -298,7 +297,7 @@ end
         InterceptTerm{true}()]
 
     # Test colliner xterms are handled
-    yxcols1 = Dict(yxterms[term(:oop_spend)]=>hrs.oop_spend, t1=>ones(nobs),
+    yxcols1 = Dict(yxterms[term(:oop_spend)]=>hrs.oop_spend, t1=>ones(N),
         yxterms[term(:t2)]=>df.t2)
     nt1 = merge(nt, (xterms=TermSet(term(1), term(:t2)), yxcols=yxcols1))
     ret1 = solveleastsquares!(nt1...)
@@ -306,7 +305,7 @@ end
     @test sum(ret1.basecols) == 3
 
     treatcells1 = VecColumnTable((rel=[0, 1, 1, 1], wave_hosp=[10, 10, 0, 1]))
-    treatcols1 = push!(copy(treatcols0), ones(nobs), ones(nobs))
+    treatcols1 = push!(copy(treatcols0), ones(N), ones(N))
     # basecol is rather conservative in dropping collinear columns
     # If there are three constant columns, it may be that only one of them gets dropped
     # Also need to have at least one term in xterms for basecol to work
@@ -320,15 +319,15 @@ end
 
 @testset "EstVcov" begin
     hrs = exampledata("hrs")
-    nobs = size(hrs, 1)
+    N = size(hrs, 1)
     col0 = convert(Vector{Float64}, (hrs.wave_hosp.==10).&(hrs.wave.==10))
     col1 = convert(Vector{Float64}, (hrs.wave_hosp.==10).&(hrs.wave.==11))
     y = convert(Vector{Float64}, hrs.oop_spend)
-    X = hcat(col0, col1, ones(nobs, 1))
+    X = hcat(col0, col1, ones(N, 1))
     crossx = cholesky!(Symmetric(X'X))
-    coef = crossx \ (X'y)
-    residuals = y - X * coef
-    nt = (data=hrs, esample=trues(nobs), vce=Vcov.simple(), coef=coef, X=X, crossx=crossx,
+    cf = crossx \ (X'y)
+    residuals = y - X * cf
+    nt = (data=hrs, esample=trues(N), vce=Vcov.simple(), coef=cf, X=X, crossx=crossx,
         residuals=residuals, xterms=AbstractTerm[term(1)], fes=FixedEffect[],
         has_fe_intercept=false)
     ret = estvcov(nt...)
@@ -340,7 +339,7 @@ end
     @test ret.vcov_mat[3,3] ≈ 20334.169 atol=1e-3
     @test ret.vcov_mat[2,1] ≈ 20334.169 atol=1e-3
     @test ret.vcov_mat[3,1] ≈ -20334.169 atol=1e-3
-    @test ret.dof_resid == nobs - 3
+    @test ret.dof_resid == N - 3
     @test ret.F ≈ 10.68532285556941 atol=1e-6
 
     nt = merge(nt, (vce=Vcov.robust(), fes=FixedEffect[]))
@@ -353,7 +352,7 @@ end
     @test ret.vcov_mat[3,3] ≈ 19436.209 atol=1e-3
     @test ret.vcov_mat[2,1] ≈ 19436.209 atol=1e-3
     @test ret.vcov_mat[3,1] ≈ -19436.209 atol=1e-3
-    @test ret.dof_resid == nobs - 3
+    @test ret.dof_resid == N - 3
     @test ret.F ≈ 5.371847047691197 atol=1e-6
 
     nt = merge(nt, (vce=Vcov.cluster(:hhidpn),))
@@ -366,18 +365,18 @@ end
     @test ret.vcov_mat[3,3] ≈ 28067.783 atol=1e-3
     @test ret.vcov_mat[2,1] ≈ 94113.386 atol=1e-2
     @test ret.vcov_mat[3,1] ≈ 12640.559 atol=1e-2
-    @test ret.dof_resid == nobs - 3
+    @test ret.dof_resid == N - 3
     @test ret.F ≈ 5.542094561672688 atol=1e-6
 
     fes = FixedEffect[FixedEffect(hrs.hhidpn)]
-    wt = uweights(nobs)
+    wt = uweights(N)
     feM = AbstractFixedEffectSolver{Float64}(fes, wt, Val{:cpu}, Threads.nthreads())
     X = hcat(col0, col1)
     _feresiduals!(Combination(y, X), feM, 1e-8, 10000)
     crossx = cholesky!(Symmetric(X'X))
-    coef = crossx \ (X'y)
-    residuals = y - X * coef
-    nt = merge(nt, (vce=Vcov.robust(), coef=coef, X=X, crossx=crossx, residuals=residuals,
+    cf = crossx \ (X'y)
+    residuals = y - X * cf
+    nt = merge(nt, (vce=Vcov.robust(), coef=cf, X=X, crossx=crossx, residuals=residuals,
         xterms=AbstractTerm[], fes=fes, has_fe_intercept=true))
     ret = estvcov(nt...)
     # Compare estimates with Stata
@@ -386,7 +385,7 @@ end
     @test ret.vcov_mat[1,1] ≈ 654959.97 atol=0.1
     @test ret.vcov_mat[2,2] ≈ 503679.27 atol=0.1
     @test ret.vcov_mat[2,1] ≈ 192866.2 atol=0.1
-    @test ret.dof_resid == nobs - nunique(fes[1]) - 2
+    @test ret.dof_resid == N - nunique(fes[1]) - 2
     @test ret.F ≈ 7.559815337537517 atol=1e-6
 
     nt = merge(nt, (vce=Vcov.cluster(:hhidpn),))
@@ -397,8 +396,84 @@ end
     @test ret.vcov_mat[1,1] ≈ 606384.66 atol=0.1
     @test ret.vcov_mat[2,2] ≈ 404399.89 atol=0.1
     @test ret.vcov_mat[2,1] ≈ 106497.43 atol=0.1
-    @test ret.dof_resid == nobs - 3
+    @test ret.dof_resid == N - 3
     @test ret.F ≈ 8.197452252592386 atol=1e-6
 
     @test EstVcov()(nt) == merge(nt, ret)
+end
+
+@testset "SolveLeastSquaresWeights" begin
+    hrs = exampledata("hrs")
+    tr = dynamic(:wave, -1)
+    N = size(hrs, 1)
+    col0 = convert(Vector{Float64}, (hrs.wave_hosp.==10).&(hrs.wave.==10))
+    col1 = convert(Vector{Float64}, (hrs.wave_hosp.==10).&(hrs.wave.==11))
+    cellnames = [:wave_hosp, :wave]
+    cols = subcolumns(hrs, cellnames)
+    cells, rows = cellrows(cols, findcell(cols))
+    yterm = term(:oop_spend)
+    yxterms = Dict(x=>apply_schema(x, schema(x, hrs), StatisticalModel)
+        for x in (term(:oop_spend), term(:male)))
+    
+    yxcols = Dict(yxterms[term(:oop_spend)]=>convert(Vector{Float64}, hrs.oop_spend),
+        yxterms[term(:male)]=>convert(Vector{Float64}, hrs.male))
+    wt = uweights(N)
+    fes = [FixedEffect(hrs.hhidpn)]
+    feM = AbstractFixedEffectSolver{Float64}(fes, wt, Val{:cpu}, Threads.nthreads())
+    y = yxcols[yxterms[term(:oop_spend)]]
+    male = yxcols[yxterms[term(:male)]]
+    _feresiduals!(Combination(y, male), feM, 1e-8, 10000)
+    X = hcat(col0, col1)
+    crossx = cholesky!(Symmetric(X'X))
+    cf = crossx \ (X'y)
+    treatcells = VecColumnTable((rel=[0, 1],))
+
+    nt = (tr=tr, solvelsweights=true, lswtnames=(), cells=cells, rows=rows,
+        X=X, crossx=crossx, coef=cf, treatcells=treatcells, yterm=yterm, xterms=AbstractTerm[],
+        yxterms=yxterms, yxcols=yxcols, feM=feM, fetol=1e-8, femaxiter=10000, weights=wt)
+    ret = solveleastsquaresweights(nt...)
+    lswt = ret.lsweights
+    @test lswt.r === cells
+    @test lswt.c === treatcells
+    @test all(lswt[lswt.r.wave_hosp.==10, 1] .≈ [-0.2, -0.2, -0.2, 0.8, -0.2])
+    @test all(lswt[lswt.r.wave_hosp.==10, 2] .≈ [-0.2, -0.2, -0.2, -0.2, 0.8])
+    @test all(x->x≈0, lswt[lswt.r.wave_hosp.!=10, :])
+    @test ret.ycellweights == ret.ycellcounts == length.(rows)
+    @test all(i->ret.ycellmeans[i] == sum(y[rows[i]])/length(rows[i]), 1:length(rows))
+
+    nt0 = merge(nt, (lswtnames=(:no,),))
+    @test_throws ArgumentError solveleastsquaresweights(nt0...)
+
+    nt = merge(nt, (lswtnames=(:wave,),))
+    ret = solveleastsquaresweights(nt...)
+    lswt = ret.lsweights
+    @test size(lswt.r) == (5, 1)
+    @test lswt.r.wave == 7:11
+
+    nt = merge(nt, (lswtnames=(:wave, :wave_hosp),))
+    ret = solveleastsquaresweights(nt...)
+    lswt = ret.lsweights
+    @test size(lswt.r) == (20, 2)
+    @test lswt.r.wave == repeat(7:11, inner=4)
+    @test lswt.r.wave_hosp == repeat(8:11, outer=5)
+    @test all(lswt[lswt.r.wave_hosp.==10, 1] .≈ [-0.2, -0.2, -0.2, 0.8, -0.2])
+    @test all(lswt[lswt.r.wave_hosp.==10, 2] .≈ [-0.2, -0.2, -0.2, -0.2, 0.8])
+
+    X = hcat(X, male)
+    crossx = cholesky!(Symmetric(X'X))
+    cf = crossx \ (X'y)
+    xterms = AbstractTerm[yxterms[term(:male)]]
+    nt = merge(nt, (lswtnames=(:wave_hosp, :wave), X=X, crossx=crossx,
+        xterms=xterms, coef=cf))
+    ret = solveleastsquaresweights(nt...)
+    lswt = ret.lsweights
+    w1 = -0.20813279638542392
+    w2 = -0.18780080542186434
+    @test all(lswt[lswt.r.wave_hosp.==10, 1] .≈ [w1, w1, w1, 0.812199194578136, w2])
+    @test all(lswt[lswt.r.wave_hosp.==10, 2] .≈ [w1, w1, w1, w2, 0.812199194578136])
+    @test all(x->isapprox(x, 0, atol=1e-16), lswt[lswt.r.wave_hosp.!=10, :])
+    y1 = y.- cf[3].*male
+    @test all(i->ret.ycellmeans[i] == sum(y1[rows[i]])/length(rows[i]), 1:length(rows))
+
+    @test SolveLeastSquaresWeights()(nt) == merge(nt, ret)
 end

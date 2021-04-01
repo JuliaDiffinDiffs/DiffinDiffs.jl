@@ -6,19 +6,16 @@ using DiffinDiffsBase: TimeType, @fieldequal,
     required, default, transformed, combinedargs, valid_didargs
 using FixedEffectModels: Combination, nunique
 using FixedEffects
-using InteractionWeightedDIDs: parse_fixedeffect!, checkvcov!, checkfes!, makefesolver,
-    _feresiduals!, makeyxcols, maketreatcols, solveleastsquares!, estvcov
+using InteractionWeightedDIDs: parse_fixedeffect!, checkvcov!, checkfes!, makefesolver!,
+    _feresiduals!, makeyxcols, maketreatcols, solveleastsquares!, estvcov,
+    solveleastsquaresweights
 using LinearAlgebra
 using StatsBase: Weights, uweights
 
 import Base: ==
 
-==(x::FixedEffect{R,I}, y::FixedEffect{R,I}) where {R,I} =
-    x.refs == y.refs && x.interaction == y.interaction && x.n == y.n
-
-# A workaround to be replaced
-==(x::Vcov.ClusterCovariance, y::Vcov.ClusterCovariance) = true
-
+@fieldequal FixedEffect
+@fieldequal Vcov.ClusterCovariance
 @fieldequal RegressionBasedDIDResult
 
 const tests = [

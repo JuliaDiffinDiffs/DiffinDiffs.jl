@@ -13,11 +13,12 @@ using Tables
 using Tables: getcolumn, columnnames
 using Vcov
 @reexport using DiffinDiffsBase
-using DiffinDiffsBase: TimeType, termvars, isintercept, parse_intercept!, _treatnames
+using DiffinDiffsBase: TimeType, termvars, isintercept, parse_intercept!,
+    _count!, _groupfind, _treatnames, _parse_bycells!, _parse_subset
 
 import Base: show
 import DiffinDiffsBase: required, default, transformed, combinedargs, copyargs,
-    valid_didargs, result, _count!
+    valid_didargs, result, vce, nobs, outcomename, weights, treatnames, dof_residual, agg
 import FixedEffectModels: has_fe
 
 export Vcov,
@@ -30,10 +31,12 @@ export CheckVcov,
        MakeTreatCols,
        SolveLeastSquares,
        EstVcov,
+       SolveLeastSquaresWeights,
        
        RegressionBasedDID,
        Reg,
-       RegressionBasedDIDResult
+       RegressionBasedDIDResult,
+       AggregatedRegBasedDIDResult
 
 include("utils.jl")
 include("procedures.jl")

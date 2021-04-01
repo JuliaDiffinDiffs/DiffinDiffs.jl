@@ -61,31 +61,32 @@ default(::CheckFEs) = (drop_singletons=true,)
 copyargs(::CheckFEs) = (2,3)
 
 """
-    makefesolver(args...)
+    makefesolver!(args...)
 
 Construct `FixedEffects.AbstractFixedEffectSolver`.
 See also [`MakeFESolver`](@ref).
 """
-function makefesolver(fes::Vector{FixedEffect}, weights::AbstractWeights,
+function makefesolver!(fes::Vector{FixedEffect}, weights::AbstractWeights,
         esample::BitVector, nfethreads::Int)
     if !isempty(fes)
         fes = FixedEffect[fe[esample] for fe in fes]
         feM = AbstractFixedEffectSolver{Float64}(fes, weights, Val{:cpu}, nfethreads)
-        return (feM=feM,)
+        return (feM=feM, fes=fes)
     else
-        return (feM=nothing,)
+        return (feM=nothing, fes=fes)
     end
 end
 
 """
     MakeFESolver <: StatsStep
 
-Call [`InteractionWeightedDIDs.makefesolver`](@ref) to construct the fixed effect solver.
+Call [`InteractionWeightedDIDs.makefesolver!`](@ref) to construct the fixed effect solver.
 """
-const MakeFESolver = StatsStep{:MakeFESolver, typeof(makefesolver), true}
+const MakeFESolver = StatsStep{:MakeFESolver, typeof(makefesolver!), true}
 
 required(::MakeFESolver) = (:fes, :weights, :esample)
 default(::MakeFESolver) = (nfethreads=Threads.nthreads(),)
+copyargs(::MakeFESolver) = (1,)
 
 function _makeyxcols!(yxterms::Dict, yxcols::Dict, yxschema, data, t::AbstractTerm)
     ct = apply_schema(t, yxschema, StatisticalModel)
@@ -220,31 +221,13 @@ function maketreatcols(data, treatname::Symbol, treatintterms::TermSet,
                 tcellnames[i] = cellnames[i+1]
             end
         end
-        treatcells = VecColumnTable(tcellcols, tcellnames)
-        rowinds = Dict{VecColsRow, Int}()
-        cellinds = Vector{Int}()
-        trows = Vector{Vector{Int}}()
-        i = 0
-        @inbounds for row in Tables.rows(treatcells)
-            i += 1
-            r = get(rowinds, row, 0)
-            if r === 0
-                push!(cellinds, i)
-                rowinds[row] = length(cellinds)
-                push!(trows, copy(treatrows[i]))
-            else
-                append!(trows[r], treatrows[i])
-            end
+        tcols = VecColumnTable(tcellcols, tcellnames)
+        treatcells, subtrows = cellrows(tcols, findcell(tcols))
+        trows = Vector{Vector{Int}}(undef, length(subtrows))
+        @inbounds for (i, rs) in enumerate(subtrows)
+            trows[i] = vcat(view(treatrows, rs)...)
         end
-        for i in 1:ntcellcol
-            tcellcols[i] = view(tcellcols[i], cellinds)
-        end
-        # Need to sort the combined cells and rows
-        p = sortperm(treatcells)
-        @inbounds for i in 1:ntcellcol
-            tcellcols[i] = tcellcols[i][p]
-        end
-        treatrows = trows[p]
+        treatrows = trows
     end
 
     # Generate treatment indicators
@@ -338,6 +321,7 @@ function solveleastsquares!(tr::DynamicTreatment{SharpDesign}, pr::TrendParallel
 
     has_intercept, has_omitsintercept = parse_intercept!(xterms)
     xwidth = 0
+    # Only terms with positive width should be collected into xs
     xs = Vector{AbstractTerm}()
     for x in xterms
         cx = yxterms[x]
@@ -402,7 +386,6 @@ function _vce(data, esample::BitVector, vce::Vcov.ClusterCovariance,
     concrete_vce = Vcov.materialize(cludata, vce)
     dof_absorb = 0
     for fe in fes
-        # ! To be fixed
         dof_absorb += any(c->isnested(fe, c.refs), concrete_vce.clusters) ? 1 : nunique(fe)
     end
     return concrete_vce, dof_absorb
@@ -442,3 +425,87 @@ const EstVcov = StatsStep{:EstVcov, typeof(estvcov), true}
 
 required(::EstVcov) = (:data, :esample, :vce, :coef, :X, :crossx, :residuals, :xterms,
     :fes, :has_fe_intercept)
+
+"""
+    solveleastsquaresweights(args...)
+
+Solve the cell-level weights assigned by least-sqaures.
+See also [`SolveLeastSquaresWeights`](@ref).
+"""
+function solveleastsquaresweights(::DynamicTreatment{SharpDesign},
+        solvelsweights::Bool, lswtnames,
+        cells::VecColumnTable, rows::Vector{Vector{Int}},
+        X::Matrix, crossx::Factorization, coef::Vector, treatcells::VecColumnTable,
+        yterm::AbstractTerm, xterms::Vector{AbstractTerm}, yxterms::Dict, yxcols::Dict,
+        feM::Union{AbstractFixedEffectSolver, Nothing}, fetol::Real, femaxiter::Int,
+        weights::AbstractWeights)
+
+    solvelsweights || return (lsweights=nothing, ycellmeans=nothing, ycellweights=nothing,
+        ycellcounts=nothing)
+    cellnames = propertynames(cells)
+    length(lswtnames) == 0 && (lswtnames = cellnames)
+    nlswt = length(lswtnames)
+    for n in lswtnames
+        n in cellnames || throw(ArgumentError("$n is invalid for lswtnames"))
+    end
+
+    # Construct Y residualized by covariates and FEs but not treatment indicators
+    yresid = yxcols[yxterms[yterm]]
+    nx = length(xterms)
+    nt = size(treatcells, 1)
+    if nx > 0
+        yresid = copy(yresid)
+        for i in 1:nx
+            yresid .-= coef[nt+i] .* yxcols[xterms[i]]
+        end
+    end
+    weights isa UnitWeights || (yresid .*= sqrt.(weights))
+
+    if lswtnames == cellnames
+        lswtcells = cells
+        lswtrows = 1:size(cells,1)
+    else
+        cols = subcolumns(cells, lswtnames)
+        lswtcells, lswtrows = cellrows(cols, findcell(cols))
+    end
+
+    # Dummy variable on the left-hand-side
+    d = Matrix{Float64}(undef, length(yresid), 1)
+    nlswtrow = length(lswtrows)
+    lswtmat = Matrix{Float64}(undef, nlswtrow, nt)
+    ycellmeans = zeros(nlswtrow)
+    ycellweights = zeros(nlswtrow)
+    ycellcounts = zeros(Int, nlswtrow)
+    @inbounds for i in 1:nlswtrow
+        # Reinitialize d for reuse
+        fill!(d, 0.0)
+        for r in lswtrows[i]
+            rs = rows[r]
+            d[rs] .= 1.0
+            wts = view(weights, rs)
+            ycellmeans[i] += sum(view(yresid, rs).*wts)
+            ycellweights[i] += sum(wts)
+            ycellcounts[i] += length(rs)
+        end
+        feM === nothing || _feresiduals!(d, feM, fetol, femaxiter)
+        weights isa UnitWeights || (d .*= sqrt.(weights))
+        lswtmat[i,:] .= (crossx \ (X'd))[1:nt]
+    end
+    ycellmeans ./= ycellweights
+    lswt = TableIndexedMatrix(lswtmat, lswtcells, treatcells)
+    return (lsweights=lswt, ycellmeans=ycellmeans, ycellweights=ycellweights,
+        ycellcounts=ycellcounts)
+end
+
+"""
+    SolveLeastSquaresWeights <: StatsStep
+
+Call [`InteractionWeightedDIDs.solveleastsquaresweights`](@ref)
+to solve the cell-level weights assigned by least-sqaures.
+"""
+const SolveLeastSquaresWeights = StatsStep{:SolveLeastSquaresWeights,
+    typeof(solveleastsquaresweights), true}
+
+required(::SolveLeastSquaresWeights) = (:tr, :solvelsweights, :lswtnames, :cells, :rows,
+    :X, :crossx, :coef, :treatcells, :yterm, :xterms, :yxterms, :yxcols,
+    :feM, :fetol, :femaxiter, :weights)
