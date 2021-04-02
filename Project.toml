@@ -1,7 +1,7 @@
 name = "InteractionWeightedDIDs"
 uuid = "4fda0319-85a0-4a01-849e-821b918731ee"
 authors = ["Junyuan Chen <norman.chen.git@gmail.com>"]
-version = "0.1.0"
+version = "0.2.0"
 
 [deps]
 DiffinDiffsBase = "7fc23ce2-6e83-4e3c-822f-a79085ccb3e8"
