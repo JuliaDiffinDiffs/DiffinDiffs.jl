@@ -13,17 +13,17 @@ that can also be used as a standalone package.
 
 > **Note:**
 >
-> The development of this package is still in an early stage.
-> Not all features are production-ready.
+> The development of this package is not fully complete.
+> New features and improvements are being added over time.
 
 ## Applicable Environment
 
-The baseline DID setup this package focuses on
+The baseline empirical environment this package focuses on
 is the same as the one considered by [Sun and Abraham (2020)](https://doi.org/10.1016/j.jeconom.2020.09.006):
 
-* The treatment state is binary, irreversible and sharp.
-* Units are treated in *different* periods (possibly never treated) in a staggered fashion.
-* Treatment effects may evolve over time following possibly different paths across treated groups.
+* Treatment states are binary, irreversible and sharp.
+* Units may receive treatment in different periods in a staggered fashion.
+* Treatment effects may evolve over time following possibly heterogenous paths across treated groups.
 
 The parameters of interest include:
 
@@ -31,27 +31,19 @@ The parameters of interest include:
 on each group of treated units in different periods.
 * Interpretable aggregations of these group-time-level parameters.
 
-## Motivation and Features
+## Main Features
 
-Although most estimation tasks covered by this package
-can be conducted with existing statistical software,
-the amount of programming work involved can be nontrivial.
-Ad hoc implementation for a specific study
-may be prone to programming errors,
-not reusable for future projects and also computationally inefficient.
-Some extra amount of automation in conducting the estimation procedures
-is therefore desirable.
-This is especially important when the estimation involves many regressors
-and the dataset is relatively large.
+This package is developed with dedication to
+both the credibility of econometric methodology
+and high performance for working with relatively large datasets.
 
-This package aims to raise the productivity of empirical researchers
-with the following features:
+The main features are the following:
 
 * Automatic and efficient generation of indicator variables based on empirical design and data coverage.
 * Enforcement of an overlap condition based on the parallel trends assumption.
 * Fast residualization of regressors from fixed effects via [FixedEffects.jl](https://github.com/FixedEffects/FixedEffects.jl).
 * Interaction-weighted DID estimators proposed by [Sun and Abraham (2020)](https://doi.org/10.1016/j.jeconom.2020.09.006).
-* Cell-level weight calculations for decomposing coefficient estimates from regression.
+* Cell-level decomposition of coefficient estimates for analytical reconciliation across specifications.
 
 As a component of [DiffinDiffs.jl](https://github.com/JuliaDiffinDiffs/DiffinDiffs.jl),
 it follows the same programming interface shared by all component packages.
@@ -64,10 +56,12 @@ Tools for easing the export of estimation results are also being developed.
 ## Econometric Foundations
 
 The package does not enforce the use of a specific estimation procedure
-and allows flexibility from the users.
+and allows some flexibility from the users.
 However, it is mainly designed to ease the adoption of
-recent advances in econometric research
-that overcome pitfalls in earlier empirical work.
+recent advances in the difference-in-differences literature
+that overcome certain pitfalls that may arise
+in scenarios where the treated units get treated in different periods
+(i.e., the staggered adoption design).
 
 The development of this package is directly based on the following studies:
 * [Sun and Abraham (2020)](https://doi.org/10.1016/j.jeconom.2020.09.006)
