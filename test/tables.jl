@@ -74,16 +74,11 @@
     @test cols == deepcopy(cols)
 
     @test sprint(show, cols) == "3280×2 VecColumnTable"
-    # There may be extra white space at the end of a row in earlier versions of Julia
-    out1 = """
+    w = VERSION < v"1.6.0" ? "  " : ""
+    @test sprint(show, MIME("text/plain"), cols) == """
         3280×2 VecColumnTable:
-         :wave       Int64  
+         :wave       Int64$w
          :oop_spend  Float64"""
-    out2 = """
-        3280×2 VecColumnTable:
-         :wave       Int64
-         :oop_spend  Float64"""
-    @test sprint(show, MIME("text/plain"), cols) in (out1, out2)
 
     @test summary(cols) == "3280×2 VecColumnTable"
     summary(stdout, cols)
