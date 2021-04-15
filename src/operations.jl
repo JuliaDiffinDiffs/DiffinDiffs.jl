@@ -8,12 +8,12 @@ function _groupfind(container)
     return inds
 end
 
-function _refs_pool(col::AbstractArray, ref_type::Type{<:Integer}=UInt32)
+function _refs_pool(col::AbstractArray, reftype::Type{<:Integer}=UInt32)
     refs = refarray(col)
     pool = refpool(col)
     labeled = pool !== nothing
     if !labeled
-        refs, invpool, pool = _label(col, eltype(col), ref_type)
+        refs, invpool, pool = _label(col, eltype(col), reftype)
     end
     return refs, pool, labeled
 end
@@ -109,7 +109,44 @@ function cellrows(cols::VecColumnTable, refrows::IdDict)
 end
 
 """
-    PanelStructure{R<:Signed, T1, T2<:TimeType}
+    settime(data, timename; step, reftype, rotation)
+    settime(time::AbstractArray; step, reftype, rotation)
+
+Return a [`ScaledArray`](@ref) that represents discretized time periods.
+Time values can be provided either as a table containing the relevant column or as an array.
+The returned array ensures well-defined time intervals for operations involving relative time
+(such as [`lag`](@ref) and [`diff`](@ref)).
+
+# Arguments
+- `data`: a Tables.jl-compatible data table.
+- `timename::Union{Symbol,Integer}`: the name of the column in `data` that contains time values.
+- `time::AbstractArray`: the array containing time values (only needed for the alternative method).
+
+# Keywords
+- `step=nothing`: the length of each time interval; try step=1 if not specified.
+- `reftype::Type{<:Signed}=Int32`: the element type of the reference values for the returned [`ScaledArray`](@ref).
+- `rotation=nothing`: rotation groups in a rotating sampling design; use [`RotatingTimeValue`](@ref)s as reference values.
+"""
+function settime(time::AbstractArray; step=nothing, reftype::Type{<:Signed}=Int32, rotation=nothing)
+    eltype(time) <: ValidTimeType ||
+        throw(ArgumentError("unaccepted element type $(eltype(time)) from time column"))
+    step === nothing && (step = one(eltype(time)))
+    time = ScaledArray(time, step; reftype=reftype)
+    if rotation !== nothing
+        refs = rotatingtime(rotation, time.refs)
+        time = ScaledArray(RefArray(refs), time.start, time.step, time.stop)
+    end
+    return time
+end
+
+function settime(data, timename::Union{Symbol,Integer}; step=nothing,
+        reftype::Type{<:Signed}=Int32, rotation=nothing)
+    checktable(data)
+    return settime(getcolumn(data, timename); step=step, reftype=reftype, rotation=rotation)
+end
+
+"""
+    PanelStructure{R<:Signed, IP<:AbstractVector, TP<:AbstractVector}
 
 Panel data structure defined by unique combinations of unit ids and time periods.
 It contains the information required for certain operations such as
@@ -119,88 +156,76 @@ See also [`setpanel`](@ref).
 # Fields
 - `refs::Vector{R}`: reference values that allow obtaining time gaps by taking differences.
 - `invrefs::Dict{R, Int}`: inverse map from `refs` to indices.
-- `idpool::Vector{T1}`: unique unit ids.
-- `timepool::Vector{T2}`: sorted unique time periods.
+- `idpool::IP`: unique unit ids.
+- `timepool::TP`: sorted unique time periods.
 - `laginds::Dict{Int, Vector{Int}}`: a map from lag distances to vectors of indices of lagged values.
 """
-struct PanelStructure{R<:Signed, T1, T2<:TimeType}
+struct PanelStructure{R<:Signed, IP<:AbstractVector, TP<:AbstractVector}
     refs::Vector{R}
     invrefs::Dict{R, Int}
-    idpool::Vector{T1}
-    timepool::Vector{T2}
+    idpool::IP
+    timepool::TP
     laginds::Dict{Int, Vector{Int}}
-    function PanelStructure(refs::Vector, idpool::Vector, timepool::Vector,
-            laginds::Dict=Dict{Int, Vector{Int}}())
-        invrefs = Dict{eltype(refs), Int}(ref=>i for (i, ref) in enumerate(refs))
-        return new{eltype(refs), eltype(idpool), eltype(timepool)}(
-            refs, invrefs, idpool, timepool, laginds)
+    function PanelStructure(refs::Vector{R}, idpool::IP, timepool::TP,
+            laginds::Dict=Dict{Int, Vector{Int}}()) where {R,IP,TP}
+        invrefs = Dict{R, Int}(ref=>i for (i, ref) in enumerate(refs))
+        return new{R,IP,TP}(refs, invrefs, idpool, timepool, laginds)
     end
-end
-
-function _scaledrefs_pool(col::AbstractArray, step, ref_type::Type{<:Signed}=Int32)
-    refs, pool, labeled = _refs_pool(col, ref_type)
-    labeled && (refs = copy(refs))
-    npool = length(pool)
-    spool = sort(pool)
-    if step === nothing
-        gaps = view(spool, 2:npool) - view(spool, 1:npool-1)
-        step = minimum(gaps)
-    end
-    pool1 = spool[1]
-    refmap = Vector{eltype(refs)}(undef, npool)
-    @inbounds for i in 1:npool
-        refmap[i] = (pool[i] - pool1) ÷ step + 1
-    end
-    @inbounds for i in 1:length(refs)
-        refs[i] = refmap[refs[i]]
-    end
-    return refs, spool
 end
 
 """
-    setpanel(data, idname, timename, timestep=nothing; ref_type=Int32)
-    setpanel(id::AbstractArray, time::AbstractArray, timestep=nothing; ref_type=Int32)
+    setpanel(data, idname, timename; step, reftype, rotation)
+    setpanel(id::AbstractArray, time::AbstractArray; step, reftype, rotation)
     
 Declare a [`PanelStructure`](@ref) which is required for certain operations
 such as [`lag`](@ref) and [`diff`](@ref).
-Either a `data` table with `idname` and `timename` for columns representing
-unit ids and time periods
-or two arrays `id` and `time` representing the two columns are required.
-In the former case, `data` must be Tables.jl-compatible.
+Unit IDs and time values can be provided either
+as a table containing the relevant columns or as arrays.
+`timestep` must be specified unless the `time` array is a [`ScaledArray`](@ref)
+that is returned by [`settime`](@ref).
 
-By default, the time interval `timestep` between two adjacent periods is inferred
-based on the minimum gap between two values in the `time` column.
-The element type of reference values for [`PanelStructure`](@ref)
-can be specified with `ref_type`.
+# Arguments
+- `data`: a Tables.jl-compatible data table.
+- `idname::Union{Symbol,Integer}`: the name of the column in `data` that contains unit IDs.
+- `timename::Union{Symbol,Integer}`: the name of the column in `data` that contains time values.
+- `id::AbstractArray`: the array containing unit IDs (only needed for the alternative method).
+- `time::AbstractArray`: the array containing time values (only needed for the alternative method).
+
+# Keywords
+- `step=nothing`: the length of each time interval; try step=1 if not specified.
+- `reftype::Type{<:Signed}=Int32`: the element type of the reference values for [`PanelStructure`](@ref).
+- `rotation=nothing`: rotation groups in a rotating sampling design; use [`RotatingTimeValue`](@ref)s as reference values.
 
 !!! note
     If the underlying data used to create the [`PanelStructure`](@ref) are modified.
     The changes will not be reflected in the existing instances of [`PanelStructure`](@ref).
     A new instance needs to be created with `setpanel`.
 """
-function setpanel(id::AbstractArray, time::AbstractArray, timestep=nothing;
-        ref_type::Type{<:Signed}=Int32)
-    eltype(time) <: TimeType ||
-        throw(ArgumentError("invalid element type $(eltype(time)) from time column"))
+function setpanel(id::AbstractArray, time::AbstractArray; step=nothing,
+        reftype::Type{<:Signed}=Int32, rotation=nothing)
+    eltype(time) <: ValidTimeType ||
+        throw(ArgumentError("unaccepted element type $(eltype(time)) from time column"))
     length(id) == length(time) || throw(DimensionMismatch(
         "id has length $(length(id)) while time has length $(length(time))"))
     refs, idpool, labeled = _refs_pool(id)
-    labeled && (refs = copy(refs))
-    trefs, tpool = _scaledrefs_pool(time, timestep, ref_type)
-    # Multiply 2 to create enough gaps between id groups for the largest possible l
+    labeled && (refs = copy(refs); idpool = copy(idpool))
+    time = settime(time; step=step, reftype=reftype, rotation=rotation)
+    trefs = refarray(time)
+    tpool = refpool(time)
+    # Multiply 2 to create enough gaps between id groups for the largest possible lead/lag
     mult = 2 * length(tpool)
     _mult!(trefs, refs, mult)
     return PanelStructure(trefs, idpool, tpool)
 end
 
-function setpanel(data, idname::Union{Symbol,Integer}, timename::Union{Symbol,Integer},
-        timestep=nothing; ref_type::Type{<:Signed}=Int32)
-    istable(data) || throw(ArgumentError("input data is not Tables.jl-compatible"))
-    return setpanel(getcolumn(data, idname), getcolumn(data, timename), timestep,
-        ref_type=ref_type)
+function setpanel(data, idname::Union{Symbol,Integer}, timename::Union{Symbol,Integer};
+        step=nothing, reftype::Type{<:Signed}=Int32)
+    checktable(data)
+    return setpanel(getcolumn(data, idname), getcolumn(data, timename);
+        step=step, reftype=reftype)
 end
 
-show(io::IO, panel::PanelStructure) = print(io, "Panel Structure")
+show(io::IO, ::PanelStructure) = print(io, "Panel Structure")
 
 function show(io::IO, ::MIME"text/plain", panel::PanelStructure)
     println(io, "Panel Structure:")

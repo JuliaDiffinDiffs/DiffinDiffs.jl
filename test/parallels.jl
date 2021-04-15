@@ -15,12 +15,14 @@ end
 
 @testset "nevertreated" begin
     nt0 = NeverTreatedParallel([0], Unconditional(), Exact())
+    nt0y = NeverTreatedParallel(Date(0), Unconditional(), Exact())
     nt1 = NeverTreatedParallel([0,1], Unconditional(), Exact())
+    nt1y = NeverTreatedParallel([Date(0), Date(1)], Unconditional(), Exact())
     
     @testset "inner constructor" begin
         @test NeverTreatedParallel([1,1,0], Unconditional(), Exact()) == nt1
         @test_throws ErrorException NeverTreatedParallel([], Unconditional(), Exact())
-        @test_throws InexactError NeverTreatedParallel([-0.5], Unconditional(), Exact())
+        @test_throws MethodError NeverTreatedParallel([-0.5], Unconditional(), Exact())
     end
 
     @testset "without @formula" begin
@@ -29,6 +31,8 @@ end
         @test nevertreated(0:1) == nt1
         @test nevertreated(Set([0,1])) == nt1
         @test nevertreated([0,1,1]) == nt1
+        @test nevertreated(Date(0)) == nt0y
+        @test nevertreated((Date(0), Date(1))) == nt1y
 
         @test nevertreated(0, Unconditional(), Exact()) == nt0
         @test nevertreated(0, c=Unconditional(), s=Exact()) == nt0
@@ -86,35 +90,39 @@ end
 
 @testset "notyettreated" begin
     ny0 = NotYetTreatedParallel([0], [0], Unconditional(), Exact())
+    ny0y = NotYetTreatedParallel(Date(0), Date(0), Unconditional(), Exact())
     ny1 = NotYetTreatedParallel([0,1], [0], Unconditional(), Exact())
+    ny1y = NotYetTreatedParallel([Date(0), Date(1)], [Date(0)], Unconditional(), Exact())
     ny2 = NotYetTreatedParallel([0,1], [0], Unconditional(), Exact())
     ny3 = NotYetTreatedParallel([0,1], [0,1], Unconditional(), Exact())
 
     @testset "inner constructor" begin
         @test NotYetTreatedParallel([1,1,0], [1,0,0], Unconditional(), Exact()) == ny3
-        @test_throws ErrorException NotYetTreatedParallel([0], [], Unconditional(), Exact())
-        @test_throws ErrorException NotYetTreatedParallel([], [0], Unconditional(), Exact())
-        @test_throws InexactError NotYetTreatedParallel([-0.5], [-1], Unconditional(), Exact())
+        @test_throws ArgumentError NotYetTreatedParallel([0], [], Unconditional(), Exact())
+        @test_throws ArgumentError NotYetTreatedParallel([], [0], Unconditional(), Exact())
+        @test_throws ArgumentError NotYetTreatedParallel([-0.5], [-1], Unconditional(), Exact())
     end
 
     @testset "without @formula" begin
         @test notyettreated(0) == ny0
-        @test notyettreated([0,1]) == ny1
-        @test notyettreated(0:1, 0) == ny2
+        @test notyettreated([0,1], 0) == ny1
+        @test notyettreated(0:1, (0,)) == ny2
         @test notyettreated(Set([0,1]), 0:1) == ny3
         @test notyettreated([0,1,1], [0,1,1]) == ny3
+        @test notyettreated(Date(0)) == ny0y
+        @test notyettreated((Date(0), Date(1)), Date(0)) == ny1y
 
         @test notyettreated(0, 0, Unconditional(), Exact()) == ny0
         @test notyettreated(0, c=Unconditional(), s=Exact()) == ny0
         @test notyettreated([0,1], [0], Unconditional(), Exact()) == ny1
-        @test notyettreated([0,1], c=Unconditional(), s=Exact()) == ny1
+        @test notyettreated([0,1], 0, c=Unconditional(), s=Exact()) == ny1
     end
 
     @testset "with @formula" begin
         @test notyettreated(term(0)) == ny0
         
-        f = @formula(y ~ notyettreated(cb(0,1)))
-        @test notyettreated(f.rhs.args_parsed[1]) == ny1
+        f = @formula(y ~ notyettreated(cb(0,1), 0))
+        @test notyettreated(f.rhs.args_parsed...) == ny1
 
         f = @formula(y ~ treat(g, ttreat(t, 0), notyettreated(0)))
         t = parse_treat(f)[1]

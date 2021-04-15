@@ -93,17 +93,17 @@ and a group that did not receive any treatment in any sample period.
 See also [`nevertreated`](@ref).
 
 # Fields
-- `e::Tuple{Vararg{TimeType}}`: group indices for units that did not receive any treatment.
+- `e::Tuple{Vararg{ValidTimeType}}`: group indices for units that did not receive any treatment.
 - `c::C`: an instance of [`ParallelCondition`](@ref).
 - `s::S`: an instance of [`ParallelStrength`](@ref).
 """
 struct NeverTreatedParallel{C,S} <: TrendParallel{C,S}
-    e::Tuple{Vararg{TimeType}}
+    e::Tuple{Vararg{ValidTimeType}}
     c::C
     s::S
     function NeverTreatedParallel(e, c::ParallelCondition, s::ParallelStrength)
-        e = (unique!(sort!([e...]))...,)
-        isempty(e) && error("field `e` cannot be empty") 
+        e = applicable(iterate, e) ? (unique!(sort!([e...]))...,) : (e,)
+        isempty(e) && error("field `e` cannot be empty")
         return new{typeof(c),typeof(s)}(e, c, s)
     end
 end
@@ -168,8 +168,8 @@ and any group that received the treatment relatively late (or never receved).
 See also [`notyettreated`](@ref).
 
 # Fields
-- `e::Tuple{Vararg{TimeType}}`: group indices for units that received the treatment relatively late.
-- `ecut::Tuple{Vararg{TimeType}}`: user-specified period(s) when units in a group in `e` started to receive treatment.
+- `e::Tuple{Vararg{ValidTimeType}}`: group indices for units that received the treatment relatively late.
+- `ecut::Tuple{Vararg{ValidTimeType}}`: user-specified period(s) when units in a group in `e` started to receive treatment.
 - `c::C`: an instance of [`ParallelCondition`](@ref).
 - `s::S`: an instance of [`ParallelStrength`](@ref).
 
@@ -179,16 +179,18 @@ See also [`notyettreated`](@ref).
     - the sample has a rotating panel structure with periods overlapping with some others.
 """
 struct NotYetTreatedParallel{C,S} <: TrendParallel{C,S}
-    e::Tuple{Vararg{TimeType}}
-    ecut::Tuple{Vararg{TimeType}}
+    e::Tuple{Vararg{ValidTimeType}}
+    ecut::Tuple{Vararg{ValidTimeType}}
     c::C
     s::S
     function NotYetTreatedParallel(e, ecut, c::ParallelCondition, s::ParallelStrength)
-        e = (unique!(sort!([e...]))...,)
-        isempty(e) && error("field `e` cannot be empty")
-        ecut = (unique!(sort!([ecut...]))...,)
-        isempty(ecut) && error("field `ecut` cannot be empty")
-        return new{typeof(c),typeof(s)}(e, ecut, c, s)
+        e = applicable(iterate, e) ? (unique!(sort!([e...]))...,) : (e,)
+        isempty(e) && throw(ArgumentError("field e cannot be empty"))
+        ecut = applicable(iterate, ecut) ? (unique!(sort!([ecut...]))...,) : (ecut,)
+        isempty(ecut) && throw(ArgumentError("field ecut cannot be empty"))
+        eltype(e) == eltype(ecut) ||
+            throw(ArgumentError("e and ecut must have the same element type"))
+        return new{typeof(c), typeof(s)}(e, ecut, c, s)
     end
 end
 
@@ -207,7 +209,7 @@ end
 
 """
     notyettreated(e, ecut, c::ParallelCondition, s::ParallelStrength)
-    notyettreated(e, ecut=minimum(e); c=Unconditional(), s=Exact())
+    notyettreated(e, ecut=e; c=Unconditional(), s=Exact())
 
 Construct a [`NotYetTreatedParallel`](@ref) with
 fields set by the arguments.
@@ -239,8 +241,7 @@ Parallel trends with any not-yet-treated group:
 """
 notyettreated(e, ecut, c::ParallelCondition, s::ParallelStrength) =
     NotYetTreatedParallel(e, ecut, c, s)
-notyettreated(e, ecut=minimum(e);
-    c::ParallelCondition=Unconditional(), s::ParallelStrength=Exact()) =
+notyettreated(e, ecut=e; c::ParallelCondition=Unconditional(), s::ParallelStrength=Exact()) =
         NotYetTreatedParallel(e, ecut, c, s)
 
 """

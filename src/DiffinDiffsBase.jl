@@ -4,7 +4,9 @@ using Base: @propagate_inbounds
 using CSV
 using CodecZlib: GzipDecompressorStream
 using Combinatorics: combinations
+using DataAPI
 using DataAPI: refarray, refpool, invrefpool
+using Dates: Period, TimeType
 using LinearAlgebra: Diagonal
 using MacroTools: @capture, isexpr, postwalk
 using Missings: allowmissing, disallowmissing
@@ -15,15 +17,13 @@ using StatsFuns: tdistccdf, tdistinvcdf
 @reexport using StatsModels
 using StatsModels: Schema
 using Tables
-using Tables: AbstractColumns, table, istable, columnnames, getcolumn
+using Tables: AbstractColumns, istable, columnnames, getcolumn
 
-import Base: ==, show, parent, view, diff
+import Base: ==, +, -, *, isless, show, parent, view, diff
 import Base: eltype, firstindex, lastindex, getindex, iterate, length, sym_in
 import StatsBase: coef, vcov, confint, nobs, dof_residual, responsename, coefnames, weights,
     coeftable
 import StatsModels: concrete_term, schema, termvars, lag, lead
-
-const TimeType = Int
 
 # Reexport objects from StatsBase
 export coef, vcov, stderror, confint, nobs, dof_residual, responsename, coefnames, weights,
@@ -32,6 +32,8 @@ export coef, vcov, stderror, confint, nobs, dof_residual, responsename, coefname
 export cb,
        ≊,
        exampledata,
+       RotatingTimeValue,
+       rotatingtime,
 
        VecColumnTable,
        VecColsRow,
@@ -40,6 +42,10 @@ export cb,
        apply_and!,
        apply_and,
        TableIndexedMatrix,
+
+       ScaledArray,
+       ScaledVector,
+       ScaledMatrix,
 
        TreatmentSharpness,
        SharpDesign,
@@ -72,6 +78,7 @@ export cb,
 
        findcell,
        cellrows,
+       settime,
        PanelStructure,
        setpanel,
        findlag!,
@@ -120,6 +127,7 @@ export cb,
 
 include("utils.jl")
 include("tables.jl")
+include("ScaledArrays.jl")
 include("treatments.jl")
 include("parallels.jl")
 include("terms.jl")

@@ -1,8 +1,10 @@
 using Test
 using DiffinDiffsBase
 
+using DataAPI: refarray, refvalue, refpool
 using DataFrames
-using DiffinDiffsBase: @fieldequal, unpack, @unpack, hastreat, parse_treat,
+using Dates: Date, Year
+using DiffinDiffsBase: @fieldequal, unpack, @unpack, checktable, hastreat, parse_treat,
     isintercept, isomitsintercept, parse_intercept!,
     ncol, nrow,
     _f, _byid, groupargs, copyargs, pool, checkdata, groupterms, checkvars!, makeweights,
@@ -22,6 +24,7 @@ include("testutils.jl")
 const tests = [
     "utils",
     "tables",
+    "ScaledArrays",
     "terms",
     "treatments",
     "parallels",

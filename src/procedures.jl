@@ -1,29 +1,25 @@
 """
     checkdata(args...)
 
-Check `data` is a `Table` and find valid rows for options `subset` and `weightname`.
+Check `data` is `Tables.AbstractColumns`-compatible
+and find valid rows for options `subset` and `weightname`.
 See also [`CheckData`](@ref).
 """
-function checkdata(data, subset::Union{BitVector, Nothing},
-        weightname::Union{Symbol, Nothing})
-
-    istable(data) ||
-        throw(ArgumentError("expect `data` being a `Table` while receiving a $(typeof(data))"))
-    
+function checkdata(data, subset::Union{BitVector, Nothing}, weightname::Union{Symbol, Nothing})
+    checktable(data)
+    nrow = Tables.rowcount(data)
     if subset !== nothing
-        length(subset) != size(data, 1) &&
-            throw(DimensionMismatch("`data` of $(size(data, 1)) rows
-                cannot be matched with subset vector of $(length(subset)) elements"))
+        length(subset) == nrow || throw(DimensionMismatch(
+            "data contain $(nrow) rows while subset has $(length(subset)) elements"))
         esample = .!ismissing.(subset) .& subset
     else
-        esample = trues(size(data, 1))
+        esample = trues(nrow)
     end
 
     if weightname !== nothing
         colweights = getcolumn(data, weightname)
         esample .&= .!ismissing.(colweights) .& (colweights .> 0)
     end
-    
     sum(esample) == 0 && error("no nonmissing data")
     return (esample=esample,)
 end
@@ -62,9 +58,26 @@ const GroupTerms = StatsStep{:GroupTerms, typeof(groupterms), false}
 
 required(::GroupTerms) = (:treatintterms, :xterms)
 
+function checktreatvars(::DynamicTreatment{SharpDesign}, pr::TrendParallel{Unconditional},
+        treatvars::Vector{Symbol}, data)
+    # treatvars should be cohort and time variables
+    col1 = getcolumn(data, treatvars[1])
+    col2 = getcolumn(data, treatvars[2])
+    T1 = nonmissingtype(eltype(col1))
+    T2 = nonmissingtype(eltype(col2))
+    T1 == T2 || throw(ArgumentError(
+        "nonmissing elements from columns $(treatvars[1]) and $(treatvars[2]) have different types $T1 and $T2"))
+    T1 <: Union{Integer, RotatingTimeValue{<:Any, <:Integer}} ||
+        col1 isa ScaledArray && col2 isa ScaledArray ||
+        throw(ArgumentError("data columns $(treatvars[1]) and $(treatvars[2]) must either have integer elements or be ScaledArrays; see settime"))
+    T1 <: ValidTimeType ||
+        throw(ArgumentError("data column $(treatvars[1]) has unaccepted element type $(T1)"))
+    eltype(pr.e) == T1 || throw(ArgumentError("element type $(eltype(pr.e)) of control cohorts from $pr does not match element type $T1 from data; expect $T1"))
+end
+
 function _overlaptime(tr::DynamicTreatment, tr_rows::BitVector, data)
-    control_time = Set(view(getcolumn(data, tr.time), .!tr_rows))
-    treated_time = Set(view(getcolumn(data, tr.time), tr_rows))
+    control_time = Set(view(refarray(getcolumn(data, tr.time)), .!tr_rows))
+    treated_time = Set(view(refarray(getcolumn(data, tr.time)), tr_rows))
     return intersect(control_time, treated_time), control_time, treated_time
 end
 
@@ -75,18 +88,22 @@ function overlap!(esample::BitVector, tr_rows::BitVector, tr::DynamicTreatment,
         (esample .&= getcolumn(data, tr.time).∈(overlap_time,))
     tr_rows .&= esample
 end
-    
+
 function overlap!(esample::BitVector, tr_rows::BitVector, tr::DynamicTreatment,
         pr::NotYetTreatedParallel{Unconditional}, treatname::Symbol, data)
     overlap_time, _c, _t = _overlaptime(tr, tr_rows, data)
     timetype = eltype(overlap_time)
-    if timetype <: Integer
-        ecut = pr.ecut === nothing ? minimum(pr.e) : pr.ecut[1]
+    if !(timetype <: RotatingTimeValue)
+        ecut = pr.ecut[1]
         valid_cohort = filter(x -> x < ecut || x in pr.e, overlap_time)
         filter!(x -> x < ecut, overlap_time)
-        esample .&= (getcolumn(data, tr.time).∈(overlap_time,)) .&
-            (getcolumn(data, treatname).∈(valid_cohort,))
+    else
+        ecut = IdDict(e.rotation=>e.time for e in pr.ecut)
+        valid_cohort = filter(x -> x.time < ecut[x.rotation] || x in pr.e, overlap_time)
+        filter!(x -> x.time < ecut[x.rotation], overlap_time)
     end
+    esample .&= (refarray(getcolumn(data, tr.time)).∈(overlap_time,)) .&
+        (refarray(getcolumn(data, treatname)).∈(valid_cohort,))
     tr_rows .&= esample
 end
 
@@ -100,23 +117,21 @@ See also [`CheckVars`](@ref).
 function checkvars!(data, tr::AbstractTreatment, pr::AbstractParallel,
         yterm::AbstractTerm, treatname::Symbol, esample::BitVector,
         treatintterms::TermSet, xterms::TermSet)
+    # Do not check eltype of treatintterms
+    treatvars = union([treatname], termvars(tr), termvars(pr))
+    checktreatvars(tr, pr, treatvars, data)
 
-    treatvars = union([treatname], (termvars(t) for t in (tr, pr, treatintterms))...)
-    for v in treatvars
-        eltype(getcolumn(data, v)) <: Union{Missing, Integer} ||
-            throw(ArgumentError("data column $v has unaccepted element type"))
-    end
-
-    allvars = union(treatvars, (termvars(t) for t in (yterm, xterms))...)
-    untreatedvars = setdiff(allvars, termvars(treatintterms))
-    for v in untreatedvars
+    allvars = union(treatvars, termvars(yterm), termvars(xterms))
+    for v in allvars
         esample .&= .!ismissing.(getcolumn(data, v))
     end
     # Values of treatintterms from untreated units are ignored
-    tr_rows = istreated.(Ref(pr), getcolumn(data, treatname)) .& esample
-    for v in termvars(treatintterms)
+    tr_rows = esample .& istreated.(Ref(pr), getcolumn(data, treatname))
+    treatintvars = termvars(treatintterms)
+    for v in treatintvars
         esample[tr_rows] .&= .!ismissing.(view(getcolumn(data, v), tr_rows))
     end
+    isempty(treatintvars) || (tr_rows .&= esample)
 
     overlap!(esample, tr_rows, tr, pr, treatname, data)
     sum(esample) == 0 && error("no nonmissing data")

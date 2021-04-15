@@ -13,7 +13,7 @@ end
     dt0 = DynamicTreatment(:month, nothing, SharpDesign())
     dt1 = DynamicTreatment(:month, -1, SharpDesign())
     dt2 = DynamicTreatment(:month, [-2,-1], SharpDesign())
-    
+
     @testset "inner constructor" begin
         @test DynamicTreatment(:month, [], SharpDesign()) == dt0
         @test DynamicTreatment(:month, [-1], SharpDesign()) == dt1
