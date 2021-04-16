@@ -32,8 +32,10 @@ export coef, vcov, stderror, confint, nobs, dof_residual, responsename, coefname
 export cb,
        ≊,
        exampledata,
+
        RotatingTimeValue,
        rotatingtime,
+       RotatingRange,
 
        VecColumnTable,
        VecColsRow,
@@ -46,6 +48,7 @@ export cb,
        ScaledArray,
        ScaledVector,
        ScaledMatrix,
+       scale,
 
        TreatmentSharpness,
        SharpDesign,
@@ -126,6 +129,7 @@ export cb,
        rescale
 
 include("utils.jl")
+include("time.jl")
 include("tables.jl")
 include("ScaledArrays.jl")
 include("treatments.jl")

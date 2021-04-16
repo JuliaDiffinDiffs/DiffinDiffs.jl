@@ -147,67 +147,6 @@ function exampledata(name::Union{Symbol,String})
     return open(path) |> GzipDecompressorStream |> read |> CSV.File
 end
 
-"""
-    RotatingTimeValue{R, T}
-
-A wrapper around a time value for distinguishing potentially different
-rotation group it could belong to in a rotating sampling design.
-See also [`rotatingtime`](@ref) and [`settime`](@ref).
-
-# Fields
-- `rotation::R`: a rotation group in a rotating sampling design.
-- `time::T`: a time value belonged to the rotation group.
-"""
-struct RotatingTimeValue{R, T}
-    rotation::R
-    time::T
-end
-
-"""
-    rotatingtime(rotation, time)
-
-Construct [`RotatingTimeValue`](@ref)s from `rotation` and `time`.
-This method simply broadcasts the default constructor over the arguments.
-"""
-rotatingtime(rotation, time) = RotatingTimeValue.(rotation, time)
-
-+(x::RotatingTimeValue, y) = RotatingTimeValue(x.rotation, x.time + y)
-+(x, y::RotatingTimeValue) = RotatingTimeValue(y.rotation, x + y.time)
--(x::RotatingTimeValue, y) = RotatingTimeValue(x.rotation, x.time - y)
--(x, y::RotatingTimeValue) = RotatingTimeValue(y.rotation, x - y.time)
-*(x::RotatingTimeValue, y) = RotatingTimeValue(x.rotation, x.time * y)
-*(x, y::RotatingTimeValue) = RotatingTimeValue(y.rotation, x * y.time)
-
-function -(x::RotatingTimeValue, y::RotatingTimeValue)
-    rx = x.rotation
-    ry = y.rotation
-    rx == ry || throw(ArgumentError("x has rotation $rx while y has rotation $ry"))
-    return x.time - y.time
-end
-
-function isless(x::RotatingTimeValue, y::RotatingTimeValue)
-    rx = x.rotation
-    ry = y.rotation
-    return isequal(rx, ry) ? isless(x.time, y.time) : isless(rx, ry)
-end
-
-==(x::RotatingTimeValue, y::RotatingTimeValue) =
-    x.rotation == y.rotation && x.time == y.time
-
-Base.checkindex(::Type{Bool}, inds::AbstractUnitRange, i::RotatingTimeValue) =
-    checkindex(Bool, inds, i.time)
-
-@propagate_inbounds getindex(X::AbstractArray, i::RotatingTimeValue) = getindex(X, i.time)
-
-show(io::IO, x::RotatingTimeValue) = print(io, x.rotation, "_", x.time)
-function show(io::IO, ::MIME"text/plain", x::RotatingTimeValue)
-    println(io, typeof(x), ':')
-    println(io, "  rotation: ", x.rotation)
-    print(io, "  time:     ", x.time)
-end
-
-const ValidTimeType = Union{Signed, TimeType, Period, RotatingTimeValue}
-
 # Check whether the input data is a column table
 function checktable(data)
     istable(data) ||

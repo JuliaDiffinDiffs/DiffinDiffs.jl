@@ -6,34 +6,31 @@ mutable struct RefArray{R}
 end
 
 """
-    ScaledArray{T,N,RA,S,P} <: AbstractArray{T,N}
+    ScaledArray{T,R,N,RA,P} <: AbstractArray{T,N}
 
 An array type that stores data as indices of a range.
 
 # Fields
 - `refs::RA<:AbstractArray{<:Any, N}`: an array of indices.
-- `start::T`: the starting value of the range.
-- `step::S`: the step size of the range.
-- `stop::T`: the stopping value of the range.
 - `pool::P<:AbstractRange{T}`: a range that covers all possible values stored by the array.
+- `invpool::Dict{T,R}`: a map from array elements to indices of `pool`.
 """
-mutable struct ScaledArray{T,N,RA,S,P} <: AbstractArray{T,N}
+mutable struct ScaledArray{T,R,N,RA,P} <: AbstractArray{T,N}
     refs::RA
-    start::T
-    step::S
-    stop::T
     pool::P
-    ScaledArray{T,N,RA,S,P}(rs::RefArray{RA}, start::T, step::S, stop::T,
-        pool::P=start:step:stop) where
-        {T, N, RA<:AbstractArray{<:Any, N}, S, P<:AbstractRange{T}} =
-            new{T,N,RA,S,P}(rs.a, start, step, stop, pool)
+    invpool::Dict{T,R}
+    ScaledArray{T,R,N,RA,P}(rs::RefArray{RA}, pool::P, invpool::Dict{T,R}) where
+        {T, R, N, RA<:AbstractArray{R, N}, P<:AbstractRange{T}} =
+            new{T,R,N,RA,P}(rs.a, pool, invpool)
 end
 
-ScaledArray(rs::RefArray{RA}, start::T, step::S, stop::T, pool::P=start:step:stop) where
-    {T,RA,S,P} = ScaledArray{T,ndims(RA),RA,S,P}(rs, start, step, stop, pool)
+ScaledArray(rs::RefArray{RA}, pool::P, invpool::Dict{T,R}) where
+    {T,R,RA<:AbstractArray{R},P} = ScaledArray{T,R,ndims(RA),RA,P}(rs, pool, invpool)
 
-const ScaledVector{T} = ScaledArray{T,1}
-const ScaledMatrix{T} = ScaledArray{T,2}
+const ScaledVector{T,R} = ScaledArray{T,R,1}
+const ScaledMatrix{T,R} = ScaledArray{T,R,2}
+
+scale(sa::ScaledArray) = step(sa.pool)
 
 function _validmin(min, xmin, isstart::Bool)
     if min === nothing
@@ -55,10 +52,11 @@ function _validmax(max, xmax, isstart::Bool)
     return max
 end
 
-function validstartstepstop(x::AbstractArray, start, step, stop, usepool)
+function validpool(x::AbstractArray, T::Type, start, step, stop, usepool::Bool)
     step === nothing && throw(ArgumentError("step cannot be nothing"))
     pool = DataAPI.refpool(x)
-    xmin, xmax = usepool && pool !== nothing ? extrema(pool) : extrema(x)
+    xs = skipmissing(usepool && pool !== nothing ? pool : x)
+    xmin, xmax = extrema(xs)
     applicable(+, xmin, step) || throw(ArgumentError(
         "step of type $(typeof(step)) does not match array with element type $(eltype(x))"))
     if xmin + step > xmin
@@ -70,47 +68,83 @@ function validstartstepstop(x::AbstractArray, start, step, stop, usepool)
     else
         throw(ArgumentError("step cannot be zero"))
     end
-    T = promote_type(eltype(x), eltype(start:step:stop))
-    return convert(T, start), convert(T, stop)
+    start = convert(T, start)
+    stop = convert(T, stop)
+    return start:step:stop
 end
 
-function _scaledlabel(x::AbstractArray, step, reftype::Type{<:Signed}=DEFAULT_REF_TYPE;
-        start=nothing, stop=nothing, usepool::Bool=true)
-    start, stop = validstartstepstop(x, start, step, stop, usepool)
-    pool = start:step:stop
-    while typemax(reftype) < length(pool)
-        reftype = widen(reftype)
-    end
-    refs = similar(x, reftype)
-    @inbounds for i in eachindex(refs)
-        refs[i] = length(start:step:x[i])
-    end
-    return refs, start, step, stop
-end
-
-function ScaledArray(x::AbstractArray, reftype::Type, start, step, stop, usepool::Bool=true)
-    refs, start, step, stop = _scaledlabel(x, step, reftype; start=start, stop=stop, usepool=usepool)
-    return ScaledArray(RefArray(refs), start, step, stop)
-end
-
-function ScaledArray(sa::ScaledArray, reftype::Type, start, step, stop, usepool::Bool=true)
-    if step !== nothing && step != sa.step
-        refs, start, step, stop = _scaledlabel(sa, step, reftype; start=start, stop=stop, usepool=usepool)
-        return ScaledArray(RefArray(refs), start, step, stop)
-    else
-        step = sa.step
-        start, stop = validstartstepstop(sa, start, step, stop, usepool)
-        refs = similar(sa.refs, reftype)
-        if start == sa.start
-            copy!(refs, sa.refs)
-        elseif start < sa.start && start < stop || start > sa.start && start > stop
-            offset = length(start:step:sa.start) - 1
-            refs .= sa.refs .+ offset
+function _scaledlabel!(labels::AbstractArray, invpool::Dict, xs::AbstractArray, start, step)
+    z = zero(valtype(invpool))
+    @inbounds for i in eachindex(labels)
+        x = xs[i]
+        lbl = get(invpool, x, z)
+        if lbl !== z
+            labels[i] = lbl
+        elseif ismissing(x)
+            labels[i] = z
+            invpool[x] = z
         else
-            offset = length(sa.start:step:start) - 1
-            refs .= sa.refs .- offset
+            r = start:step:x
+            lbl = length(r)
+            labels[i] = lbl
+            invpool[x] = lbl
         end
-        return ScaledArray(RefArray(refs), start, step, stop)
+    end
+end
+
+function scaledlabel(xs::AbstractArray, stepsize,
+        R::Type=DEFAULT_REF_TYPE, T::Type=eltype(xs);
+        start=nothing, stop=nothing, usepool::Bool=true)
+    pool = validpool(xs, T, start, stepsize, stop, usepool)
+    T = Missing <: T ? Union{eltype(pool), Missing} : eltype(pool)
+    start = first(pool)
+    stepsize = step(pool)
+    if R <: Integer
+        while typemax(R) < length(pool)
+            R = widen(R)
+        end
+    end
+    labels = similar(xs, R)
+    invpool = Dict{T,R}()
+    _scaledlabel!(labels, invpool, xs, start, stepsize)
+    return labels, pool, invpool
+end
+
+function ScaledArray(x::AbstractArray, reftype::Type, xtype::Type, start, step, stop, usepool::Bool=true)
+    refs, pool, invpool = scaledlabel(x, step, reftype, xtype; start=start, stop=stop, usepool=usepool)
+    return ScaledArray(RefArray(refs), pool, invpool)
+end
+
+function ScaledArray(sa::ScaledArray, reftype::Type, xtype::Type, start, step, stop, usepool::Bool=true)
+    if step !== nothing && step != scale(sa)
+        refs, pool, invpool = scaledlabel(sa, step, reftype, xtype; start=start, stop=stop, usepool=usepool)
+        return ScaledArray(RefArray(refs), pool, invpool)
+    else
+        step = scale(sa)
+        pool = validpool(sa, xtype, start, step, stop, usepool)
+        T = Missing <: xtype ? Union{eltype(pool), Missing} : eltype(pool)
+        refs = similar(sa.refs, reftype)
+        invpool = Dict{T, reftype}()
+        start0 = first(sa.pool)
+        start = first(pool)
+        stop = last(pool)
+        if start == start0
+            copy!(refs, sa.refs)
+            copy!(invpool, sa.invpool)
+        elseif start < start0 && start < stop || start > start0 && start > stop
+            offset = length(start:step:start0) - 1
+            refs .= sa.refs .+ offset
+            for (k, v) in sa.invpool
+                invpool[k] = v + offset
+            end
+        else
+            offset = length(start0:step:start) - 1
+            refs .= sa.refs .- offset
+            for (k, v) in sa.invpool
+                invpool[k] = v - offset
+            end
+        end
+        return ScaledArray(RefArray(refs), pool, invpool)
     end
 end
 
@@ -126,27 +160,28 @@ If `start` or `stop` is not specified, it will be chosen based on the extrema of
 - `usepool::Bool=true`: find extrema of `x` based on `DataAPI.refpool`.
 """
 ScaledArray(x::AbstractArray, start, step, stop=nothing;
-    reftype::Type=DEFAULT_REF_TYPE, usepool::Bool=true) =
-        ScaledArray(x, reftype, start, step, stop, usepool)
+    reftype::Type=DEFAULT_REF_TYPE, xtype::Type=eltype(x), usepool::Bool=true) =
+        ScaledArray(x, reftype, xtype, start, step, stop, usepool)
 
 ScaledArray(sa::ScaledArray, start, step, stop=nothing;
-    reftype::Type=eltype(refarray(sa)), usepool::Bool=true) =
-        ScaledArray(sa, reftype, start, step, stop, usepool)
+    reftype::Type=eltype(refarray(sa)), xtype::Type=eltype(sa), usepool::Bool=true) =
+        ScaledArray(sa, reftype, xtype, start, step, stop, usepool)
 
 ScaledArray(x::AbstractArray, step; reftype::Type=DEFAULT_REF_TYPE,
-    start=nothing, stop=nothing, usepool::Bool=true) =
-        ScaledArray(x, reftype, start, step, stop, usepool)
+    start=nothing, stop=nothing, xtype::Type=eltype(x), usepool::Bool=true) =
+        ScaledArray(x, reftype, xtype, start, step, stop, usepool)
 
 ScaledArray(sa::ScaledArray, step=nothing; reftype::Type=eltype(refarray(sa)),
-    start=nothing, stop=nothing, usepool::Bool=true) =
-        ScaledArray(sa, reftype, start, step, stop, usepool)
+    start=nothing, stop=nothing, xtype::Type=eltype(sa), usepool::Bool=true) =
+        ScaledArray(sa, reftype, xtype, start, step, stop, usepool)
 
 Base.size(sa::ScaledArray) = size(sa.refs)
-Base.IndexStyle(::Type{<:ScaledArray{T,N,RA}}) where {T,N,RA} = IndexStyle(RA)
+Base.IndexStyle(::Type{<:ScaledArray{T,R,N,RA}}) where {T,R,N,RA} = IndexStyle(RA)
 
 DataAPI.refarray(sa::ScaledArray) = sa.refs
 DataAPI.refvalue(sa::ScaledArray, n::Integer) = getindex(DataAPI.refpool(sa), n)
 DataAPI.refpool(sa::ScaledArray) = sa.pool
+DataAPI.invrefpool(sa::ScaledArray) = sa.invpool
 
 DataAPI.refarray(ssa::SubArray{<:Any, <:Any, <:ScaledArray}) =
     view(parent(ssa).refs, ssa.indices...)
@@ -154,11 +189,14 @@ DataAPI.refvalue(ssa::SubArray{<:Any, <:Any, <:ScaledArray}, n::Integer) =
     DataAPI.refvalue(parent(ssa), n)
 DataAPI.refpool(ssa::SubArray{<:Any, <:Any, <:ScaledArray}) =
     DataAPI.refpool(parent(ssa))
+DataAPI.invrefpool(ssa::SubArray{<:Any, <:Any, <:ScaledArray}) =
+    DataAPI.invrefpool(parent(ssa))
 
 @inline function Base.getindex(sa::ScaledArray, i::Int)
     refs = DataAPI.refarray(sa)
     @boundscheck checkbounds(refs, i)
     @inbounds n = refs[i]
+    iszero(n) && return missing
     pool = DataAPI.refpool(sa)
     @boundscheck checkbounds(pool, n)
     return @inbounds pool[n]
@@ -169,13 +207,14 @@ end
     @boundscheck checkbounds(refs, I...)
     @inbounds ns = refs[I...]
     pool = DataAPI.refpool(sa)
-    @boundscheck checkbounds(pool, ns)
+    N = length(pool)
+    @boundscheck checkindex(Bool, 0:N, ns) || throw_boundserror(pool, ns)
     return @inbounds pool[ns]
 end
 
 function Base.:(==)(x::ScaledArray, y::ScaledArray)
     size(x) == size(y) || return false
-    x.start == y.start && x.step == y.step && return x.refs == y.refs
+    first(x.pool) == first(y.pool) && step(x.pool) == step(y.pool) && return x.refs == y.refs
     eq = true
     for (p, q) in zip(x, y)
         # missing could arise

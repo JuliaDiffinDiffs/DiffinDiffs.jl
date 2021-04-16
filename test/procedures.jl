@@ -87,6 +87,20 @@ end
         ret = (esample=df.wave_hosp.∈((8,11),), tr_rows=hrs.wave_hosp.==8)
         @test checkvars!(nt...) == ret
 
+        df.wave_hosp = Date.(df.wave_hosp)
+        @test_throws ArgumentError checkvars!(nt...)
+        df.wave = Date.(df.wave)
+        @test_throws ArgumentError checkvars!(nt...)
+        nt = merge(nt, (pr=nevertreated(Date(11)),))
+        @test_throws ArgumentError checkvars!(nt...)
+        df.wave_hosp = settime(df.wave_hosp, step=Year(1))
+        df.wave = settime(df.wave, step=Year(1))
+        @test checkvars!(nt...) == ret
+        nt = merge(nt, (pr=notyettreated(Date(11)),))
+        @test checkvars!(nt...) ==
+            (esample=(df.wave_hosp.∈((Date(8),Date(11)),)).&(df.wave.!=Date(11)),
+            tr_rows=(df.wave_hosp.==Date(8)).&(df.wave.!=Date(11)))
+
         df = DataFrame(hrs)
         rot = ifelse.(isodd.(df.hhidpn), 1, 2)
         df.wave_hosp = rotatingtime(rot, df.wave_hosp)

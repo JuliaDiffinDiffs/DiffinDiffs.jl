@@ -20,7 +20,17 @@ end
 
 # Obtain unique labels for row-wise pairs of values from a1 and a2 when mult is large enough
 function _mult!(a1::AbstractArray, a2::AbstractArray, mult)
-    a1 .+= mult .* (a2 .- 1)
+    z = zero(eltype(a1))
+    @inbounds for i in eachindex(a1)
+        x1 = a1[i]
+        x2 = a2[i]
+        # Handle missing values represented by zeros
+        if iszero(x1) || iszero(x2)
+            a1[i] = z
+        else
+            a1[i] += mult * (x2 - 1)
+        end
+	end
 end
 
 """
@@ -128,13 +138,24 @@ The returned array ensures well-defined time intervals for operations involving 
 - `rotation=nothing`: rotation groups in a rotating sampling design; use [`RotatingTimeValue`](@ref)s as reference values.
 """
 function settime(time::AbstractArray; step=nothing, reftype::Type{<:Signed}=Int32, rotation=nothing)
-    eltype(time) <: ValidTimeType ||
-        throw(ArgumentError("unaccepted element type $(eltype(time)) from time column"))
-    step === nothing && (step = one(eltype(time)))
+    T = eltype(time)
+    T <: ValidTimeType && !(T <: RotatingTimeValue) ||
+        throw(ArgumentError("unaccepted element type $T from time column"))
+    step === nothing && (step = one(T))
     time = ScaledArray(time, step; reftype=reftype)
     if rotation !== nothing
         refs = rotatingtime(rotation, time.refs)
-        time = ScaledArray(RefArray(refs), time.start, time.step, time.stop)
+        rots = unique(rotation)
+        invpool = Dict{RotatingTimeValue{eltype(rotation), T}, eltype(refs)}()
+        for (k, v) in time.invpool
+            for r in rots
+                rt = RotatingTimeValue(r, k)
+                invpool[rt] = RotatingTimeValue(r, v)
+            end
+        end
+        rmin, rmax = extrema(rots)
+        pool = RotatingTimeValue(rmin, first(time.pool)):scale(time):RotatingTimeValue(rmax, last(time.pool))
+        time = ScaledArray(RefArray(refs), pool, invpool)
     end
     return time
 end

@@ -93,12 +93,16 @@ function overlap!(esample::BitVector, tr_rows::BitVector, tr::DynamicTreatment,
         pr::NotYetTreatedParallel{Unconditional}, treatname::Symbol, data)
     overlap_time, _c, _t = _overlaptime(tr, tr_rows, data)
     timetype = eltype(overlap_time)
+    invpool = invrefpool(getcolumn(data, tr.time))
     if !(timetype <: RotatingTimeValue)
         ecut = pr.ecut[1]
+        invpool === nothing || (ecut = invpool[ecut])
         valid_cohort = filter(x -> x < ecut || x in pr.e, overlap_time)
         filter!(x -> x < ecut, overlap_time)
     else
-        ecut = IdDict(e.rotation=>e.time for e in pr.ecut)
+        ecut = pr.ecut
+        invpool === nothing || (ecut = (invpool[e] for e in ecut))
+        ecut = IdDict(e.rotation=>e.time for e in ecut)
         valid_cohort = filter(x -> x.time < ecut[x.rotation] || x in pr.e, overlap_time)
         filter!(x -> x.time < ecut[x.rotation], overlap_time)
     end
