@@ -11,6 +11,7 @@ using LinearAlgebra: Diagonal
 using MacroTools: @capture, isexpr, postwalk
 using Missings: allowmissing, disallowmissing
 using PooledArrays: _label
+using PrettyTables: pretty_table
 using Reexport
 using StatsBase: CoefTable, Weights, stderror, uweights
 using StatsFuns: tdistccdf, tdistinvcdf

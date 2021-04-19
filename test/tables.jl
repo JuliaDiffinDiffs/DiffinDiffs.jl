@@ -18,6 +18,7 @@
     @test size(cols) == (0, 1)
     @test length(cols) == 1
     @test isempty(cols)
+    @test sprint(show, MIME("text/plain"), cols) == "0×1 VecColumnTable"
 
     cols = VecColumnTable((wave=hrs.wave,))
     @test size(cols) == (3280, 1)
@@ -74,11 +75,22 @@
     @test cols == deepcopy(cols)
 
     @test sprint(show, cols) == "3280×2 VecColumnTable"
-    w = VERSION < v"1.6.0" ? "  " : ""
     @test sprint(show, MIME("text/plain"), cols) == """
         3280×2 VecColumnTable:
-         :wave       Int64$w
-         :oop_spend  Float64"""
+          Row │  wave  oop_spend
+              │ Int64    Float64
+        ──────┼──────────────────
+            1 │    10    6532.91
+            2 │     8    1326.93
+            3 │    11    1050.33
+            4 │     9    979.418
+            5 │     7    5498.68
+          ⋮   │   ⋮        ⋮
+         3276 │    11    3020.78
+         3277 │     8     2632.0
+         3278 │     9     657.34
+         3279 │    10    782.795
+         3280 │     7    4182.39"""
 
     @test summary(cols) == "3280×2 VecColumnTable"
     summary(stdout, cols)
