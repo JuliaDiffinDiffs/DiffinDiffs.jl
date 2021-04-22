@@ -119,7 +119,8 @@ function Base.show(io::IO, ::MIME"text/plain", cols::VecColumnTable)
     show(io, cols)
     if ncol(cols) > 0 && nrow(cols) > 0
         println(io, ':')
-        pretty_table(IOContext(io, :limit=>true, :displaysize=>(15, 80)),
+        nr, nc = displaysize(io)
+        pretty_table(IOContext(io, :limit=>true, :displaysize=>(nr-3, nc)),
             cols, vlines=1:1, hlines=1:1,
             show_row_number=true, show_omitted_cell_summary=false,
             newline_at_end=false, vcrop_mode=:middle)

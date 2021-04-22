@@ -75,7 +75,7 @@
     @test cols == deepcopy(cols)
 
     @test sprint(show, cols) == "3280×2 VecColumnTable"
-    @test sprint(show, MIME("text/plain"), cols) == """
+    @test sprint(show, MIME("text/plain"), cols, context=:displaysize=>(18,80)) == """
         3280×2 VecColumnTable:
           Row │  wave  oop_spend
               │ Int64    Float64
@@ -93,7 +93,7 @@
          3280 │     7    4182.39"""
 
     @test summary(cols) == "3280×2 VecColumnTable"
-    summary(stdout, cols)
+    @test sprint(summary, cols) == "3280×2 VecColumnTable"
 
     @test Tables.istable(typeof(cols))
     @test Tables.columnaccess(typeof(cols))
