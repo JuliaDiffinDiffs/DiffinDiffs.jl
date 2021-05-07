@@ -22,6 +22,7 @@ using Tables: AbstractColumns, istable, columnnames, getcolumn
 
 import Base: ==, +, -, *, isless, show, parent, view, diff
 import Base: eltype, firstindex, lastindex, getindex, iterate, length, sym_in
+import Missings: allowmissing, disallowmissing
 import StatsBase: coef, vcov, confint, nobs, dof_residual, responsename, coefnames, weights,
     coeftable
 import StatsModels: concrete_term, schema, termvars, lag, lead

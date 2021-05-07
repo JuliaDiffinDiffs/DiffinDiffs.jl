@@ -11,26 +11,31 @@ end
 An array type that stores data as indices of a range.
 
 # Fields
-- `refs::RA<:AbstractArray{<:Any, N}`: an array of indices.
-- `pool::P<:AbstractRange{T}`: a range that covers all possible values stored by the array.
+- `refs::RA<:AbstractArray{R,N}`: an array of indices.
+- `pool::P<:AbstractRange`: a range that covers all possible values stored by the array.
 - `invpool::Dict{T,R}`: a map from array elements to indices of `pool`.
 """
 mutable struct ScaledArray{T,R,N,RA,P} <: AbstractArray{T,N}
     refs::RA
     pool::P
     invpool::Dict{T,R}
-    ScaledArray{T,R,N,RA,P}(rs::RefArray{RA}, pool::P, invpool::Dict{T,R}) where
-        {T, R, N, RA<:AbstractArray{R, N}, P<:AbstractRange{T}} =
-            new{T,R,N,RA,P}(rs.a, pool, invpool)
+    function ScaledArray{T,R,N,RA,P}(rs::RefArray{RA}, pool::P, invpool::Dict{T,R}) where
+            {T, R, N, RA<:AbstractArray{R, N}, P<:AbstractRange}
+        eltype(P) == nonmissingtype(T) || throw(ArgumentError(
+            "expect element type of pool being $(nonmissingtype(T)); got $(eltype(P))"))
+        return new{T,R,N,RA,P}(rs.a, pool, invpool)
+    end
 end
 
-ScaledArray(rs::RefArray{RA}, pool::P, invpool::Dict{T,R}) where
-    {T,R,RA<:AbstractArray{R},P} = ScaledArray{T,R,ndims(RA),RA,P}(rs, pool, invpool)
+ScaledArray(rs::RefArray{RA}, pool::P, invpool::Dict{T,R}) where {T,R,RA<:AbstractArray{R},P} =
+    ScaledArray{T,R,ndims(RA),RA,P}(rs, pool, invpool)
 
 const ScaledVector{T,R} = ScaledArray{T,R,1}
 const ScaledMatrix{T,R} = ScaledArray{T,R,2}
 
-scale(sa::ScaledArray) = step(sa.pool)
+const ScaledArrOrSub = Union{ScaledArray, SubArray{<:Any, <:Any, <:ScaledArray}}
+
+scale(sa::ScaledArrOrSub) = step(DataAPI.refpool(sa))
 
 function _validmin(min, xmin, isstart::Bool)
     if min === nothing
@@ -178,6 +183,14 @@ ScaledArray(sa::ScaledArray, step=nothing; reftype::Type=eltype(refarray(sa)),
 Base.size(sa::ScaledArray) = size(sa.refs)
 Base.IndexStyle(::Type{<:ScaledArray{T,R,N,RA}}) where {T,R,N,RA} = IndexStyle(RA)
 
+Base.similar(sa::ScaledArray{T,R}, dims::Dims=size(sa)) where {T,R} =
+    ScaledArray(RefArray(ones(R, dims)), DataAPI.refpool(sa), Dict{T,R}())
+
+Base.similar(sa::SubArray{<:Any, <:Any, <:ScaledArray{T,R}}, dims::Dims=size(sa)) where {T,R} =
+    ScaledArray(RefArray(ones(R, dims)), DataAPI.refpool(sa), Dict{T,R}())
+
+Base.similar(sa::ScaledArrOrSub, dims::Int...) = similar(sa, dims)
+
 DataAPI.refarray(sa::ScaledArray) = sa.refs
 DataAPI.refvalue(sa::ScaledArray, n::Integer) = getindex(DataAPI.refpool(sa), n)
 DataAPI.refpool(sa::ScaledArray) = sa.pool
@@ -202,19 +215,51 @@ DataAPI.invrefpool(ssa::SubArray{<:Any, <:Any, <:ScaledArray}) =
     return @inbounds pool[n]
 end
 
-@inline function Base.getindex(sa::ScaledArray, I...)
-    refs = DataAPI.refarray(sa)
-    @boundscheck checkbounds(refs, I...)
-    @inbounds ns = refs[I...]
+Base.@propagate_inbounds function Base.getindex(sa::ScaledArrOrSub, I::AbstractVector)
+    newrefs = DataAPI.refarray(sa)[I]
     pool = DataAPI.refpool(sa)
-    N = length(pool)
-    @boundscheck checkindex(Bool, 0:N, ns) || throw_boundserror(pool, ns)
-    return @inbounds pool[ns]
+    invpool = DataAPI.invrefpool(sa)
+    return ScaledArray(RefArray(newrefs), pool, invpool)
 end
 
-function Base.:(==)(x::ScaledArray, y::ScaledArray)
+Base.@propagate_inbounds function Base.setindex!(sa::ScaledArray, val, ind::Int)
+    invpool = DataAPI.invrefpool(sa)
+    n = get(invpool, val, nothing)
+    if n === nothing
+        pool = DataAPI.refpool(sa)
+        r = first(pool):step(pool):val
+        last(r) > last(pool) && (sa.pool = r)
+        n = length(r)
+        invpool[val] = n
+    end
+    refs = DataAPI.refarray(sa)
+    refs[ind] = n
+    return sa
+end
+
+Base.@propagate_inbounds function Base.setindex!(sa::ScaledArray, ::Missing, ind::Int)
+    refs = DataAPI.refarray(sa)
+    z = zero(eltype(refs))
+    invpool = DataAPI.invrefpool(sa)
+    invpool[missing] = z
+    refs[ind] = z
+    return sa
+end
+
+allowmissing(sa::ScaledArray{T,R}) where {T,R} =
+    ScaledArray(RefArray(sa.refs), sa.pool, convert(Dict{Union{T,Missing},R}, sa.invpool))
+
+function disallowmissing(sa::ScaledArray{T,R}) where {T,R}
+    T1 = nonmissingtype(T)
+    any(x->iszero(x), sa.refs) && throw(ArgumentError("cannot convert missing to $T1"))
+    delete!(sa.invpool, missing)
+    return ScaledArray(RefArray(sa.refs), sa.pool, convert(Dict{T1,R}, sa.invpool))
+end
+
+function Base.:(==)(x::ScaledArrOrSub, y::ScaledArrOrSub)
     size(x) == size(y) || return false
-    first(x.pool) == first(y.pool) && step(x.pool) == step(y.pool) && return x.refs == y.refs
+    first(DataAPI.refpool(x)) == first(DataAPI.refpool(y)) &&
+        scale(x) == scale(y) && return DataAPI.refarray(x) == DataAPI.refarray(y)
     eq = true
     for (p, q) in zip(x, y)
         # missing could arise

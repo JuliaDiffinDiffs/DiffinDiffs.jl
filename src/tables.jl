@@ -96,7 +96,7 @@ end
 
 Base.values(cols::VecColumnTable) = _columns(cols)
 Base.haskey(cols::VecColumnTable, key::Symbol) = haskey(_lookup(cols), key)
-Base.haskey(cols::VecColumnTable, i::Int) = 0 < i < length(_names(cols))
+Base.haskey(cols::VecColumnTable, i::Int) = 0 < i <= length(_names(cols))
 
 function Base.:(==)(x::VecColumnTable, y::VecColumnTable)
     size(x) == size(y) || return false

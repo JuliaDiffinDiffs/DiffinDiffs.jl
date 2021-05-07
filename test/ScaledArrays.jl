@@ -50,24 +50,51 @@ using DiffinDiffsBase: RefArray, validpool, scaledlabel
     @test sa5.refs == sa4.refs
     @test sa5.refs !== sa4.refs
 
+    sa6 = ScaledArray([missing, 1, 2], 1)
+    @test eltype(sa6) == Union{Int,Missing}
+    @test sa6.refs == 0:2
+    @test eltype(sa6.refs) == Int32
+    @test ismissing(sa6[1])
+
     @test_throws ArgumentError ScaledArray(sa5, stop=7, usepool=false)
+    @test_throws ArgumentError ScaledArray(RefArray(1:3), 1.0:0.5:3.0, Dict{Int,Int}())
 
     @test size(sa) == (10,)
     @test IndexStyle(typeof(sa)) == IndexLinear()
+
+    @test similar(sa, 4) == ScaledArray(RefArray(ones(Int, 4)), sa.pool, Dict{Date,Int}())
+    @test similar(sa, (4,)) == similar(view(sa, 1:5), 4) == similar(sa, 4)
 
     @test refarray(sa) === sa.refs
     @test refvalue(sa, 1) == Date(1)
     @test refpool(sa) === sa.pool
     @test invrefpool(sa) === sa.invpool
 
-    ssa = view(sa, 3:4)
-    @test refarray(ssa) == view(sa.refs, 3:4)
+    ssa = view(sa, 3:5)
+    @test refarray(ssa) == view(sa.refs, 3:5)
     @test refvalue(ssa, 1) == Date(1)
     @test refpool(ssa) === sa.pool
     @test invrefpool(ssa) === sa.invpool
+    @test ssa == sa[3:5]
 
     @test sa[1] == Date(1)
     @test sa[1:2] == sa[[1,2]] == sa[(1:10).<3] == Date.(1:2)
+    @test sa[1:2] isa ScaledArray
+    @test ssa[1:2] isa ScaledArray
+
+    sa[1] = Date(10)
+    @test sa[1] == Date(10)
+    sa[1:2] .= Date(100)
+    @test sa[1:2] == [Date(100), Date(100)]
+    @test last(sa.pool) == Date(100)
+    @test_throws MethodError sa[1] = missing
+    sa = allowmissing(sa)
+    sa[1] = missing
+    @test ismissing(sa[1])
+    @test_throws ArgumentError disallowmissing(sa)
+    sa[1] = Date(1)
+    sa = disallowmissing(sa)
+    @test eltype(sa) == Date
 end
 
 @testset "scaledlabel" begin

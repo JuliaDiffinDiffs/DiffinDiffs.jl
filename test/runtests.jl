@@ -11,6 +11,7 @@ using DiffinDiffsBase: @fieldequal, unpack, @unpack, checktable, hastreat, parse
     _totermset!, parse_didargs!, _treatnames, _parse_bycells!, _parse_subset, _nselected,
     treatindex, checktreatindex
 using LinearAlgebra: Diagonal
+using Missings: allowmissing, disallowmissing
 using PooledArrays: PooledArray
 using StatsBase: Weights, UnitWeights
 using StatsModels: termvars

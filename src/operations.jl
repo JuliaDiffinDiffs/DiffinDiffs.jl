@@ -94,7 +94,15 @@ function cellrows(cols::VecColumnTable, refrows::IdDict)
     ncol = length(cols)
     ncell = length(refrows)
     rows = Vector{Vector{Int}}(undef, ncell)
-    columns = AbstractVector[Vector{eltype(c)}(undef, ncell) for c in cols]
+    columns = Vector{AbstractVector}(undef, ncol)
+    for i in 1:ncol
+        c = cols[i]
+        if typeof(c) <: ScaledArray || typeof(c) <: SubArray{<:Any,1,<:ScaledArray}
+            columns[i] = similar(c, ncell)
+        else
+            columns[i] = Vector{eltype(c)}(undef, ncell)
+        end
+    end
     refs = Vector{keytype(refrows)}(undef, ncell)
     r = 0
     @inbounds for (k, v) in refrows

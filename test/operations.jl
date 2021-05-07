@@ -42,6 +42,16 @@ end
         sortslices(unique(hcat(hrs.wave, hrs.wave_hosp), dims=1), dims=1)
     @test propertynames(cells) == [:wave, :wave_hosp]
     @test rows[1] == intersect(findall(x->x==7, hrs.wave), findall(x->x==8, hrs.wave_hosp))
+
+    df = DataFrame(hrs)
+    df.wave = ScaledArray(df.wave, 1)
+    df.wave_hosp = ScaledArray(df.wave_hosp, 1)
+    cols1 = subcolumns(df, (:wave, :wave_hosp))
+    cells1, rows1 = cellrows(cols1, rows_dict)
+    @test rows1 == rows
+    @test cells1 == cells
+    @test cells1.wave isa ScaledArray
+    @test cells1.wave_hosp isa ScaledArray
 end
 
 @testset "settime" begin
