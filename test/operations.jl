@@ -54,7 +54,7 @@ end
     @test cells1.wave_hosp isa ScaledArray
 end
 
-@testset "settime" begin
+@testset "settime aligntime" begin
     hrs = exampledata("hrs")
     t = settime(hrs, :wave, step=2, reftype=Int16)
     @test eltype(refarray(t)) == Int16
@@ -66,6 +66,22 @@ end
     @test eltype(t) == RotatingTimeValue{Bool, eltype(hrs.wave)}
     @test eltype(refarray(t)) == RotatingTimeValue{Bool, Int32}
     @test all(x->x.rotation==isodd(x.time), t.refs)
+
+    df = DataFrame(hrs)
+    df.wave1 = Date.(df.wave)
+    t = settime(df, :wave1, step=Year(1))
+    @test t == df.wave1
+    @test t.pool == Date(7):Year(1):Date(11)
+
+    df.t1 = settime(df, :wave, step=1)
+    df.t2 = settime(df, :wave, step=2)
+    t = aligntime(df, :t2, :t1)
+    @test t == df.t2
+    @test t.pool == df.t1.pool
+    df.t2 = settime(df, :wave, start=0, stop=20)
+    t = aligntime(df, :t2, :t1)
+    @test t == df.t2
+    @test t.pool == df.t1.pool
 end
 
 @testset "PanelStructure" begin

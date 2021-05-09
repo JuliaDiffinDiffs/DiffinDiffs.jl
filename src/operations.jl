@@ -97,7 +97,7 @@ function cellrows(cols::VecColumnTable, refrows::IdDict)
     columns = Vector{AbstractVector}(undef, ncol)
     for i in 1:ncol
         c = cols[i]
-        if typeof(c) <: ScaledArray || typeof(c) <: SubArray{<:Any,1,<:ScaledArray}
+        if typeof(c) <: ScaledArrOrSub
             columns[i] = similar(c, ncell)
         else
             columns[i] = Vector{eltype(c)}(undef, ncell)
@@ -127,13 +127,15 @@ function cellrows(cols::VecColumnTable, refrows::IdDict)
 end
 
 """
-    settime(data, timename; step, reftype, rotation)
-    settime(time::AbstractArray; step, reftype, rotation)
+    settime(data, timename; step, start, stop, reftype, rotation)
+    settime(time::AbstractArray; step, start, stop, reftype, rotation)
 
-Return a [`ScaledArray`](@ref) that represents discretized time periods.
+Convert a column of time values to a [`ScaledArray`](@ref)
+for representing discretized time periods of uniform length.
 Time values can be provided either as a table containing the relevant column or as an array.
 The returned array ensures well-defined time intervals for operations involving relative time
 (such as [`lag`](@ref) and [`diff`](@ref)).
+See also [`aligntime`](@ref).
 
 # Arguments
 - `data`: a Tables.jl-compatible data table.
@@ -142,15 +144,18 @@ The returned array ensures well-defined time intervals for operations involving 
 
 # Keywords
 - `step=nothing`: the length of each time interval; try step=1 if not specified.
+- `start=nothing`: the first element of the `pool` of the returned [`ScaledArray`](@ref).
+- `stop=nothing`: the last element of the `pool` of the returned [`ScaledArray`](@ref).
 - `reftype::Type{<:Signed}=Int32`: the element type of the reference values for the returned [`ScaledArray`](@ref).
 - `rotation=nothing`: rotation groups in a rotating sampling design; use [`RotatingTimeValue`](@ref)s as reference values.
 """
-function settime(time::AbstractArray; step=nothing, reftype::Type{<:Signed}=Int32, rotation=nothing)
+function settime(time::AbstractArray; step=nothing, start=nothing, stop=nothing,
+        reftype::Type{<:Signed}=Int32, rotation=nothing)
     T = eltype(time)
     T <: ValidTimeType && !(T <: RotatingTimeValue) ||
         throw(ArgumentError("unaccepted element type $T from time column"))
     step === nothing && (step = one(T))
-    time = ScaledArray(time, step; reftype=reftype)
+    time = ScaledArray(time, start, step, stop; reftype=reftype)
     if rotation !== nothing
         refs = rotatingtime(rotation, time.refs)
         rots = unique(rotation)
@@ -168,10 +173,30 @@ function settime(time::AbstractArray; step=nothing, reftype::Type{<:Signed}=Int3
     return time
 end
 
-function settime(data, timename::Union{Symbol,Integer}; step=nothing,
+function settime(data, timename::Union{Symbol,Integer};
+        step=nothing, start=nothing, stop=nothing,
         reftype::Type{<:Signed}=Int32, rotation=nothing)
     checktable(data)
-    return settime(getcolumn(data, timename); step=step, reftype=reftype, rotation=rotation)
+    return settime(getcolumn(data, timename);
+        step=step, start=start, stop=stop, reftype=reftype, rotation=rotation)
+end
+
+"""
+    aligntime(data, colname::Union{Symbol,Integer}, timename::Union{Symbol,Integer})
+
+Convert a column of time values indexed by `colname` from `data` table
+to a [`ScaledArray`](@ref) with a `pool`
+that has the same first element and step size as the `pool` from
+the [`ScaledArray`](@ref) indexed by `timename`.
+See also [`settime`](@ref).
+
+This is useful for representing all discretized time periods with the same scale
+so that the underlying reference values returned by `DataAPI.refarray`
+can be directly comparable across the columns.
+"""
+function aligntime(data, colname::Union{Symbol,Integer}, timename::Union{Symbol,Integer})
+    checktable(data)
+    return align(getcolumn(data, colname), getcolumn(data, timename))
 end
 
 """

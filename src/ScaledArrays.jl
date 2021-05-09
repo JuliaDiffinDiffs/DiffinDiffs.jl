@@ -33,9 +33,18 @@ ScaledArray(rs::RefArray{RA}, pool::P, invpool::Dict{T,R}) where {T,R,RA<:Abstra
 const ScaledVector{T,R} = ScaledArray{T,R,1}
 const ScaledMatrix{T,R} = ScaledArray{T,R,2}
 
-const ScaledArrOrSub = Union{ScaledArray, SubArray{<:Any, <:Any, <:ScaledArray}}
+const ScaledArrOrSub{T,R,N,RA,P} = Union{ScaledArray{T,R,N,RA,P},
+    SubArray{<:Any, <:Any, <:ScaledArray{T,R,N,RA,P}}}
 
+"""
+    scale(sa::ScaledArrOrSub)
+
+Return the step size of the `pool` of `sa`.
+"""
 scale(sa::ScaledArrOrSub) = step(DataAPI.refpool(sa))
+
+Base.size(sa::ScaledArray) = size(sa.refs)
+Base.IndexStyle(::Type{<:ScaledArray{T,R,N,RA}}) where {T,R,N,RA} = IndexStyle(RA)
 
 function _validmin(min, xmin, isstart::Bool)
     if min === nothing
@@ -180,9 +189,6 @@ ScaledArray(sa::ScaledArray, step=nothing; reftype::Type=eltype(refarray(sa)),
     start=nothing, stop=nothing, xtype::Type=eltype(sa), usepool::Bool=true) =
         ScaledArray(sa, reftype, xtype, start, step, stop, usepool)
 
-Base.size(sa::ScaledArray) = size(sa.refs)
-Base.IndexStyle(::Type{<:ScaledArray{T,R,N,RA}}) where {T,R,N,RA} = IndexStyle(RA)
-
 Base.similar(sa::ScaledArray{T,R}, dims::Dims=size(sa)) where {T,R} =
     ScaledArray(RefArray(ones(R, dims)), DataAPI.refpool(sa), Dict{T,R}())
 
@@ -190,6 +196,28 @@ Base.similar(sa::SubArray{<:Any, <:Any, <:ScaledArray{T,R}}, dims::Dims=size(sa)
     ScaledArray(RefArray(ones(R, dims)), DataAPI.refpool(sa), Dict{T,R}())
 
 Base.similar(sa::ScaledArrOrSub, dims::Int...) = similar(sa, dims)
+
+"""
+    align(xs::AbstractArray, sa::ScaledArrOrSub)
+
+Convert `xs` into a [`ScaledArray`](@ref) with a `pool`
+that has the same first element and step size as the `pool` from `sa`.
+"""
+function align(xs::AbstractArray, sa::ScaledArrOrSub)
+    pool = DataAPI.refpool(sa)
+    invpool = DataAPI.invrefpool(sa)
+    step = scale(sa)
+    xmin, xmax = extrema(xs)
+    start = first(pool)
+    stop = last(pool)
+    start < stop && xmin < start && throw(ArgumentError(
+        "the minimum of xs $xmin is smaller than the minimum of pool $start"))
+    start > stop && xmax > start && throw(ArgumentError(
+        "the maximum of xs $xmax is greater than the maximum of pool $start"))
+    refs = similar(DataAPI.refarray(sa), size(xs))
+    _scaledlabel!(refs, invpool, xs, start, step)
+    return ScaledArray(RefArray(refs), pool, invpool)
+end
 
 DataAPI.refarray(sa::ScaledArray) = sa.refs
 DataAPI.refvalue(sa::ScaledArray, n::Integer) = getindex(DataAPI.refpool(sa), n)

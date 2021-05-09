@@ -27,10 +27,14 @@
     @test isless(rt[1], rt[7])
     @test isless(rt[1], 2.0)
     @test isless(1, rt[2])
+    @test isless(rt[1], missing)
+    @test !isless(missing, rt[1])
 
     @test rt[1] == RotatingTimeValue(Int32(5), Int32(1))
     @test rt[1] == 1
     @test 1 == rt[1]
+    @test isequal(rt[1] == missing, missing)
+    @test isequal(missing == rt[1], missing)
 
     @test zero(typeof(rt[1])) === RotatingTimeValue(0, 0)
     @test iszero(RotatingTimeValue(1, 0))

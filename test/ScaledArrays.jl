@@ -5,7 +5,13 @@ using DiffinDiffsBase: RefArray, validpool, scaledlabel
     pool = Date(1):Year(1):Date(5)
     invpool = Dict(p=>i for (i, p) in enumerate(pool))
     sa = ScaledArray(RefArray(refs), pool, invpool)
+    ssa = view(sa, 3:5)
     @test sa.refs === refs
+
+    @test scale(sa) == Year(1)
+    @test scale(ssa) == Year(1)
+    @test size(sa) == (10,)
+    @test IndexStyle(typeof(sa)) == IndexLinear()
 
     x = 1:10
     @test validpool(x, Int, 10, -1, nothing, true) == 10:-1:1
@@ -59,18 +65,23 @@ using DiffinDiffsBase: RefArray, validpool, scaledlabel
     @test_throws ArgumentError ScaledArray(sa5, stop=7, usepool=false)
     @test_throws ArgumentError ScaledArray(RefArray(1:3), 1.0:0.5:3.0, Dict{Int,Int}())
 
-    @test size(sa) == (10,)
-    @test IndexStyle(typeof(sa)) == IndexLinear()
-
     @test similar(sa, 4) == ScaledArray(RefArray(ones(Int, 4)), sa.pool, Dict{Date,Int}())
     @test similar(sa, (4,)) == similar(view(sa, 1:5), 4) == similar(sa, 4)
+
+    xs = Date(5):Year(-1):Date(1)
+    sa1 = align(xs, sa)
+    @test sa1.pool == pool
+    xs = Date(0):Year(1):Date(4)
+    @test_throws ArgumentError align(xs, sa)
+    sa1 = ScaledArray(sa, Year(-1))
+    xs = Date(2):Year(1):Date(6)
+    @test_throws ArgumentError align(xs, sa1)
 
     @test refarray(sa) === sa.refs
     @test refvalue(sa, 1) == Date(1)
     @test refpool(sa) === sa.pool
     @test invrefpool(sa) === sa.invpool
 
-    ssa = view(sa, 3:5)
     @test refarray(ssa) == view(sa.refs, 3:5)
     @test refvalue(ssa, 1) == Date(1)
     @test refpool(ssa) === sa.pool

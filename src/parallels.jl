@@ -85,6 +85,25 @@ assume a parallel trends assumption holds over all the relevant time periods.
 abstract type TrendParallel{C,S} <: AbstractParallel{C,S} end
 
 """
+    istreated(pr::TrendParallel, x)
+
+Test whether `x` represents the treatment time
+for a group of units that are not treated.
+See also [`istreated!`](@ref).
+"""
+function istreated end
+
+"""
+    istreated!(out::AbstractVector{Bool}, pr::TrendParallel, x::AbstractArray)
+
+For each element in `x`,
+test whether it represents the treatment time
+for a group of units that are not treated and save the result in `out`.
+See also [`istreated`](@ref).
+"""
+function istreated! end
+
+"""
     NeverTreatedParallel{C,S} <: TrendParallel{C,S}
 
 Assume a parallel trends assumption holds between any group
@@ -109,6 +128,20 @@ struct NeverTreatedParallel{C,S} <: TrendParallel{C,S}
 end
 
 istreated(pr::NeverTreatedParallel, x) = !(x in pr.e)
+
+function istreated!(out::AbstractVector{Bool}, pr::NeverTreatedParallel,
+        x::AbstractArray{<:Union{ValidTimeType, Missing}})
+    e = Set(pr.e)
+    out .= .!(x .∈ Ref(e))
+end
+
+function istreated!(out::AbstractVector{Bool}, pr::NeverTreatedParallel,
+        x::ScaledArray{<:Union{ValidTimeType, Missing}})
+    refs = refarray(x)
+    invpool = invrefpool(x)
+    e = Set(invpool[c] for c in pr.e if haskey(invpool, c))
+    out .= .!(refs .∈ Ref(e))
+end
 
 show(io::IO, pr::NeverTreatedParallel) =
     print(IOContext(io, :compact=>true), "NeverTreated{", pr.c, ",", pr.s, "}",
@@ -195,6 +228,20 @@ struct NotYetTreatedParallel{C,S} <: TrendParallel{C,S}
 end
 
 istreated(pr::NotYetTreatedParallel, x) = !(x in pr.e)
+
+function istreated!(out::AbstractVector{Bool}, pr::NotYetTreatedParallel,
+        x::AbstractArray{<:Union{ValidTimeType, Missing}})
+    e = Set(pr.e)
+    out .= .!(x .∈ Ref(e))
+end
+
+function istreated!(out::AbstractVector{Bool}, pr::NotYetTreatedParallel,
+        x::ScaledArray{<:Union{ValidTimeType, Missing}})
+    refs = refarray(x)
+    invpool = invrefpool(x)
+    e = Set(invpool[c] for c in pr.e if haskey(invpool, c))
+    out .= .!(refs .∈ Ref(e))
+end
 
 show(io::IO, pr::NotYetTreatedParallel) =
     print(IOContext(io, :compact=>true), "NotYetTreated{", pr.c, ",", pr.s, "}",

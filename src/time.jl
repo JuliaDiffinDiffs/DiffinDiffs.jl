@@ -45,12 +45,16 @@ isless(x::RotatingTimeValue, y::RotatingTimeValue) =
 
 isless(x::RotatingTimeValue, y) = isless(x.time, y)
 isless(x, y::RotatingTimeValue) = isless(x, y.time)
+isless(::RotatingTimeValue, ::Missing) = true
+isless(::Missing, ::RotatingTimeValue) = false
 
 ==(x::RotatingTimeValue, y::RotatingTimeValue) =
     x.rotation == y.rotation && x.time == y.time
 
 ==(x::RotatingTimeValue, y) = x.time == y
 ==(x, y::RotatingTimeValue) = x == y.time
+==(::RotatingTimeValue, ::Missing) = missing
+==(::Missing, ::RotatingTimeValue) = missing
 
 Base.zero(::Type{RotatingTimeValue{R,T}}) where {R,T} = RotatingTimeValue(zero(R), zero(T))
 Base.iszero(x::RotatingTimeValue) = iszero(x.time)

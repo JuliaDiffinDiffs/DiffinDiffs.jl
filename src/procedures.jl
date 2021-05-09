@@ -1,36 +1,45 @@
 """
-    checkdata(args...)
+    checkdata!(args...)
 
 Check `data` is `Tables.AbstractColumns`-compatible
 and find valid rows for options `subset` and `weightname`.
 See also [`CheckData`](@ref).
 """
-function checkdata(data, subset::Union{BitVector, Nothing}, weightname::Union{Symbol, Nothing})
+function checkdata!(data, subset::Union{BitVector, Nothing}, weightname::Union{Symbol, Nothing})
     checktable(data)
     nrow = Tables.rowcount(data)
     if subset !== nothing
         length(subset) == nrow || throw(DimensionMismatch(
             "data contain $(nrow) rows while subset has $(length(subset)) elements"))
-        esample = .!ismissing.(subset) .& subset
+        esample = subset
     else
         esample = trues(nrow)
     end
 
+    # A cache that makes updating BitVector (esample or tr_rows) faster
+    # See https://github.com/JuliaData/DataFrames.jl/pull/2726
+    aux = BitVector(undef, nrow)
+
     if weightname !== nothing
         colweights = getcolumn(data, weightname)
-        esample .&= .!ismissing.(colweights) .& (colweights .> 0)
+        if Missing <: eltype(colweights)
+            aux .= .!ismissing.(colweights)
+            esample .&= aux
+        end
+        aux[esample] .= view(colweights, esample) .> 0
+        esample[esample] .&= view(aux, esample)
     end
     sum(esample) == 0 && error("no nonmissing data")
-    return (esample=esample,)
+    return (esample=esample, aux=aux)
 end
 
 """
     CheckData <: StatsStep
 
-Call [`DiffinDiffsBase.checkdata`](@ref)
+Call [`DiffinDiffsBase.checkdata!`](@ref)
 for some preliminary checks of the input data.
 """
-const CheckData = StatsStep{:CheckData, typeof(checkdata), true}
+const CheckData = StatsStep{:CheckData, typeof(checkdata!), true}
 
 required(::CheckData) = (:data,)
 default(::CheckData) = (subset=nothing, weightname=nothing)
@@ -68,11 +77,16 @@ function checktreatvars(::DynamicTreatment{SharpDesign}, pr::TrendParallel{Uncon
     T1 == T2 || throw(ArgumentError(
         "nonmissing elements from columns $(treatvars[1]) and $(treatvars[2]) have different types $T1 and $T2"))
     T1 <: Union{Integer, RotatingTimeValue{<:Any, <:Integer}} ||
-        col1 isa ScaledArray && col2 isa ScaledArray ||
-        throw(ArgumentError("data columns $(treatvars[1]) and $(treatvars[2]) must either have integer elements or be ScaledArrays; see settime"))
+        col1 isa ScaledArrOrSub && col2 isa ScaledArrOrSub ||
+        throw(ArgumentError("columns $(treatvars[1]) and $(treatvars[2]) must either have integer elements or be ScaledArrays; see settime and aligntime"))
     T1 <: ValidTimeType ||
-        throw(ArgumentError("data column $(treatvars[1]) has unaccepted element type $(T1)"))
+        throw(ArgumentError("column $(treatvars[1]) has unaccepted element type $(T1)"))
     eltype(pr.e) == T1 || throw(ArgumentError("element type $(eltype(pr.e)) of control cohorts from $pr does not match element type $T1 from data; expect $T1"))
+    if col1 isa ScaledArrOrSub
+        first(DataAPI.refpool(col1)) == first(DataAPI.refpool(col2)) &&
+            scale(col1) == scale(col2) || throw(ArgumentError(
+            "time values in columns $(treatvars[1]) and $(treatvars[2]) are not aligned; see aligntime"))
+    end
 end
 
 function _overlaptime(tr::DynamicTreatment, tr_rows::BitVector, data)
@@ -81,33 +95,36 @@ function _overlaptime(tr::DynamicTreatment, tr_rows::BitVector, data)
     return intersect(control_time, treated_time), control_time, treated_time
 end
 
-function overlap!(esample::BitVector, tr_rows::BitVector, tr::DynamicTreatment,
+function overlap!(esample::BitVector, tr_rows::BitVector, aux::BitVector, tr::DynamicTreatment,
         ::NeverTreatedParallel{Unconditional}, treatname::Symbol, data)
     overlap_time, control_time, treated_time = _overlaptime(tr, tr_rows, data)
-    length(control_time)==length(treated_time)==length(overlap_time) ||
-        (esample .&= getcolumn(data, tr.time).∈(overlap_time,))
+    if !(length(control_time)==length(treated_time)==length(overlap_time))
+        aux[esample] .= view(refarray(getcolumn(data, tr.time)), esample) .∈ (overlap_time,)
+        esample[esample] .&= view(aux, esample)
+    end
     tr_rows .&= esample
 end
 
-function overlap!(esample::BitVector, tr_rows::BitVector, tr::DynamicTreatment,
+function overlap!(esample::BitVector, tr_rows::BitVector, aux::BitVector, tr::DynamicTreatment,
         pr::NotYetTreatedParallel{Unconditional}, treatname::Symbol, data)
     overlap_time, _c, _t = _overlaptime(tr, tr_rows, data)
     timetype = eltype(overlap_time)
     invpool = invrefpool(getcolumn(data, tr.time))
+    e = invpool === nothing ? Set(pr.e) : Set(invpool[c] for c in pr.e)
     if !(timetype <: RotatingTimeValue)
-        ecut = pr.ecut[1]
-        invpool === nothing || (ecut = invpool[ecut])
-        valid_cohort = filter(x -> x < ecut || x in pr.e, overlap_time)
+        ecut = invpool === nothing ? pr.ecut[1] : invpool[pr.ecut[1]]
         filter!(x -> x < ecut, overlap_time)
+        isvalidcohort = x -> x < ecut || x in e
     else
-        ecut = pr.ecut
-        invpool === nothing || (ecut = (invpool[e] for e in ecut))
+        ecut = invpool === nothing ? pr.ecut : (invpool[e] for e in pr.ecut)
         ecut = IdDict(e.rotation=>e.time for e in ecut)
-        valid_cohort = filter(x -> x.time < ecut[x.rotation] || x in pr.e, overlap_time)
         filter!(x -> x.time < ecut[x.rotation], overlap_time)
+        isvalidcohort = x -> x.time < ecut[x.rotation] || x in e
     end
-    esample .&= (refarray(getcolumn(data, tr.time)).∈(overlap_time,)) .&
-        (refarray(getcolumn(data, treatname)).∈(valid_cohort,))
+    aux[esample] .= view(refarray(getcolumn(data, tr.time)), esample) .∈ (overlap_time,)
+    esample[esample] .&= view(aux, esample)
+    aux[esample] .= isvalidcohort.(view(refarray(getcolumn(data, treatname)), esample))
+    esample[esample] .&= view(aux, esample)
     tr_rows .&= esample
 end
 
@@ -119,7 +136,7 @@ and find rows with data from treated units.
 See also [`CheckVars`](@ref).
 """
 function checkvars!(data, tr::AbstractTreatment, pr::AbstractParallel,
-        yterm::AbstractTerm, treatname::Symbol, esample::BitVector,
+        yterm::AbstractTerm, treatname::Symbol, esample::BitVector, aux::BitVector,
         treatintterms::TermSet, xterms::TermSet)
     # Do not check eltype of treatintterms
     treatvars = union([treatname], termvars(tr), termvars(pr))
@@ -127,17 +144,27 @@ function checkvars!(data, tr::AbstractTreatment, pr::AbstractParallel,
 
     allvars = union(treatvars, termvars(yterm), termvars(xterms))
     for v in allvars
-        esample .&= .!ismissing.(getcolumn(data, v))
+        col = getcolumn(data, v)
+        if Missing <: eltype(col)
+            aux .= .!ismissing.(col)
+            esample .&= aux
+        end
     end
     # Values of treatintterms from untreated units are ignored
-    tr_rows = esample .& istreated.(Ref(pr), getcolumn(data, treatname))
+    tr_rows = copy(esample)
+    istreated!(view(aux, esample), pr, view(getcolumn(data, treatname), esample))
+    tr_rows[esample] .&= view(aux, esample)
     treatintvars = termvars(treatintterms)
     for v in treatintvars
-        esample[tr_rows] .&= .!ismissing.(view(getcolumn(data, v), tr_rows))
+        col = getcolumn(data, v)
+        if Missing <: eltype(col)
+            aux[tr_rows] .= .!ismissing.(view(col, tr_rows))
+            esample[tr_rows] .&= view(aux, tr_rows)
+        end
     end
-    isempty(treatintvars) || (tr_rows .&= esample)
+    isempty(treatintvars) || (tr_rows[tr_rows] .&= view(esample, tr_rows))
 
-    overlap!(esample, tr_rows, tr, pr, treatname, data)
+    overlap!(esample, tr_rows, aux, tr, pr, treatname, data)
     sum(esample) == 0 && error("no nonmissing data")
     return (esample=esample, tr_rows=tr_rows::BitVector)
 end
@@ -149,7 +176,7 @@ Call [`DiffinDiffsBase.checkvars!`](@ref) to exclude invalid rows for relevant v
 """
 const CheckVars = StatsStep{:CheckVars, typeof(checkvars!), true}
 
-required(::CheckVars) = (:data, :tr, :pr, :yterm, :treatname, :esample)
+required(::CheckVars) = (:data, :tr, :pr, :yterm, :treatname, :esample, :aux)
 default(::CheckVars) = (treatintterms=TermSet(), xterms=TermSet())
 copyargs(::CheckVars) = (6,)
 

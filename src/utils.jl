@@ -151,6 +151,6 @@ end
 function checktable(data)
     istable(data) ||
         throw(ArgumentError("data of type $(typeof(data)) is not Tables.jl-compatible"))
-    Tables.columnaccess(data) && Tables.columns(data) === data ||
+    Tables.columnaccess(data) ||
         throw(ArgumentError("data of type $(typeof(data)) is not a column table"))
 end

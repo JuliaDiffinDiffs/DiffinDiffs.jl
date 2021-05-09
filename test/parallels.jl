@@ -192,17 +192,32 @@ end
     end
 end
 
-@testset "istreated" begin
+@testset "istreated istreated!" begin
     nt = nevertreated(-1)
     @test istreated(nt, -1) == false
     @test istreated(nt, 0)
 
+    out = BitVector(undef, 3)
+    x = [1, -1, missing]
+    @test istreated!(out, nt, x) == [true, false, true]
+    x = ScaledArray([1, -1, missing], 1)
+    @test istreated!(out, nt, x) == [true, false, true]
+    x = ScaledArray([1, 0, missing], 1)
+    @test istreated!(out, nt, x) == [true, true, true]
+
     ny = notyettreated(5)
     @test istreated(ny, 5) == false
     @test istreated(ny, 4)
-
     ny = notyettreated(5, 4)
     @test istreated(ny, 4)
+
+    out = BitVector(undef, 3)
+    x = [1, 5, missing]
+    @test istreated!(out, ny, x) == [true, false, true]
+    x = ScaledArray([1, 5, missing], 1)
+    @test istreated!(out, ny, x) == [true, false, true]
+    x = ScaledArray([1, 0, missing], 1)
+    @test istreated!(out, ny, x) == [true, true, true]
 end
 
 @testset "termvars" begin
