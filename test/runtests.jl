@@ -23,9 +23,9 @@ import DiffinDiffsBase: required, valid_didargs, result
 include("testutils.jl")
 
 const tests = [
+    "tables",
     "utils",
     "time",
-    "tables",
     "ScaledArrays",
     "terms",
     "treatments",

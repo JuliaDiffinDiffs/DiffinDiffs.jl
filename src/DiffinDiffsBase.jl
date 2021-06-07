@@ -133,9 +133,9 @@ export cb,
        lincom,
        rescale
 
+include("tables.jl")
 include("utils.jl")
 include("time.jl")
-include("tables.jl")
 include("ScaledArrays.jl")
 include("treatments.jl")
 include("parallels.jl")

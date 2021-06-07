@@ -23,9 +23,11 @@ end
 
 @testset "exampledata" begin
     @test exampledata() == (:hrs, :nsw, :mpdta)
-    @test size(exampledata(:hrs)) == (3280,)
-    @test size(exampledata(:nsw)) == (32834,)
-    @test size(exampledata(:mpdta)) == (2500,)
+    hrs = exampledata("hrs")
+    @test size(hrs) == (3280, 11)
+    @test hrs[1] isa Vector
+    @test size(exampledata(:nsw)) == (32834, 11)
+    @test size(exampledata(:mpdta)) == (2500, 5)
 end
 
 @testset "checktable" begin

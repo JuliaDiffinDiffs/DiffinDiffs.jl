@@ -1,5 +1,5 @@
 @testset "VecColumnTable" begin
-    hrs = exampledata("hrs")
+    hrs = DataFrame(exampledata("hrs"))
     cols = VecColumnTable(AbstractVector[], Symbol[], Dict{Symbol,Int}())
     cols1 = VecColumnTable(AbstractVector[], Symbol[])
     @test cols1 == cols

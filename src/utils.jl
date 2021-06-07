@@ -144,7 +144,13 @@ function exampledata(name::Union{Symbol,String})
     Symbol(name) in exampledata() ||
         throw(ArgumentError("example dataset $(name) does not exist"))
     path = (@__DIR__)*"/../data/$(name).csv.gz"
-    return open(path) |> GzipDecompressorStream |> read |> CSV.File
+    cols = open(path) |> GzipDecompressorStream |> read |> CSV.File |> VecColumnTable
+    # Avoid customized index type for columns from CSV.File
+    for i in 1:ncol(cols)
+        col = _columns(cols)[i]
+        _columns(cols)[i] = convert(Vector, col)
+    end
+    return cols
 end
 
 # Check whether the input data is a column table

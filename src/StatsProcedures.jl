@@ -436,7 +436,7 @@ function show(io::IO, ::MIME"text/plain", sp::StatsSpec{T}) where T
     _show_args(io, sp)
 end
 
-function _count!(objcount::IdDict, obj)
+function _count!(objcount::AbstractDict, obj)
     count = get(objcount, obj, 0)
     objcount[obj] = count + 1
 end

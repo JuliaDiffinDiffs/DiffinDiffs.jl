@@ -11,7 +11,7 @@ end
 function _refs_pool(col::AbstractArray, reftype::Type{<:Integer}=UInt32)
     refs = refarray(col)
     pool = refpool(col)
-    labeled = pool !== nothing
+    labeled = pool !== nothing && !(pool isa RotatingTimeRange)
     if !labeled
         refs, invpool, pool = _label(col, eltype(col), reftype)
     end
