@@ -4,11 +4,17 @@
 Exclude rows that are invalid for variance-covariance estimator.
 See also [`CheckVcov`](@ref).
 """
-checkvcov!(data, esample::BitVector,
+checkvcov!(data, esample::BitVector, aux::BitVector,
     vce::Union{Vcov.SimpleCovariance, Vcov.RobustCovariance}) = NamedTuple()
 
-function checkvcov!(data, esample::BitVector, vce::Vcov.ClusterCovariance)
-    esample .&= Vcov.completecases(data, vce)
+function checkvcov!(data, esample::BitVector, aux::BitVector, vce::Vcov.ClusterCovariance)
+    for name in Vcov.names(vce)
+        col = getcolumn(data, name)
+        if Missing <: eltype(col)
+            aux .= .!ismissing.(col)
+            esample .&= aux
+        end
+    end
     return (esample=esample,)
 end
 
@@ -20,7 +26,7 @@ exclude rows that are invalid for variance-covariance estimator.
 """
 const CheckVcov = StatsStep{:CheckVcov, typeof(checkvcov!), true}
 
-required(::CheckVcov) = (:data, :esample)
+required(::CheckVcov) = (:data, :esample, :aux)
 default(::CheckVcov) = (vce=Vcov.robust(),)
 copyargs(::CheckVcov) = (2,)
 
@@ -163,7 +169,7 @@ default(::MakeYXCols) = (contrasts=nothing, fetol=1e-8, femaxiter=10000)
 
 function combinedargs(::MakeYXCols, allntargs)
     yx = TermSet()
-    @inbounds for nt in allntargs
+    for nt in allntargs
         push!(yx, nt.yterm)
         foreach(x->push!(yx, x), nt.xterms)
     end
@@ -182,7 +188,7 @@ function maketreatcols(data, treatname::Symbol, treatintterms::TermSet,
         weights::AbstractWeights, esample::BitVector,
         cohortinteracted::Bool, fetol::Real, femaxiter::Int,
         ::Type{DynamicTreatment{SharpDesign}}, time::Symbol,
-        exc::IdDict{Int,Int}, notreat::IdDict{TimeType,Int})
+        exc::Dict{Int,Int}, notreat::IdDict{ValidTimeType,Int})
 
     nobs = sum(esample)
     # Putting treatname before time avoids sorting twice if cohortinteracted
@@ -190,7 +196,7 @@ function maketreatcols(data, treatname::Symbol, treatintterms::TermSet,
     cols = subcolumns(data, cellnames, esample)
     cells, rows = cellrows(cols, findcell(cols))
 
-    rel = cells[2] .- cells[1]
+    rel = refarray(cells[2]) .- refarray(cells[1])
     kept = .!haskey.(Ref(exc), rel) .& .!haskey.(Ref(notreat), cells[1])
     treatrows = rows[kept]
     # Construct cells needed for treatment indicators
@@ -283,17 +289,17 @@ combinedargs(step::MakeTreatCols, allntargs) =
 
 # Obtain the relative time periods excluded by all tr in allntargs
 function combinedargs(::MakeTreatCols, allntargs, ::Type{DynamicTreatment{SharpDesign}})
-    exc = IdDict{Int,Int}()
-    notreat = IdDict{TimeType,Int}()
+    exc = Dict{Int,Int}()
+    notreat = IdDict{ValidTimeType,Int}()
     @inbounds for nt in allntargs
         foreach(x->_count!(exc, x), nt.tr.exc)
         foreach(x->_count!(notreat, x), nt.pr.e)
     end
     nnt = length(allntargs)
-    @inbounds for (k, v) in exc
+    for (k, v) in exc
         v == nnt || delete!(exc, k)
     end
-    @inbounds for (k, v) in notreat
+    for (k, v) in notreat
         v == nnt || delete!(notreat, k)
     end
     return (exc, notreat)
@@ -339,14 +345,14 @@ function solveleastsquares!(tr::DynamicTreatment{SharpDesign}, pr::TrendParallel
     X = hcat(tcols..., (yxcols[x] for x in xs)...)
     
     ntcols = length(tcols)
-    basecols = trues(size(X,2))
+    basiscols = trues(size(X,2))
     if size(X, 2) > ntcols
-        basecols = basecol(X)
+        basiscols = diag(invsym!(X'X)) .> 0
         # Do not drop any treatment indicator
-        sum(basecols[1:ntcols]) == ntcols ||
+        sum(basiscols[1:ntcols]) == ntcols ||
             error("covariates are collinear with treatment indicators")
-        sum(basecols) < size(X, 2) &&
-            (X = X[:, basecols])
+        sum(basiscols) < size(X, 2) &&
+            (X = X[:, basiscols])
     end
 
     crossx = cholesky!(Symmetric(X'X))
@@ -356,7 +362,7 @@ function solveleastsquares!(tr::DynamicTreatment{SharpDesign}, pr::TrendParallel
     return (coef=coef::Vector{Float64}, X=X::Matrix{Float64},
         crossx=crossx::Cholesky{Float64,Matrix{Float64}},
         residuals=residuals::Vector{Float64}, treatcells=treatcells::VecColumnTable,
-        xterms=xs::Vector{AbstractTerm}, basecols=basecols::BitVector)
+        xterms=xs::Vector{AbstractTerm}, basiscols=basiscols::BitVector)
 end
 
 """

@@ -78,7 +78,7 @@ function result(::Type{Reg}, @nospecialize(nt::NamedTuple))
     yterm = nt.yxterms[nt.yterm]
     yname = coefnames(yterm)
     cnames = _treatnames(nt.treatcells)
-    cnames = append!(cnames, coefnames.(nt.xterms))[nt.basecols]
+    cnames = append!(cnames, coefnames.(nt.xterms))[nt.basiscols]
     coefinds = Dict(cnames .=> 1:length(cnames))
     didresult = RegressionBasedDIDResult{typeof(nt.tr), nt.cohortinteracted}(
         nt.coef, nt.vcov_mat, nt.vce, nt.tr, nt.pr, nt.cellweights, nt.cellcounts,

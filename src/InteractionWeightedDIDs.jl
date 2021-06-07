@@ -1,10 +1,11 @@
 module InteractionWeightedDIDs
 
 using Base: Callable
+using DataAPI: refarray
 using FixedEffectModels: FixedEffectTerm, Combination,
-    fe, _parse_fixedeffect, basecol, isnested, nunique
+    fe, _parse_fixedeffect, invsym!, isnested, nunique
 using FixedEffects
-using LinearAlgebra: Cholesky, Factorization, Symmetric, cholesky!
+using LinearAlgebra: Cholesky, Factorization, Symmetric, cholesky!, diag
 using Reexport
 using StatsBase: AbstractWeights, CovarianceEstimator, UnitWeights, PValue, TestStat, NoQuote
 using StatsFuns: fdistccdf
@@ -13,7 +14,7 @@ using Tables
 using Tables: getcolumn, columnnames
 using Vcov
 @reexport using DiffinDiffsBase
-using DiffinDiffsBase: TimeType, termvars, isintercept, parse_intercept!,
+using DiffinDiffsBase: ValidTimeType, termvars, isintercept, parse_intercept!,
     _count!, _groupfind, _treatnames, _parse_bycells!, _parse_subset
 
 import Base: show

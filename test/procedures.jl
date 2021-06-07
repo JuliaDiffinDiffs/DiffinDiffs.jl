@@ -1,12 +1,17 @@
 @testset "CheckVcov" begin
     hrs = exampledata("hrs")
-    nt = (data=hrs, esample=trues(size(hrs,1)), vce=Vcov.robust())
+    nt = (data=hrs, esample=trues(size(hrs,1)), aux=trues(size(hrs,1)), vce=Vcov.robust())
     @test checkvcov!(nt...) == NamedTuple()
     nt = merge(nt, (vce=Vcov.cluster(:hhidpn),))
     @test checkvcov!(nt...) == (esample=trues(size(hrs,1)),)
 
-    @test CheckVcov()((data=hrs, esample=trues(size(hrs,1)))) ==
-        (data=hrs, esample=trues(size(hrs,1)))
+    df = DataFrame(hrs)
+    allowmissing!(df, :hhidpn)
+    nt = merge(nt, (data=df,))
+    @test checkvcov!(nt...) == (esample=trues(size(hrs,1)),)
+
+    @test CheckVcov()((data=hrs, esample=trues(size(hrs,1)), aux=trues(size(hrs,1)))) ==
+        (data=hrs, esample=trues(size(hrs,1)), aux=trues(size(hrs,1)))
 end
 
 @testset "CheckFEs" begin
@@ -147,7 +152,8 @@ end
     pr = nevertreated(11)
     nt = (data=hrs, treatname=:wave_hosp, treatintterms=TermSet(), feM=nothing,
         weights=uweights(N), esample=trues(N), default(MakeTreatCols())...)
-    ret = maketreatcols(nt..., typeof(tr), tr.time, IdDict(-1=>1), IdDict{TimeType,Int}(11=>1))
+    ret = maketreatcols(nt..., typeof(tr), tr.time, Dict(-1=>1),
+        IdDict{ValidTimeType,Int}(11=>1))
     @test size(ret.cells) == (20, 2)
     @test length(ret.rows) == 20
     @test size(ret.treatcells) == (12, 2)
@@ -169,7 +175,8 @@ end
     @test all(w[ret.treatcells.wave_hosp.==10].==163)
 
     nt = merge(nt, (treatintterms=TermSet(term(:male)),))
-    ret1 = maketreatcols(nt..., typeof(tr), tr.time, IdDict(-1=>1), IdDict{TimeType,Int}(11=>1))
+    ret1 = maketreatcols(nt..., typeof(tr), tr.time, Dict(-1=>1),
+        IdDict{ValidTimeType,Int}(11=>1))
     @test size(ret1.cells) == (40, 3)
     @test length(ret1.rows) == 40
     @test size(ret1.treatcells) == (24, 3)
@@ -188,7 +195,8 @@ end
     @test ret1.cellweights == ret1.cellcounts
 
     nt = merge(nt, (cohortinteracted=false, treatintterms=TermSet()))
-    ret2 = maketreatcols(nt..., typeof(tr), tr.time, IdDict(-1=>1), IdDict{TimeType,Int}(11=>1))
+    ret2 = maketreatcols(nt..., typeof(tr), tr.time, Dict(-1=>1),
+        IdDict{ValidTimeType,Int}(11=>1))
     @test ret2.cells[1] == ret.cells[1]
     @test ret2.cells[2] == ret.cells[2]
     @test ret2.rows == ret.rows
@@ -202,7 +210,8 @@ end
     @test ret2.cellweights == ret2.cellcounts
 
     nt = merge(nt, (treatintterms=TermSet(term(:male)),))
-    ret3 = maketreatcols(nt..., typeof(tr), tr.time, IdDict(-1=>1), IdDict{TimeType,Int}(11=>1))
+    ret3 = maketreatcols(nt..., typeof(tr), tr.time, Dict(-1=>1),
+        IdDict{ValidTimeType,Int}(11=>1))
     @test ret3.cells[1] == ret1.cells[1]
     @test ret3.cells[2] == ret1.cells[2]
     @test ret3.cells[3] == ret1.cells[3]
@@ -223,7 +232,8 @@ end
     feM = AbstractFixedEffectSolver{Float64}(fes, wt, Val{:cpu}, Threads.nthreads())
     nt = merge(nt, (data=df, feM=feM, weights=wt, esample=esample,
         treatintterms=TermSet(), cohortinteracted=true))
-    ret = maketreatcols(nt..., typeof(tr), tr.time, IdDict(-1=>1), IdDict{TimeType,Int}(11=>1))
+    ret = maketreatcols(nt..., typeof(tr), tr.time, Dict(-1=>1),
+        IdDict{ValidTimeType,Int}(11=>1))
     col = reshape(col[esample], N, 1)
     defaults = (default(MakeTreatCols())...,)
     _feresiduals!(col, feM, defaults[2:3]...)
@@ -233,18 +243,34 @@ end
 
     allntargs = NamedTuple[(tr=tr, pr=pr)]
     @test combinedargs(MakeTreatCols(), allntargs) ==
-        (IdDict(-1=>1), IdDict{TimeType,Int}(11=>1))
+        (Dict(-1=>1), IdDict{ValidTimeType,Int}(11=>1))
     push!(allntargs, allntargs[1])
     @test combinedargs(MakeTreatCols(), allntargs) ==
-        (IdDict(-1=>2), IdDict{TimeType,Int}(11=>2))
+        (Dict(-1=>2), IdDict{ValidTimeType,Int}(11=>2))
     push!(allntargs, (tr=dynamic(:wave, [-1,-2]), pr=nevertreated(10:11)))
     @test combinedargs(MakeTreatCols(), allntargs) ==
-        (IdDict(-1=>3), IdDict{TimeType,Int}(11=>3))
+        (Dict(-1=>3), IdDict{ValidTimeType,Int}(11=>3))
     push!(allntargs, (tr=dynamic(:wave, [-3]), pr=nevertreated(10)))
     @test combinedargs(MakeTreatCols(), allntargs) ==
-        (IdDict{Int,Int}(), IdDict{TimeType,Int}())
+        (Dict{Int,Int}(), IdDict{ValidTimeType,Int}())
 
-    nt = merge(nt, (tr=tr, pr=pr))
+    df.wave = Date.(df.wave)
+    df.wave_hosp = Date.(df.wave_hosp)
+    df.wave = settime(df, :wave, step=Year(1))
+    df.wave_hosp = settime(df, :wave_hosp, start=Date(7), step=Year(1))
+    ret1 = maketreatcols(nt..., typeof(tr), tr.time,
+        Dict(-1=>1), IdDict{ValidTimeType,Int}(Date(11)=>1))
+    @test ret1.cells[1] == Date.(ret.cells[1])
+    @test ret1.cells[2] == Date.(ret.cells[2])
+    @test ret1.rows == ret.rows
+    @test ret1.treatcells[1] == Date.(ret.treatcells[1])
+    @test ret1.treatcells[2] == ret.treatcells[2]
+    @test ret1.treatrows == ret.treatrows
+    @test ret1.treatcols == ret.treatcols
+    @test ret1.cellweights == ret.cellweights
+    @test ret1.cellcounts == ret.cellcounts
+
+    nt = merge(nt, (data=hrs, tr=tr, pr=pr))
     @test MakeTreatCols()(nt) == merge(nt, (cells=ret.cells, rows=ret.rows,
         treatcells=ret.treatcells, treatrows=ret.treatrows, treatcols=ret.treatcols,
         cellweights=ret.cellweights, cellcounts=ret.cellcounts))
@@ -281,7 +307,7 @@ end
     @test ret.treatcells.wave_hosp == [10, 10]
     @test ret.treatcells.rel == [0, 1]
     @test ret.xterms == AbstractTerm[t1]
-    @test ret.basecols == trues(3)
+    @test ret.basiscols == trues(3)
 
     # Verify that an intercept will only be added when needed
     nt1 = merge(nt, (xterms=TermSet(),))
@@ -302,13 +328,13 @@ end
     nt1 = merge(nt, (xterms=TermSet(term(1), term(:t2)), yxcols=yxcols1))
     ret1 = solveleastsquares!(nt1...)
     @test ret1.coef[1:2] == ret.coef[1:2]
-    @test sum(ret1.basecols) == 3
+    @test sum(ret1.basiscols) == 3
 
     treatcells1 = VecColumnTable((rel=[0, 1, 1, 1], wave_hosp=[10, 10, 0, 1]))
     treatcols1 = push!(copy(treatcols0), ones(N), ones(N))
     # basecol is rather conservative in dropping collinear columns
     # If there are three constant columns, it may be that only one of them gets dropped
-    # Also need to have at least one term in xterms for basecol to work
+    # Also need to have at least one term in xterms for basiscol to work
     yxcols2 = Dict(yxterms[term(:oop_spend)]=>hrs.oop_spend, yxterms[term(:male)]=>hrs.male)
     nt1 = merge(nt1, (xterms=TermSet(term(:male), term(0)), treatcells=treatcells1,
         yxcols=yxcols2, treatcols=treatcols1))
@@ -415,14 +441,13 @@ end
     yxterms = Dict(x=>apply_schema(x, schema(x, hrs), StatisticalModel)
         for x in (term(:oop_spend), term(:male)))
     
-    yxcols = Dict(yxterms[term(:oop_spend)]=>convert(Vector{Float64}, hrs.oop_spend),
-        yxterms[term(:male)]=>convert(Vector{Float64}, hrs.male))
+    yxcols = Dict(yxterms[term(:oop_spend)]=>convert(Vector{Float64}, hrs.oop_spend))
     wt = uweights(N)
     fes = [FixedEffect(hrs.hhidpn)]
     feM = AbstractFixedEffectSolver{Float64}(fes, wt, Val{:cpu}, Threads.nthreads())
     y = yxcols[yxterms[term(:oop_spend)]]
-    male = yxcols[yxterms[term(:male)]]
-    _feresiduals!(Combination(y, male), feM, 1e-8, 10000)
+    fetol = 1e-8
+    _feresiduals!(Combination(y, col0, col1), feM, fetol, 10000)
     X = hcat(col0, col1)
     crossx = cholesky!(Symmetric(X'X))
     cf = crossx \ (X'y)
@@ -435,11 +460,12 @@ end
     lswt = ret.lsweights
     @test lswt.r === cells
     @test lswt.c === treatcells
-    @test all(lswt[lswt.r.wave_hosp.==10, 1] .≈ [-0.2, -0.2, -0.2, 0.8, -0.2])
-    @test all(lswt[lswt.r.wave_hosp.==10, 2] .≈ [-0.2, -0.2, -0.2, -0.2, 0.8])
-    @test all(x->x≈0, lswt[lswt.r.wave_hosp.!=10, :])
+    @test lswt[lswt.r.wave_hosp.==10, 1] ≈ [-1/3, -1/3, -1/3, 1, 0] atol=fetol
+    @test lswt[lswt.r.wave_hosp.==10, 1] ≈ [-1/3, -1/3, -1/3, 1, 0] atol=fetol
+    @test lswt[lswt.r.wave_hosp.==10, 2] ≈ [-1/3, -1/3, -1/3, 0, 1] atol=fetol
+    @test all(x->isapprox(x, 0, atol=fetol), lswt[lswt.r.wave_hosp.!=10, :])
     @test ret.ycellweights == ret.ycellcounts == length.(rows)
-    @test all(i->ret.ycellmeans[i] == sum(y[rows[i]])/length(rows[i]), 1:length(rows))
+    @test all(i->ret.ycellmeans[i] ≈ sum(y[rows[i]])/length(rows[i]), 1:length(rows))
 
     nt0 = merge(nt, (lswtnames=(:no,),))
     @test_throws ArgumentError solveleastsquaresweights(nt0...)
@@ -456,23 +482,33 @@ end
     @test size(lswt.r) == (20, 2)
     @test lswt.r.wave == repeat(7:11, inner=4)
     @test lswt.r.wave_hosp == repeat(8:11, outer=5)
-    @test all(lswt[lswt.r.wave_hosp.==10, 1] .≈ [-0.2, -0.2, -0.2, 0.8, -0.2])
-    @test all(lswt[lswt.r.wave_hosp.==10, 2] .≈ [-0.2, -0.2, -0.2, -0.2, 0.8])
+    @test lswt[lswt.r.wave_hosp.==10, 1] ≈ [-1/3, -1/3, -1/3, 1, 0] atol=fetol
+    @test lswt[lswt.r.wave_hosp.==10, 2] ≈ [-1/3, -1/3, -1/3, 0, 1] atol=fetol
 
-    X = hcat(X, male)
+    df = DataFrame(hrs)
+    df.x = zeros(N)
+    df.x[df.wave.==7] .= rand(656)
+    yxterms = Dict(x=>apply_schema(x, schema(x, df), StatisticalModel)
+        for x in (term(:oop_spend), term(:x)))
+    yxcols = Dict(yxterms[term(:oop_spend)]=>convert(Vector{Float64}, hrs.oop_spend),
+        yxterms[term(:x)]=>convert(Vector{Float64}, df.x))
+    fes = [FixedEffect(hrs.hhidpn), FixedEffect(hrs.wave)]
+    feM = AbstractFixedEffectSolver{Float64}(fes, wt, Val{:cpu}, Threads.nthreads())
+    y = yxcols[yxterms[term(:oop_spend)]]
+    x = yxcols[yxterms[term(:x)]]
+    _feresiduals!(Combination(y, col0, col1, x), feM, fetol, 10000)
+    X = hcat(col0, col1, x)
     crossx = cholesky!(Symmetric(X'X))
     cf = crossx \ (X'y)
-    xterms = AbstractTerm[yxterms[term(:male)]]
-    nt = merge(nt, (lswtnames=(:wave_hosp, :wave), X=X, crossx=crossx,
-        xterms=xterms, coef=cf))
+    xterms = AbstractTerm[yxterms[term(:x)]]
+    nt = merge(nt, (lswtnames=(:wave_hosp, :wave), X=X, crossx=crossx, coef=cf,
+        xterms=xterms, yxterms=yxterms, yxcols=yxcols))
     ret = solveleastsquaresweights(nt...)
     lswt = ret.lsweights
-    w1 = -0.20813279638542392
-    w2 = -0.18780080542186434
-    @test all(lswt[lswt.r.wave_hosp.==10, 1] .≈ [w1, w1, w1, 0.812199194578136, w2])
-    @test all(lswt[lswt.r.wave_hosp.==10, 2] .≈ [w1, w1, w1, w2, 0.812199194578136])
-    @test all(x->isapprox(x, 0, atol=1e-16), lswt[lswt.r.wave_hosp.!=10, :])
-    y1 = y.- cf[3].*male
+    @test lswt[lswt.r.wave.<=9, 1] ≈ lswt[lswt.r.wave.<=9, 2]
+    @test lswt[lswt.r.wave.==10, 1] ≈ lswt[lswt.r.wave.==11, 2]
+    @test lswt[lswt.r.wave.==11, 1] ≈ lswt[lswt.r.wave.==10, 2]
+    y1 = y .- cf[3].*x
     @test all(i->ret.ycellmeans[i] == sum(y1[rows[i]])/length(rows[i]), 1:length(rows))
 
     @test SolveLeastSquaresWeights()(nt) == merge(nt, ret)

@@ -2,7 +2,8 @@ using Test
 using InteractionWeightedDIDs
 
 using DataFrames
-using DiffinDiffsBase: TimeType, @fieldequal,
+using Dates: Date, Year
+using DiffinDiffsBase: ValidTimeType, @fieldequal,
     required, default, transformed, combinedargs, valid_didargs
 using FixedEffectModels: Combination, nunique
 using FixedEffects

@@ -34,7 +34,7 @@
 
     @test r.ycellweights == r.ycellcounts
     @test r.ycellcounts == repeat([252, 176, 163, 65], inner=4)
-    @test all(i->r.coef[i]≈sum(r.lsweights[:,i].*r.ycellmeans), 1:ntreatcoef(r))
+    @test all(i->r.coef[i] ≈ sum(r.lsweights[:,i].*r.ycellmeans), 1:ntreatcoef(r))
 
     @test sprint(show, r) == "Regression-based DID result"
     pv = VERSION < v"1.6.0" ? " <1e-7" : "<1e-07"
@@ -55,10 +55,21 @@
         Converged:                   true    Singletons dropped:             0
         ──────────────────────────────────────────────────────────────────────"""
 
+    df = DataFrame(hrs)
+    df.wave = Date.(df.wave)
+    df.wave_hosp = Date.(df.wave_hosp)
+    df.wave = settime(df, :wave, step=Year(1))
+    df.wave_hosp = settime(df, :wave_hosp, start=Date(7), step=Year(1))
+    r1 = @did(Reg, data=df, dynamic(:wave, -1), notyettreated(Date(11)),
+        vce=Vcov.cluster(:hhidpn), yterm=term(:oop_spend), treatname=:wave_hosp,
+        treatintterms=(), xterms=(fe(:wave)+fe(:hhidpn)), solvelsweights=false)
+    @test coef(r1) ≈ coef(r)
+    @test r1.coefnames[1] == "wave_hosp: 0008-01-01 & rel: 0"
+
     r = @did(Reg, data=hrs, dynamic(:wave, -1), notyettreated([11]),
         vce=Vcov.cluster(:hhidpn), yterm=term(:oop_spend), treatname=:wave_hosp,
         treatintterms=(), cohortinteracted=false, lswtnames=(:wave_hosp, :wave))
-    @test all(i->r.coef[i]≈sum(r.lsweights[:,i].*r.ycellmeans), 1:ntreatcoef(r))
+    @test all(i->r.coef[i] ≈ sum(r.lsweights[:,i].*r.ycellmeans), 1:ntreatcoef(r))
 
     @test sprint(show, MIME("text/plain"), r) == """
         ──────────────────────────────────────────────────────────────────────
@@ -75,8 +86,8 @@
         ──────────────────────────────────────────────────────────────────────"""
 
     sr = view(r, 1:3)
-    @test coef(sr)[1] ≈ 1560.2174484214308
-    @test vcov(sr)[1] ≈ 1.1248572269146878e6
+    @test coef(sr)[1] == r.coef[1]
+    @test vcov(sr)[1] == r.vcov[1]
     @test parent(sr) === r
 
     tr = rescale(r, fill(2, 5), 1:5)
@@ -137,7 +148,7 @@ end
 
     @test a.cellweights == a.cellcounts
     @test a.cellcounts == [163, 339, 591, 428, 252]
-    @test all(i->a.coef[i]≈sum(a.lsweights[:,i].*r.ycellmeans), 1:ntreatcoef(a))
+    @test all(i->a.coef[i] ≈ sum(a.lsweights[:,i].*r.ycellmeans), 1:ntreatcoef(a))
 
     a1 = agg(r, (:rel,), subset=:rel=>isodd)
     @test length(coef(a1)) == 2
