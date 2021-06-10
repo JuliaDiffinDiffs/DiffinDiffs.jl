@@ -97,12 +97,12 @@ end
         @test_throws ArgumentError checkvars!(nt...)
         nt = merge(nt, (pr=nevertreated(Date(11)),))
         @test_throws ArgumentError checkvars!(nt...)
-        df.wave = settime(df.wave, step=Year(1))
-        df.wave_hosp = settime(df.wave_hosp, step=Year(1))
+        df.wave = settime(df.wave, Year(1))
+        df.wave_hosp = settime(df.wave_hosp, Year(1))
         @test_throws ArgumentError checkvars!(nt...)
         df.wave_hosp = aligntime(df, :wave_hosp, :wave)
         @test checkvars!(nt...) == ret
-        nt = merge(nt, (pr=notyettreated(Date(11)),esample=trues(N)))
+        nt = merge(nt, (pr=notyettreated(Date(11)), esample=trues(N)))
         ret = checkvars!(nt...)
         @test ret == (esample=(df.wave_hosp.∈((Date(8),Date(11)),)).&(df.wave.!=Date(11)),
             tr_rows=(df.wave_hosp.==Date(8)).&(df.wave.!=Date(11)))
@@ -125,33 +125,43 @@ end
         df.wave = rotatingtime(rot, df.wave)
         e = rotatingtime((1,2), 11)
         nt = merge(nt, (data=df, tr=dynamic(:wave, -1), pr=nevertreated(e), treatintterms=TermSet(), xterms=TermSet(), esample=trues(N)))
+        # Check RotatingTimeArray
+        @test_throws ArgumentError checkvars!(nt...)
+        df.wave_hosp = settime(hrs.wave_hosp, rotation=rot)
+        df.wave = settime(hrs.wave, rotation=rot)
+        # Check aligntime
+        @test_throws ArgumentError checkvars!(nt...)
+        df.wave_hosp = aligntime(df.wave_hosp, df.wave)
         ret1 = checkvars!(nt...)
         @test ret1 == (esample=trues(N), tr_rows=hrs.wave_hosp.!=11)
-        df.wave_hosp = rotatingtime(2, hrs.wave_hosp)
-        df.wave = rotatingtime(2, hrs.wave)
+        df.wave_hosp = settime(hrs.wave_hosp, start=7, rotation=ones(N))
+        df.wave = settime(hrs.wave, rotation=ones(N))
+        # Check the match of field type of pr.e
+        @test_throws ArgumentError checkvars!(nt...)
+        df.wave_hosp = settime(hrs.wave_hosp, start=7, rotation=ones(Int, N))
+        df.wave = settime(hrs.wave, rotation=ones(Int, N))
         nt = merge(nt, (esample=trues(N), pr=notyettreated(e),))
         ret2 = checkvars!(nt...)
         @test ret2 == (esample=hrs.wave.!=11, tr_rows=(hrs.wave_hosp.!=11).&(hrs.wave.!=11))
 
-        df.wave = settime(Date.(hrs.wave), step=Year(1), rotation=rot)
-        df.wave_hosp = rotatingtime(rot, Date.(hrs.wave_hosp))
-        df.wave_hosp = aligntime(df, :wave_hosp, :wave)
+        # RotatingTimeArray with time field of type Array
+        df.wave_hosp = RotatingTimeArray(rot, hrs.wave_hosp)
+        df.wave = RotatingTimeArray(rot, hrs.wave)
+        e = rotatingtime((1,2), (10,11))
+        nt = merge(nt, (esample=trues(N), pr=notyettreated(e)))
+        ret3 = checkvars!(nt...)
+        ret3e = (hrs.wave.!=11).&(.!((hrs.wave.==10).&(rot.==1))).&
+            (.!((hrs.wave_hosp.==11).&(rot.==1)))
+        @test ret3 == (esample=ret3e, tr_rows=ret3e.&
+            (hrs.wave_hosp.!=11).&(.!((hrs.wave_hosp.==10).&(rot.==1))))
+
+        df.wave = settime(Date.(hrs.wave), Year(1), rotation=rot)
+        df.wave_hosp = settime(Date.(hrs.wave_hosp), Year(1), start=Date(7), rotation=rot)
         e = rotatingtime((1,2), Date(11))
         nt = merge(nt, (esample=trues(N), pr=nevertreated(e)))
         @test checkvars!(nt...) == ret1
         nt = merge(nt, (esample=trues(N), pr=notyettreated(e),))
         @test checkvars!(nt...) == ret2
-
-        allowmissing!(df, :wave_hosp)
-        df.wave_hosp .= ifelse.(hrs.wave_hosp.==8, missing, df.wave_hosp)
-        nt = merge(nt, (esample=trues(N), pr=nevertreated(e)))
-        ret = checkvars!(nt...)
-        @test ret.esample == (hrs.wave_hosp.!=8)
-        @test ret.tr_rows == ret.esample.&(hrs.wave_hosp.!=11)
-        nt = merge(nt, (esample=trues(N), pr=notyettreated(e)))
-        ret = checkvars!(nt...)
-        @test ret.esample == (hrs.wave_hosp.!=8).&(hrs.wave.!=11)
-        @test ret.tr_rows == ret.esample.&(hrs.wave_hosp.!=11)
     end
 
     @testset "StatsStep" begin

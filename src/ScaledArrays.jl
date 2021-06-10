@@ -8,7 +8,7 @@ end
 """
     ScaledArray{T,R,N,RA,P} <: AbstractArray{T,N}
 
-An array type that stores data as indices of a range.
+Array type that stores data as indices of a range.
 
 # Fields
 - `refs::RA<:AbstractArray{R,N}`: an array of indices.
@@ -189,10 +189,7 @@ ScaledArray(sa::ScaledArray, step=nothing; reftype::Type=eltype(refarray(sa)),
     start=nothing, stop=nothing, xtype::Type=eltype(sa), usepool::Bool=true) =
         ScaledArray(sa, reftype, xtype, start, step, stop, usepool)
 
-Base.similar(sa::ScaledArray{T,R}, dims::Dims=size(sa)) where {T,R} =
-    ScaledArray(RefArray(ones(R, dims)), DataAPI.refpool(sa), Dict{T,R}())
-
-Base.similar(sa::SubArray{<:Any, <:Any, <:ScaledArray{T,R}}, dims::Dims=size(sa)) where {T,R} =
+Base.similar(sa::ScaledArrOrSub{T,R}, dims::Dims=size(sa)) where {T,R} =
     ScaledArray(RefArray(ones(R, dims)), DataAPI.refpool(sa), Dict{T,R}())
 
 Base.similar(sa::ScaledArrOrSub, dims::Int...) = similar(sa, dims)

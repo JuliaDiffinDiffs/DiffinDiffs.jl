@@ -17,6 +17,7 @@ using StatsBase: CoefTable, Weights, stderror, uweights
 using StatsFuns: tdistccdf, tdistinvcdf
 @reexport using StatsModels
 using StatsModels: Schema
+using StructArrays: StructArray
 using Tables
 using Tables: AbstractColumns, istable, columnnames, getcolumn
 
@@ -37,7 +38,7 @@ export cb,
 
        RotatingTimeValue,
        rotatingtime,
-       RotatingRange,
+       RotatingTimeArray,
 
        VecColumnTable,
        VecColsRow,

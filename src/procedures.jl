@@ -67,6 +67,19 @@ const GroupTerms = StatsStep{:GroupTerms, typeof(groupterms), false}
 
 required(::GroupTerms) = (:treatintterms, :xterms)
 
+function _checkscales(col1::AbstractArray, col2::AbstractArray, treatvars::Vector{Symbol})
+    if col1 isa ScaledArrOrSub || col2 isa ScaledArrOrSub
+        col1 isa ScaledArrOrSub && col2 isa ScaledArrOrSub ||
+            throw(ArgumentError("time fields in both columns $(treatvars[1]) and $(treatvars[2]) must be ScaledArrays; see settime and aligntime"))
+        first(DataAPI.refpool(col1)) == first(DataAPI.refpool(col2)) &&
+            scale(col1) == scale(col2) || throw(ArgumentError(
+            "time fields in columns $(treatvars[1]) and $(treatvars[2]) are not aligned; see aligntime"))
+    else
+        eltype(col1) <: Integer || throw(ArgumentError(
+            "columns $(treatvars[1]) and $(treatvars[2]) must be stored in ScaledArrays; see settime and aligntime"))
+    end
+end
+
 function checktreatvars(::DynamicTreatment{SharpDesign}, pr::TrendParallel{Unconditional},
         treatvars::Vector{Symbol}, data)
     # treatvars should be cohort and time variables
@@ -76,22 +89,22 @@ function checktreatvars(::DynamicTreatment{SharpDesign}, pr::TrendParallel{Uncon
     T2 = nonmissingtype(eltype(col2))
     T1 == T2 || throw(ArgumentError(
         "nonmissing elements from columns $(treatvars[1]) and $(treatvars[2]) have different types $T1 and $T2"))
-    T1 <: Union{Integer, RotatingTimeValue{<:Any, <:Integer}} ||
-        col1 isa ScaledArrOrSub && col2 isa ScaledArrOrSub ||
-        throw(ArgumentError("columns $(treatvars[1]) and $(treatvars[2]) must either have integer elements or be ScaledArrays; see settime and aligntime"))
     T1 <: ValidTimeType ||
         throw(ArgumentError("column $(treatvars[1]) has unaccepted element type $(T1)"))
     eltype(pr.e) == T1 || throw(ArgumentError("element type $(eltype(pr.e)) of control cohorts from $pr does not match element type $T1 from data; expect $T1"))
-    if col1 isa ScaledArrOrSub
-        first(DataAPI.refpool(col1)) == first(DataAPI.refpool(col2)) &&
-            scale(col1) == scale(col2) || throw(ArgumentError(
-            "time values in columns $(treatvars[1]) and $(treatvars[2]) are not aligned; see aligntime"))
+    if T1 <: RotatingTimeValue
+        col1 isa RotatingTimeArray && col2 isa RotatingTimeArray ||
+            throw(ArgumentError("columns $(treatvars[1]) and $(treatvars[2]) must be RotatingTimeArrays; see settime"))
+        _checkscales(col1.time, col2.time, treatvars)
+    else
+        _checkscales(col1, col2, treatvars)
     end
 end
 
 function _overlaptime(tr::DynamicTreatment, tr_rows::BitVector, data)
-    control_time = Set(view(refarray(getcolumn(data, tr.time)), .!tr_rows))
-    treated_time = Set(view(refarray(getcolumn(data, tr.time)), tr_rows))
+    timeref = refarray(getcolumn(data, tr.time))
+    control_time = Set(view(timeref, .!tr_rows))
+    treated_time = Set(view(timeref, tr_rows))
     return intersect(control_time, treated_time), control_time, treated_time
 end
 
@@ -108,20 +121,26 @@ end
 function overlap!(esample::BitVector, tr_rows::BitVector, aux::BitVector, tr::DynamicTreatment,
         pr::NotYetTreatedParallel{Unconditional}, treatname::Symbol, data)
     overlap_time, _c, _t = _overlaptime(tr, tr_rows, data)
-    timetype = eltype(overlap_time)
-    invpool = invrefpool(getcolumn(data, tr.time))
-    e = invpool === nothing ? Set(pr.e) : Set(invpool[c] for c in pr.e)
-    if !(timetype <: RotatingTimeValue)
+    timecol = getcolumn(data, tr.time)
+    if !(eltype(timecol) <: RotatingTimeValue)
+        invpool = invrefpool(timecol)
+        e = invpool === nothing ? Set(pr.e) : Set(invpool[c] for c in pr.e)
         ecut = invpool === nothing ? pr.ecut[1] : invpool[pr.ecut[1]]
         filter!(x -> x < ecut, overlap_time)
         isvalidcohort = x -> x < ecut || x in e
     else
-        ecut = invpool === nothing ? pr.ecut : (invpool[e] for e in pr.ecut)
-        ecut = IdDict(e.rotation=>e.time for e in ecut)
+        invpool = invrefpool(timecol.time)
+        if invpool === nothing
+            e = Set(pr.e)
+            ecut = IdDict(e.rotation=>e.time for e in pr.ecut)
+        else
+            e = Set(RotatingTimeValue(c.rotation, invpool[c.time]) for c in pr.e)
+            ecut = IdDict(e.rotation=>invpool[e.time] for e in pr.ecut)
+        end
         filter!(x -> x.time < ecut[x.rotation], overlap_time)
         isvalidcohort = x -> x.time < ecut[x.rotation] || x in e
     end
-    aux[esample] .= view(refarray(getcolumn(data, tr.time)), esample) .∈ (overlap_time,)
+    aux[esample] .= view(refarray(timecol), esample) .∈ (overlap_time,)
     esample[esample] .&= view(aux, esample)
     aux[esample] .= isvalidcohort.(view(refarray(getcolumn(data, treatname)), esample))
     esample[esample] .&= view(aux, esample)

@@ -11,7 +11,7 @@ end
 function _refs_pool(col::AbstractArray, reftype::Type{<:Integer}=UInt32)
     refs = refarray(col)
     pool = refpool(col)
-    labeled = pool !== nothing && !(pool isa RotatingTimeRange)
+    labeled = pool !== nothing
     if !labeled
         refs, invpool, pool = _label(col, eltype(col), reftype)
     end
@@ -97,7 +97,7 @@ function cellrows(cols::VecColumnTable, refrows::IdDict)
     columns = Vector{AbstractVector}(undef, ncol)
     for i in 1:ncol
         c = cols[i]
-        if typeof(c) <: ScaledArrOrSub
+        if typeof(c) <: Union{ScaledArrOrSub, RotatingTimeArray}
             columns[i] = similar(c, ncell)
         else
             columns[i] = Vector{eltype(c)}(undef, ncell)
@@ -127,76 +127,66 @@ function cellrows(cols::VecColumnTable, refrows::IdDict)
 end
 
 """
-    settime(data, timename; step, start, stop, reftype, rotation)
-    settime(time::AbstractArray; step, start, stop, reftype, rotation)
+    settime(time::AbstractArray, step; start, stop, reftype, rotation)
 
 Convert a column of time values to a [`ScaledArray`](@ref)
 for representing discretized time periods of uniform length.
-Time values can be provided either as a table containing the relevant column or as an array.
+If `rotation` is specified (time values belong to multiple rotation groups),
+a [`RotatingTimeArray`](@ref) is returned with the `time` field
+being a [`ScaledArray`](@ref).
 The returned array ensures well-defined time intervals for operations involving relative time
 (such as [`lag`](@ref) and [`diff`](@ref)).
 See also [`aligntime`](@ref).
 
 # Arguments
-- `data`: a Tables.jl-compatible data table.
-- `timename::Union{Symbol,Integer}`: the name of the column in `data` that contains time values.
-- `time::AbstractArray`: the array containing time values (only needed for the alternative method).
+- `time::AbstractArray`: the array containing time values.
+- `step=nothing`: the length of each time interval; try `step=one(eltype(time))` if not specified.
 
 # Keywords
-- `step=nothing`: the length of each time interval; try step=1 if not specified.
 - `start=nothing`: the first element of the `pool` of the returned [`ScaledArray`](@ref).
 - `stop=nothing`: the last element of the `pool` of the returned [`ScaledArray`](@ref).
-- `reftype::Type{<:Signed}=Int32`: the element type of the reference values for the returned [`ScaledArray`](@ref).
-- `rotation=nothing`: rotation groups in a rotating sampling design; use [`RotatingTimeValue`](@ref)s as reference values.
+- `reftype::Type{<:Signed}=Int32`: the element type of the reference values for the [`ScaledArray`](@ref).
+- `rotation=nothing`: rotation groups in a rotating sampling design.
 """
-function settime(time::AbstractArray; step=nothing, start=nothing, stop=nothing,
+function settime(time::AbstractArray, step=nothing; start=nothing, stop=nothing,
         reftype::Type{<:Signed}=Int32, rotation=nothing)
     T = eltype(time)
     T <: ValidTimeType && !(T <: RotatingTimeValue) ||
         throw(ArgumentError("unaccepted element type $T from time column"))
     step === nothing && (step = one(T))
     time = ScaledArray(time, start, step, stop; reftype=reftype)
-    if rotation !== nothing
-        refs = rotatingtime(rotation, time.refs)
-        rots = unique(rotation)
-        invpool = Dict{RotatingTimeValue{eltype(rotation), T}, eltype(refs)}()
-        for (k, v) in time.invpool
-            for r in rots
-                rt = RotatingTimeValue(r, k)
-                invpool[rt] = RotatingTimeValue(r, v)
-            end
-        end
-        rmin, rmax = extrema(rots)
-        pool = RotatingTimeValue(rmin, first(time.pool)):scale(time):RotatingTimeValue(rmax, last(time.pool))
-        time = ScaledArray(RefArray(refs), pool, invpool)
-    end
+    rotation === nothing || (time = RotatingTimeArray(rotation, time))
     return time
 end
 
-function settime(data, timename::Union{Symbol,Integer};
-        step=nothing, start=nothing, stop=nothing,
-        reftype::Type{<:Signed}=Int32, rotation=nothing)
-    checktable(data)
-    return settime(getcolumn(data, timename);
-        step=step, start=start, stop=stop, reftype=reftype, rotation=rotation)
-end
-
 """
+    aligntime(col::AbstractArray, time::ScaledArrOrSub)
+    aligntime(col::AbstractArray, time::RotatingTimeArray)
     aligntime(data, colname::Union{Symbol,Integer}, timename::Union{Symbol,Integer})
 
-Convert a column of time values indexed by `colname` from `data` table
-to a [`ScaledArray`](@ref) with a `pool`
+Convert a column of time values `col` to a [`ScaledArray`](@ref) with a `pool`
 that has the same first element and step size as the `pool` from
-the [`ScaledArray`](@ref) indexed by `timename`.
+the [`ScaledArray`](@ref) `time`.
+If `time` is a [`RotatingTimeArray`](@ref) with the `time` field being a [`ScaledArray`](@ref),
+the returned array is also a [`RotatingTimeArray`](@ref)
+with the `time` field being the converted [`ScaledArray`](@ref).
+Alternative, the arrays may be specified with a Tables.jl-compatible `data` table
+and column indices `colname` and `timename`.
 See also [`settime`](@ref).
 
 This is useful for representing all discretized time periods with the same scale
 so that the underlying reference values returned by `DataAPI.refarray`
 can be directly comparable across the columns.
 """
+aligntime(col::AbstractArray, time::ScaledArrOrSub) = align(col, time)
+aligntime(col::AbstractArray, time::RotatingTimeArray) =
+    RotatingTimeArray(time.rotation, align(col, time.time))
+aligntime(col::RotatingTimeArray, time::RotatingTimeArray) =
+    RotatingTimeArray(time.rotation, align(col.time, time.time))
+
 function aligntime(data, colname::Union{Symbol,Integer}, timename::Union{Symbol,Integer})
     checktable(data)
-    return align(getcolumn(data, colname), getcolumn(data, timename))
+    return aligntime(getcolumn(data, colname), getcolumn(data, timename))
 end
 
 """
@@ -246,7 +236,7 @@ that is returned by [`settime`](@ref).
 - `time::AbstractArray`: the array containing time values (only needed for the alternative method).
 
 # Keywords
-- `step=nothing`: the length of each time interval; try step=1 if not specified.
+- `step=nothing`: the length of each time interval; try `step=one(eltype(time))` if not specified.
 - `reftype::Type{<:Signed}=Int32`: the element type of the reference values for [`PanelStructure`](@ref).
 - `rotation=nothing`: rotation groups in a rotating sampling design; use [`RotatingTimeValue`](@ref)s as reference values.
 
@@ -263,7 +253,7 @@ function setpanel(id::AbstractArray, time::AbstractArray; step=nothing,
         "id has length $(length(id)) while time has length $(length(time))"))
     refs, idpool, labeled = _refs_pool(id)
     labeled && (refs = copy(refs); idpool = copy(idpool))
-    time = settime(time; step=step, reftype=reftype, rotation=rotation)
+    time = settime(time, step; reftype=reftype, rotation=rotation)
     trefs = refarray(time)
     tpool = refpool(time)
     # Multiply 2 to create enough gaps between id groups for the largest possible lead/lag

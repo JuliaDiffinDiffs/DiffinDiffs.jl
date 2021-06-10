@@ -11,17 +11,6 @@
     @test getfield.(rt, :rotation) == rot
     @test getfield.(rt, :time) == time
 
-    rtd = rotatingtime(1, Date(1))
-    rt1 = rotatingtime(1, 1)
-    @test rtd + Year(1) == Year(1) + rtd == rotatingtime(1, Date(2))
-    @test rtd - Year(1) == rotatingtime(1, Date(0))
-    @test 1 - rt1 == rotatingtime(1, 0)
-    @test_throws MethodError Year(3) - rtd
-    @test 2 * rt1 == rt1 * 2 == rotatingtime(1, 2)
-
-    @test rt[1] - rt[2] == -1
-    @test_throws ArgumentError rt[1] - rt[6]
-
     @test isless(rt[1], rt[2])
     @test isless(rt[6], rt[1])
     @test isless(rt[1], rt[7])
@@ -30,7 +19,12 @@
     @test isless(rt[1], missing)
     @test !isless(missing, rt[1])
 
+    @test isequal(rt[1], RotatingTimeValue(5, 1))
+
     @test rt[1] == RotatingTimeValue(Int32(5), Int32(1))
+    @test isequal(rt[1] == RotatingTimeValue(missing, 1), missing)
+    @test isequal(rt[1] == RotatingTimeValue(5, missing), missing)
+    @test isequal(rt[1] == RotatingTimeValue(1, missing), missing)
     @test rt[1] == 1
     @test 1 == rt[1]
     @test isequal(rt[1] == missing, missing)
@@ -39,17 +33,15 @@
     @test zero(typeof(rt[1])) === RotatingTimeValue(0, 0)
     @test iszero(RotatingTimeValue(1, 0))
     @test !iszero(RotatingTimeValue(0, 1))
+    @test one(typeof(rt[1])) === RotatingTimeValue(1, 1)
+    @test isone(RotatingTimeValue(1, 1))
+    @test !isone(RotatingTimeValue(1, 0))
 
     @test convert(typeof(rt[1]), RotatingTimeValue(Int32(5), Int32(1))) ===
         RotatingTimeValue(5, 1)
 
-    @test checkindex(Bool, 1:5, rt1)
-    @test checkindex(Bool, 2:5, rt1) == false
-    X = 1:5
-    @test X[rt1] == 1
-    rts = rotatingtime(1, 2:3)
-    @test X[rts] == 2:3
-    @test_throws BoundsError (1:2)[rts]
+    @test nonmissingtype(RotatingTimeValue{Union{Int,Missing}, Union{Int,Missing}}) ==
+        RotatingTimeValue{Int, Int}
 
     @test iterate(rt1) == (rt1, nothing)
     @test iterate(rt1, 1) === nothing
@@ -63,23 +55,31 @@
           time:     1"""
 end
 
-@testset "RotatingTimeRange" begin
-    rt1 = RotatingTimeValue(1, Date(1))
-    rt5 = RotatingTimeValue(2, Date(5))
-    rt1_1 = RotatingTimeValue(1, Date(5))
-    r = rt1:Year(1):rt5
-    @test r.value === rt1
-    @test r.range == Date(1):Year(1):Date(5)
-    @test first(r) === rt1
-    @test step(r) == Year(1)
-    @test last(r) === rt1_1
-    @test length(r) == 5
+@testset "RotatingTimeArray" begin
+    rot = collect(1:5)
+    time = collect(1.0:5.0)
+    a = RotatingTimeArray(rot, time)
+    @test eltype(a) == RotatingTimeValue{Int, Float64}
+    @test size(a) == (5,)
+    @test IndexStyle(typeof(a)) == IndexLinear()
 
-    @test r[1] === rt1
-    @test r[end] === rt1_1
+    @test a[1] == RotatingTimeValue(1, 1.0)
+    @test a[5:-1:1] == RotatingTimeArray(rot[5:-1:1], time[5:-1:1])
 
-    i1 = RotatingTimeValue(1, 1)
-    i5 = RotatingTimeValue(2, 5)
-    @test r[i1] === rt1
-    @test r[i5] === rt5
+    a[1] = RotatingTimeValue(2, 2.0)
+    @test a[1] == RotatingTimeValue(2, 2.0)
+    a[1:2] = a[3:4]
+    @test a[1:2] == a[3:4]
+
+    v = view(a, 2:4)
+    @test v isa RotatingTimeArray
+    @test v == a[2:4]
+
+    @test typeof(similar(a)) == typeof(a)
+    @test size(similar(a, 3)) == (3,)
+
+    @test v.rotation == rot[2:4]
+    @test v.time == time[2:4]
+
+    @test refarray(a).rotation == rot
 end
