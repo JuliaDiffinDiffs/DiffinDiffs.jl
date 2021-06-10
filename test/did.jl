@@ -56,15 +56,24 @@
         ──────────────────────────────────────────────────────────────────────"""
 
     df = DataFrame(hrs)
-    df.wave = Date.(df.wave)
-    df.wave_hosp = Date.(df.wave_hosp)
-    df.wave = settime(df, :wave, step=Year(1))
-    df.wave_hosp = settime(df, :wave_hosp, start=Date(7), step=Year(1))
+    df.wave = settime(Date.(hrs.wave), Year(1))
+    df.wave_hosp = settime(Date.(hrs.wave_hosp), Year(1), start=Date(7))
     r1 = @did(Reg, data=df, dynamic(:wave, -1), notyettreated(Date(11)),
         vce=Vcov.cluster(:hhidpn), yterm=term(:oop_spend), treatname=:wave_hosp,
-        treatintterms=(), xterms=(fe(:wave)+fe(:hhidpn)), solvelsweights=false)
+        treatintterms=(), xterms=(fe(:wave)+fe(:hhidpn)), solvelsweights=true)
     @test coef(r1) ≈ coef(r)
     @test r1.coefnames[1] == "wave_hosp: 0008-01-01 & rel: 0"
+
+    rot = ifelse.(isodd.(hrs.hhidpn), 1, 2)
+    df.wave = settime(Date.(hrs.wave), Year(1), rotation=rot)
+    df.wave_hosp = settime(Date.(hrs.wave_hosp), Year(1), start=Date(7), rotation=rot)
+    e = rotatingtime((1,2), Date(11))
+    r2 = @did(Reg, data=df, dynamic(:wave, -1), notyettreated(e),
+        vce=Vcov.cluster(:hhidpn), yterm=term(:oop_spend), treatname=:wave_hosp,
+        treatintterms=(), xterms=(fe(:wave)+fe(:hhidpn)), solvelsweights=true)
+    @test length(coef(r2)) == 18
+    @test coef(r2)[1] ≈ 3790.7218412450593
+    @test r2.coefnames[1] == "wave_hosp: 1_0008-01-01 & rel: 0"
 
     r = @did(Reg, data=hrs, dynamic(:wave, -1), notyettreated([11]),
         vce=Vcov.cluster(:hhidpn), yterm=term(:oop_spend), treatname=:wave_hosp,

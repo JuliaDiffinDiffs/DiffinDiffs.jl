@@ -254,10 +254,8 @@ end
     @test combinedargs(MakeTreatCols(), allntargs) ==
         (Dict{Int,Int}(), IdDict{ValidTimeType,Int}())
 
-    df.wave = Date.(df.wave)
-    df.wave_hosp = Date.(df.wave_hosp)
-    df.wave = settime(df, :wave, step=Year(1))
-    df.wave_hosp = settime(df, :wave_hosp, start=Date(7), step=Year(1))
+    df.wave = settime(Date.(hrs.wave), Year(1))
+    df.wave_hosp = settime(Date.(hrs.wave_hosp), Year(1), start=Date(7))
     ret1 = maketreatcols(nt..., typeof(tr), tr.time,
         Dict(-1=>1), IdDict{ValidTimeType,Int}(Date(11)=>1))
     @test ret1.cells[1] == Date.(ret.cells[1])
@@ -269,6 +267,34 @@ end
     @test ret1.treatcols == ret.treatcols
     @test ret1.cellweights == ret.cellweights
     @test ret1.cellcounts == ret.cellcounts
+
+    rot = ifelse.(isodd.(hrs.hhidpn), 1, 2)
+    df.wave = RotatingTimeArray(rot, hrs.wave)
+    df.wave_hosp = RotatingTimeArray(rot, hrs.wave_hosp)
+    e = rotatingtime((1,1,2), (10,11,11))
+    ret2 = maketreatcols(nt..., typeof(tr), tr.time,
+        Dict(-1=>1), IdDict{ValidTimeType,Int}(c=>1 for c in e))
+    @test ret2.cells[1] == sort!(append!((rotatingtime(r, ret.cells[1]) for r in (1,2))...))
+    rt = append!((rotatingtime(r, 7:11) for r in (1,2))...)
+    @test ret2.cells[2] == repeat(rt, 4)
+    @test size(ret2.treatcells) == (20, 2)
+    @test sort!(unique(ret2.treatcells[1])) ==
+        sort!(append!(rotatingtime(1, 8:9), rotatingtime(2, 8:10)))
+    
+    df.wave = settime(Date.(hrs.wave), Year(1), rotation=rot)
+    df.wave_hosp = settime(Date.(hrs.wave_hosp), Year(1), start=Date(7), rotation=rot)
+    e = rotatingtime((1,1,2), Date.((10,11,11)))
+    ret3 = maketreatcols(nt..., typeof(tr), tr.time,
+        Dict(-1=>1), IdDict{ValidTimeType,Int}(c=>1 for c in e))
+    @test ret3.cells[1].time == Date.(ret2.cells[1].time)
+    @test ret3.cells[2].time == Date.(ret2.cells[2].time)
+    @test ret3.rows == ret2.rows
+    @test ret3.treatcells[1].time == Date.(ret2.treatcells[1].time)
+    @test ret3.treatcells[2] == ret2.treatcells[2]
+    @test ret3.treatrows == ret2.treatrows
+    @test ret3.treatcols == ret2.treatcols
+    @test ret3.cellweights == ret2.cellweights
+    @test ret3.cellcounts == ret2.cellcounts
 
     nt = merge(nt, (data=hrs, tr=tr, pr=pr))
     @test MakeTreatCols()(nt) == merge(nt, (cells=ret.cells, rows=ret.rows,

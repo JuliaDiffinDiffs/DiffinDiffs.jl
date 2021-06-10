@@ -196,7 +196,11 @@ function maketreatcols(data, treatname::Symbol, treatintterms::TermSet,
     cols = subcolumns(data, cellnames, esample)
     cells, rows = cellrows(cols, findcell(cols))
 
-    rel = refarray(cells[2]) .- refarray(cells[1])
+    if cells[1] isa RotatingTimeArray
+        rel = refarray(cells[2].time) .- refarray(cells[1].time)
+    else
+        rel = refarray(cells[2]) .- refarray(cells[1])
+    end
     kept = .!haskey.(Ref(exc), rel) .& .!haskey.(Ref(notreat), cells[1])
     treatrows = rows[kept]
     # Construct cells needed for treatment indicators
@@ -495,7 +499,7 @@ function solveleastsquaresweights(::DynamicTreatment{SharpDesign},
         end
         feM === nothing || _feresiduals!(d, feM, fetol, femaxiter)
         weights isa UnitWeights || (d .*= sqrt.(weights))
-        lswtmat[i,:] .= (crossx \ (X'd))[1:nt]
+        lswtmat[i,:] .= view((crossx \ (X'd)), 1:nt)
     end
     ycellmeans ./= ycellweights
     lswt = TableIndexedMatrix(lswtmat, lswtcells, treatcells)
