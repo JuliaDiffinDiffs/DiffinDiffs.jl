@@ -152,8 +152,7 @@ end
     pr = nevertreated(11)
     nt = (data=hrs, treatname=:wave_hosp, treatintterms=TermSet(), feM=nothing,
         weights=uweights(N), esample=trues(N), default(MakeTreatCols())...)
-    ret = maketreatcols(nt..., typeof(tr), tr.time, Dict(-1=>1),
-        IdDict{ValidTimeType,Int}(11=>1))
+    ret = maketreatcols(nt..., tr.time, Dict(-1=>1), IdDict{ValidTimeType,Int}(11=>1))
     @test size(ret.cells) == (20, 2)
     @test length(ret.rows) == 20
     @test size(ret.treatcells) == (12, 2)
@@ -175,8 +174,7 @@ end
     @test all(w[ret.treatcells.wave_hosp.==10].==163)
 
     nt = merge(nt, (treatintterms=TermSet(term(:male)),))
-    ret1 = maketreatcols(nt..., typeof(tr), tr.time, Dict(-1=>1),
-        IdDict{ValidTimeType,Int}(11=>1))
+    ret1 = maketreatcols(nt..., tr.time, Dict(-1=>1), IdDict{ValidTimeType,Int}(11=>1))
     @test size(ret1.cells) == (40, 3)
     @test length(ret1.rows) == 40
     @test size(ret1.treatcells) == (24, 3)
@@ -195,8 +193,7 @@ end
     @test ret1.cellweights == ret1.cellcounts
 
     nt = merge(nt, (cohortinteracted=false, treatintterms=TermSet()))
-    ret2 = maketreatcols(nt..., typeof(tr), tr.time, Dict(-1=>1),
-        IdDict{ValidTimeType,Int}(11=>1))
+    ret2 = maketreatcols(nt..., tr.time, Dict(-1=>1), IdDict{ValidTimeType,Int}(11=>1))
     @test ret2.cells[1] == ret.cells[1]
     @test ret2.cells[2] == ret.cells[2]
     @test ret2.rows == ret.rows
@@ -210,8 +207,7 @@ end
     @test ret2.cellweights == ret2.cellcounts
 
     nt = merge(nt, (treatintterms=TermSet(term(:male)),))
-    ret3 = maketreatcols(nt..., typeof(tr), tr.time, Dict(-1=>1),
-        IdDict{ValidTimeType,Int}(11=>1))
+    ret3 = maketreatcols(nt..., tr.time, Dict(-1=>1), IdDict{ValidTimeType,Int}(11=>1))
     @test ret3.cells[1] == ret1.cells[1]
     @test ret3.cells[2] == ret1.cells[2]
     @test ret3.cells[3] == ret1.cells[3]
@@ -232,8 +228,7 @@ end
     feM = AbstractFixedEffectSolver{Float64}(fes, wt, Val{:cpu}, Threads.nthreads())
     nt = merge(nt, (data=df, feM=feM, weights=wt, esample=esample,
         treatintterms=TermSet(), cohortinteracted=true))
-    ret = maketreatcols(nt..., typeof(tr), tr.time, Dict(-1=>1),
-        IdDict{ValidTimeType,Int}(11=>1))
+    ret = maketreatcols(nt..., tr.time, Dict(-1=>1), IdDict{ValidTimeType,Int}(11=>1))
     col = reshape(col[esample], N, 1)
     defaults = (default(MakeTreatCols())...,)
     _feresiduals!(col, feM, defaults[2:3]...)
@@ -254,9 +249,13 @@ end
     @test combinedargs(MakeTreatCols(), allntargs) ==
         (Dict{Int,Int}(), IdDict{ValidTimeType,Int}())
 
+    allntargs = NamedTuple[(tr=tr, pr=pr), (tr=tr, pr=unspecifiedpr())]
+    @test combinedargs(MakeTreatCols(), allntargs) ==
+        (Dict(-1=>2), IdDict{ValidTimeType,Int}())
+
     df.wave = settime(Date.(hrs.wave), Year(1))
     df.wave_hosp = settime(Date.(hrs.wave_hosp), Year(1), start=Date(7))
-    ret1 = maketreatcols(nt..., typeof(tr), tr.time,
+    ret1 = maketreatcols(nt..., tr.time,
         Dict(-1=>1), IdDict{ValidTimeType,Int}(Date(11)=>1))
     @test ret1.cells[1] == Date.(ret.cells[1])
     @test ret1.cells[2] == Date.(ret.cells[2])
@@ -272,7 +271,7 @@ end
     df.wave = RotatingTimeArray(rot, hrs.wave)
     df.wave_hosp = RotatingTimeArray(rot, hrs.wave_hosp)
     e = rotatingtime((1,1,2), (10,11,11))
-    ret2 = maketreatcols(nt..., typeof(tr), tr.time,
+    ret2 = maketreatcols(nt..., tr.time,
         Dict(-1=>1), IdDict{ValidTimeType,Int}(c=>1 for c in e))
     @test ret2.cells[1] == sort!(append!((rotatingtime(r, ret.cells[1]) for r in (1,2))...))
     rt = append!((rotatingtime(r, 7:11) for r in (1,2))...)
@@ -284,7 +283,7 @@ end
     df.wave = settime(Date.(hrs.wave), Year(1), rotation=rot)
     df.wave_hosp = settime(Date.(hrs.wave_hosp), Year(1), start=Date(7), rotation=rot)
     e = rotatingtime((1,1,2), Date.((10,11,11)))
-    ret3 = maketreatcols(nt..., typeof(tr), tr.time,
+    ret3 = maketreatcols(nt..., tr.time,
         Dict(-1=>1), IdDict{ValidTimeType,Int}(c=>1 for c in e))
     @test ret3.cells[1].time == Date.(ret2.cells[1].time)
     @test ret3.cells[2].time == Date.(ret2.cells[2].time)

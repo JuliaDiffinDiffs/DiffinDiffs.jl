@@ -10,14 +10,14 @@ const RegressionBasedDID = DiffinDiffsEstimator{:RegressionBasedDID,
 const Reg = RegressionBasedDID
 
 function valid_didargs(d::Type{Reg}, ::DynamicTreatment{SharpDesign},
-        ::TrendParallel{Unconditional, Exact}, args::Dict{Symbol,Any})
+        ::TrendOrUnspecifiedPR{Unconditional,Exact}, args::Dict{Symbol,Any})
     name = get(args, :name, "")::String
     treatintterms = haskey(args, :treatintterms) ? args[:treatintterms] : TermSet()
     xterms = haskey(args, :xterms) ? args[:xterms] : TermSet()
     solvelsweights = haskey(args, :lswtnames) || get(args, :solvelsweights, false)::Bool
     ntargs = (data=args[:data],
         tr=args[:tr]::DynamicTreatment{SharpDesign},
-        pr=args[:pr]::TrendParallel{Unconditional, Exact},
+        pr=args[:pr]::TrendOrUnspecifiedPR{Unconditional,Exact},
         yterm=args[:yterm]::AbstractTerm,
         treatname=args[:treatname]::Symbol,
         subset=get(args, :subset, nothing)::Union{BitVector,Nothing},

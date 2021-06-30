@@ -94,6 +94,35 @@
         Fixed effects: none
         ──────────────────────────────────────────────────────────────────────"""
 
+    r0 = @did(Reg, data=hrs, dynamic(:wave, -1), unspecifiedpr(),
+        vce=Vcov.cluster(:hhidpn), yterm=term(:oop_spend), treatname=:wave_hosp,
+        treatintterms=(), xterms=(fe(:wave),),
+        cohortinteracted=false, solvelsweights=true)
+    # Compare estimates with Stata
+    # gen rel = wave - wave_hosp
+    # gen irel?? = rel==??
+    # reghdfe oop_spend irel*, a(wave) cluster(hhidpn)
+    @test coef(r0) ≈ [-1029.0482, 245.20926, 188.59266, 3063.2707,
+        1060.5317, 1152.3315, 1986.7811] atol=1e-4
+    @test diag(vcov(r0)) ≈ [764612.86, 626165.68, 236556.13, 163459.83,
+        130471.28, 294368.49, 677821.36] atol=1e0
+    pv = VERSION < v"1.6.0" ? " <1e-8" : "<1e-08"
+    @test sprint(show, MIME("text/plain"), r0) == """
+        ──────────────────────────────────────────────────────────────────────
+        Summary of results: Regression-based DID
+        ──────────────────────────────────────────────────────────────────────
+        Number of obs:               3280    Degrees of freedom:            12
+        F-statistic:                 9.12    p-value:                   $pv
+        ──────────────────────────────────────────────────────────────────────
+        Sharp dynamic specification
+        ──────────────────────────────────────────────────────────────────────
+        Relative time periods:          7    Excluded periods:              -1
+        ──────────────────────────────────────────────────────────────────────
+        Fixed effects: fe_wave
+        ──────────────────────────────────────────────────────────────────────
+        Converged:                   true    Singletons dropped:             0
+        ──────────────────────────────────────────────────────────────────────"""
+
     sr = view(r, 1:3)
     @test coef(sr)[1] == r.coef[1]
     @test vcov(sr)[1] == r.vcov[1]
