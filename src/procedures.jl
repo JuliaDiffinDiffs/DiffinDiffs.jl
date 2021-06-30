@@ -80,8 +80,8 @@ function _checkscales(col1::AbstractArray, col2::AbstractArray, treatvars::Vecto
     end
 end
 
-function checktreatvars(::DynamicTreatment{SharpDesign}, pr::TrendParallel{Unconditional},
-        treatvars::Vector{Symbol}, data)
+function checktreatvars(::DynamicTreatment{SharpDesign},
+        pr::TrendOrUnspecifiedPR{Unconditional}, treatvars::Vector{Symbol}, data)
     # treatvars should be cohort and time variables
     col1 = getcolumn(data, treatvars[1])
     col2 = getcolumn(data, treatvars[2])
@@ -91,7 +91,9 @@ function checktreatvars(::DynamicTreatment{SharpDesign}, pr::TrendParallel{Uncon
         "nonmissing elements from columns $(treatvars[1]) and $(treatvars[2]) have different types $T1 and $T2"))
     T1 <: ValidTimeType ||
         throw(ArgumentError("column $(treatvars[1]) has unaccepted element type $(T1)"))
-    eltype(pr.e) == T1 || throw(ArgumentError("element type $(eltype(pr.e)) of control cohorts from $pr does not match element type $T1 from data; expect $T1"))
+    if pr isa TrendParallel
+        eltype(pr.e) == T1 || throw(ArgumentError("element type $(eltype(pr.e)) of control cohorts from $pr does not match element type $T1 from data; expect $T1"))
+    end
     if T1 <: RotatingTimeValue
         col1 isa RotatingTimeArray && col2 isa RotatingTimeArray ||
             throw(ArgumentError("columns $(treatvars[1]) and $(treatvars[2]) must be RotatingTimeArrays; see settime"))
@@ -147,6 +149,9 @@ function overlap!(esample::BitVector, tr_rows::BitVector, aux::BitVector, tr::Dy
     tr_rows .&= esample
 end
 
+overlap!(esample::BitVector, tr_rows::BitVector, aux::BitVector, tr::DynamicTreatment,
+    pr::UnspecifiedParallel{Unconditional}, treatname::Symbol, data) = nothing
+
 """
     checkvars!(args...)
 
@@ -171,8 +176,10 @@ function checkvars!(data, tr::AbstractTreatment, pr::AbstractParallel,
     end
     # Values of treatintterms from untreated units are ignored
     tr_rows = copy(esample)
-    istreated!(view(aux, esample), pr, view(getcolumn(data, treatname), esample))
-    tr_rows[esample] .&= view(aux, esample)
+    if !(pr isa UnspecifiedParallel)
+        istreated!(view(aux, esample), pr, view(getcolumn(data, treatname), esample))
+        tr_rows[esample] .&= view(aux, esample)
+    end
     treatintvars = termvars(treatintterms)
     for v in treatintvars
         col = getcolumn(data, v)

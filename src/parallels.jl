@@ -22,7 +22,7 @@ show(io::IO, ::Unconditional) =
 """
     unconditional()
 
-Alias for [`Unconditional()`](@ref).
+Alias of [`Unconditional()`](@ref).
 """
 unconditional() = Unconditional()
 
@@ -56,7 +56,7 @@ show(io::IO, ::Exact) =
 """
     exact()
 
-Alias for [`Exact()`](@ref).
+Alias of [`Exact()`](@ref).
 """
 exact() = Exact()
 
@@ -77,12 +77,62 @@ abstract type AbstractParallel{C<:ParallelCondition, S<:ParallelStrength} end
 @fieldequal AbstractParallel
 
 """
+    UnspecifiedParallel{C,S} <: AbstractParallel{C,S}
+
+A parallel trends assumption (PTA) without explicitly specified
+relations across treatment groups.
+See also [`unspecifiedpr`](@ref).
+
+With this parallel type,
+operations for complying with a PTA are suppressed.
+This is useful, for example,
+when the user-provided regressors and sample restrictions
+need to be accepted without any PTA-specific alteration.
+
+# Fields
+- `c::C`: an instance of [`ParallelCondition`](@ref).
+- `s::S`: an instance of [`ParallelStrength`](@ref).
+"""
+struct UnspecifiedParallel{C,S} <: AbstractParallel{C,S}
+    c::C
+    s::S
+    function UnspecifiedParallel(c::ParallelCondition=Unconditional(),
+            s::ParallelStrength=Exact())
+        return new{typeof(c),typeof(s)}(c, s)
+    end
+end
+
+"""
+    unspecifiedpr(c::ParallelCondition=Unconditional(), s::ParallelStrength=Exact())
+
+Construct an [`UnspecifiedParallel`](@ref) with fields set by the arguments.
+This is an alias of the inner constructor of [`UnspecifiedParallel`](@ref).
+"""
+unspecifiedpr(c::ParallelCondition=Unconditional(), s::ParallelStrength=Exact()) =
+    UnspecifiedParallel(c, s)
+
+show(io::IO, pr::UnspecifiedParallel) =
+    print(IOContext(io, :compact=>true), "Unspecified{", pr.c, ",", pr.s, "}")
+
+function show(io::IO, ::MIME"text/plain", pr::UnspecifiedParallel)
+    print(io, pr.s, " among unspecified treatment groups")
+    pr.c isa Unconditional || print(io, ":\n  ", pr.c)
+end
+
+"""
     TrendParallel{C,S} <: AbstractParallel{C,S}
 
 Supertype for all parallel types that
 assume a parallel trends assumption holds over all the relevant time periods.
 """
 abstract type TrendParallel{C,S} <: AbstractParallel{C,S} end
+
+"""
+    TrendOrUnspecifiedPR{C,S}
+
+Union type of [`TrendParallel{C,S}`](@ref) and [`UnspecifiedParallel{C,S}`](@ref).
+"""
+const TrendOrUnspecifiedPR{C,S} = Union{TrendParallel{C,S}, UnspecifiedParallel{C,S}}
 
 """
     istreated(pr::TrendParallel, x)
@@ -306,5 +356,6 @@ termvars(s::ParallelStrength) =
 termvars(::Exact) = Symbol[]
 termvars(pr::AbstractParallel) =
     error("StatsModels.termvars is not defined for $(typeof(pr))")
+termvars(pr::UnspecifiedParallel) = union(termvars(pr.c), termvars(pr.s))
 termvars(pr::NeverTreatedParallel) = union(termvars(pr.c), termvars(pr.s))
 termvars(pr::NotYetTreatedParallel) = union(termvars(pr.c), termvars(pr.s))

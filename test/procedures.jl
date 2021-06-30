@@ -62,9 +62,13 @@ end
     @testset "checkvars!" begin
         hrs = exampledata("hrs")
         N = size(hrs,1)
-        nt = (data=hrs, tr=dynamic(:wave, -1), pr=nevertreated(11), yterm=term(:oop_spend),
+        us = unspecifiedpr()
+        nt = (data=hrs, tr=dynamic(:wave, -1), pr=us, yterm=term(:oop_spend),
             treatname=:wave_hosp, esample=trues(N), aux=BitVector(undef, N),
             treatintterms=TermSet(), xterms=TermSet())
+        @test checkvars!(nt...) == (esample=trues(N), tr_rows=trues(N))
+
+        nt = merge(nt, (pr=nevertreated(11),))
         @test checkvars!(nt...) == (esample=trues(N), tr_rows=hrs.wave_hosp.!=11)
 
         nt = merge(nt, (pr=notyettreated(11),))
@@ -76,19 +80,31 @@ end
             (esample=.!(hrs.wave_hosp.∈(10,)).& .!(hrs.wave.∈((10,11),)),
             tr_rows=(.!(hrs.wave_hosp.∈((10,11),)).& .!(hrs.wave.∈((10,11),))))
 
+        nt = merge(nt, (pr=us, treatintterms=TermSet(term(:male)),
+            xterms=TermSet(term(:white)), esample=trues(N)))
+        @test checkvars!(nt...) == (esample=trues(N), tr_rows=trues(N))
+
         nt = merge(nt, (pr=nevertreated(11), treatintterms=TermSet(term(:male)),
             xterms=TermSet(term(:white)), esample=trues(N)))
         @test checkvars!(nt...) == (esample=trues(N), tr_rows=hrs.wave_hosp.!=11)
 
         df = DataFrame(hrs)
         allowmissing!(df, :male)
-        df.male .= ifelse.(df.wave_hosp.==11, missing, df.male)
-        nt = merge(nt, (data=df,))
+        df.male .= ifelse.(hrs.wave_hosp.==11, missing, df.male)
+
+        nt = merge(nt, (data=df, pr=us, esample=trues(N)))
+        @test checkvars!(nt...) == (esample=hrs.wave_hosp.!=11, tr_rows=hrs.wave_hosp.!=11)
+        df.male .= ifelse.(hrs.wave_hosp.==10, missing, hrs.male)
+        nt = merge(nt, (esample=trues(N),))
+        @test checkvars!(nt...) == (esample=hrs.wave_hosp.!=10, tr_rows=hrs.wave_hosp.!=10)
+
+        df.male .= ifelse.(hrs.wave_hosp.==11, missing, hrs.male)
+        nt = merge(nt, (pr=nevertreated(11), esample=trues(N)))
         @test checkvars!(nt...) == (esample=trues(N), tr_rows=hrs.wave_hosp.!=11)
-        df.male .= ifelse.(df.wave_hosp.==10, missing, df.male)
-        @test checkvars!(nt...) == (esample=df.wave_hosp.!=10, tr_rows=hrs.wave_hosp.∈((8,9),))
-        df.white = ifelse.(df.wave_hosp.==9, missing, df.white.+0.5)
-        ret = (esample=df.wave_hosp.∈((8,11),), tr_rows=hrs.wave_hosp.==8)
+        df.male .= ifelse.(hrs.wave_hosp.==10, missing, df.male)
+        @test checkvars!(nt...) == (esample=hrs.wave_hosp.!=10, tr_rows=hrs.wave_hosp.∈((8,9),))
+        df.white = ifelse.(hrs.wave_hosp.==9, missing, df.white.+0.5)
+        ret = (esample=hrs.wave_hosp.∈((8,11),), tr_rows=hrs.wave_hosp.==8)
         @test checkvars!(nt...) == ret
 
         df.wave_hosp = Date.(df.wave_hosp)
