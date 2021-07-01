@@ -42,19 +42,35 @@
     end
 end
 
-@testset "GroupTerms" begin
-    @testset "groupterms" begin
-        nt = (treatintterms=TermSet(), xterms=TermSet(term(:x)))
-        @test groupterms(nt...) == nt
+@testset "GroupTreatintterms" begin
+    @testset "grouptreatintterms" begin
+        nt = (treatintterms=TermSet(),)
+        @test grouptreatintterms(nt...) == nt
     end
 
     @testset "StatsStep" begin
-        @test sprint(show, GroupTerms()) == "GroupTerms"
-        @test sprint(show, MIME("text/plain"), GroupTerms()) ==
-            "GroupTerms (StatsStep that calls DiffinDiffsBase.groupterms)"
-        @test _byid(GroupTerms()) == false
-        nt = (treatintterms=TermSet(), xterms=TermSet(term(:x)))
-        @test GroupTerms()(nt) == nt 
+        @test sprint(show, GroupTreatintterms()) == "GroupTreatintterms"
+        @test sprint(show, MIME("text/plain"), GroupTreatintterms()) ==
+            "GroupTreatintterms (StatsStep that calls DiffinDiffsBase.grouptreatintterms)"
+        @test _byid(GroupTreatintterms()) == false
+        nt = (treatintterms=TermSet(),)
+        @test GroupTreatintterms()() == nt
+    end
+end
+
+@testset "GroupXterms" begin
+    @testset "groupxterms" begin
+        nt = (xterms=TermSet(term(:x)),)
+        @test groupxterms(nt...) == nt
+    end
+
+    @testset "StatsStep" begin
+        @test sprint(show, GroupXterms()) == "GroupXterms"
+        @test sprint(show, MIME("text/plain"), GroupXterms()) ==
+            "GroupXterms (StatsStep that calls DiffinDiffsBase.groupxterms)"
+        @test _byid(GroupXterms()) == false
+        nt = (xterms=TermSet(),)
+        @test GroupXterms()() == nt
     end
 end
 
@@ -63,9 +79,11 @@ end
         hrs = exampledata("hrs")
         N = size(hrs,1)
         us = unspecifiedpr()
-        nt = (data=hrs, tr=dynamic(:wave, -1), pr=us, yterm=term(:oop_spend),
+        tr = dynamic(:wave, -1)
+        nt = (data=hrs, pr=us, yterm=term(:oop_spend),
             treatname=:wave_hosp, esample=trues(N), aux=BitVector(undef, N),
-            treatintterms=TermSet(), xterms=TermSet())
+            treatintterms=TermSet(), xterms=TermSet(),
+            tytr=typeof(tr), trvars=(termvars(tr)...,), tr=tr)
         @test checkvars!(nt...) == (esample=trues(N), tr_rows=trues(N))
 
         nt = merge(nt, (pr=nevertreated(11),))
@@ -140,7 +158,8 @@ end
         df.wave_hosp = rotatingtime(rot, df.wave_hosp)
         df.wave = rotatingtime(rot, df.wave)
         e = rotatingtime((1,2), 11)
-        nt = merge(nt, (data=df, tr=dynamic(:wave, -1), pr=nevertreated(e), treatintterms=TermSet(), xterms=TermSet(), esample=trues(N)))
+        nt = merge(nt, (data=df, pr=nevertreated(e), treatintterms=TermSet(),
+            xterms=TermSet(), esample=trues(N)))
         # Check RotatingTimeArray
         @test_throws ArgumentError checkvars!(nt...)
         df.wave_hosp = settime(hrs.wave_hosp, rotation=rot)
@@ -198,10 +217,27 @@ end
         @test CheckVars()(nt) ==
             merge(nt, (esample=trues(N), tr_rows=hrs.wave_hosp.!=11))
         nt = (data=hrs, tr=dynamic(:wave, -1), pr=nevertreated(11), yterm=term(:oop_spend),
-            treatname=:wave_hosp, esample=trues(N), aux=BitVector(undef, N))
+            treatname=:wave_hosp, esample=trues(N), aux=BitVector(undef, N),
+            treatintterms=TermSet(), xterms=TermSet())
         @test CheckVars()(nt) ==
             merge(nt, (esample=trues(N), tr_rows=hrs.wave_hosp.!=11))
         @test_throws ErrorException CheckVars()()
+    end
+end
+
+@testset "GroupSample" begin
+    @testset "groupsample" begin
+        nt = (esample=trues(3),)
+        @test groupsample(nt...) == nt
+    end
+
+    @testset "StatsStep" begin
+        @test sprint(show, GroupSample()) == "GroupSample"
+        @test sprint(show, MIME("text/plain"), GroupSample()) ==
+            "GroupSample (StatsStep that calls DiffinDiffsBase.groupsample)"
+        @test _byid(GroupSample()) == false
+        nt = (esample=trues(3),)
+        @test GroupSample()(nt) == nt
     end
 end
 

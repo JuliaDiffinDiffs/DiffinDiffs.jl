@@ -545,3 +545,22 @@ end
     m = Diagonal(r.treatcells.rel[1:3])
     @test vcov(tr) == m * r.vcov[1:3,1:3] * m'
 end
+
+@testset "post!" begin
+    @test getexportformat() == DefaultExportFormat[1]
+    setexportformat!(StataPostHDF())
+    @test DefaultExportFormat[1] == StataPostHDF()
+
+    f = Dict{String,Any}()
+    r = TestResult(2, 2)
+    post!(f, r)
+    @test f["model"] == "DiffinDiffsBase.AbstractDIDResult"
+    @test f["b"] == coef(r)
+    @test f["V"] == vcov(r)
+    @test f["vce"] == "nothing"
+    @test f["N"] == nobs(r)
+    @test f["depvar"] == "y"
+    @test f["coefnames"][1] == "rel: 1 & c: 1"
+    @test f["weights"] == "w"
+    @test f["ntreatcoef"] == 4
+end

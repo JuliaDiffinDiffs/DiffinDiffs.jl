@@ -780,3 +780,67 @@ function rescale(r::AbstractDIDResult, by::Pair, subset)
     tinds = treatindex(ntreatcoef(r), inds)
     return rescale(r, apply(view(treatcells(r), tinds), by), inds)
 end
+
+"""
+    ExportFormat
+
+Supertype for all types representing the format for exporting an [`AbstractDIDResult`](@ref).
+"""
+abstract type ExportFormat end
+
+"""
+    StataPostHDF <: ExportFormat
+
+Export an [`AbstractDIDResult`](@ref) for Stata module
+[`posthdf`](https://github.com/junyuan-chen/posthdf).
+"""
+struct StataPostHDF <: ExportFormat end
+
+const DefaultExportFormat = ExportFormat[StataPostHDF()]
+
+"""
+    getexportformat()
+
+Return the default [`ExportFormat`](@ref) for [`post!`](@ref).
+"""
+getexportformat() = DefaultExportFormat[1]
+
+"""
+    setexportformat!(format::ExportFormat)
+
+Set the default [`ExportFormat`](@ref) for [`post!`](@ref).
+"""
+setexportformat!(format::ExportFormat) = (DefaultExportFormat[1] = format)
+
+"""
+    post!(f, r::AbstractDIDResult; kwargs...)
+
+Export result `r` in a default [`ExportFormat`](@ref).
+
+The default format can be retrieved via [`getexportformat`](@ref)
+and modified via [`setexportformat!`](@ref).
+"""
+post!(f, r::AbstractDIDResult; kwargs...) =
+    post!(f, getexportformat(), r; kwargs...)
+
+"""
+    post!(f, ::StataPostHDF, r::AbstractDIDResult; model="DiffinDiffsBase.AbstractDIDResult")
+
+Export result `r` for Stata module
+[`posthdf`](https://github.com/junyuan-chen/posthdf).
+A subset of field values from `r` are placed in `f` by setting key-value pairs,
+where `f` can be either an `HDF5.Group` or any object that can be indexed by strings.
+"""
+function post!(f, ::StataPostHDF, r::AbstractDIDResult;
+        model::String="DiffinDiffsBase.AbstractDIDResult")
+    f["model"] = model
+    f["b"] = coef(r)
+    f["V"] = vcov(r)
+    f["vce"] = repr(vce(r))
+    f["N"] = nobs(r)
+    f["depvar"] = string(outcomename(r))
+    f["coefnames"] = convert(AbstractVector{String}, coefnames(r))
+    f["weights"] = (w = weights(r); w === nothing ? "" : string(w))
+    f["ntreatcoef"] = ntreatcoef(r)
+    return f
+end

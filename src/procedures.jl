@@ -45,27 +45,48 @@ required(::CheckData) = (:data,)
 default(::CheckData) = (subset=nothing, weightname=nothing)
 
 """
-    groupterms(args...)
+    grouptreatintterms(treatintterms)
 
-Return the arguments for allowing later comparisons based on object-id.
-See also [`GroupTerms`](@ref).
+Return the argument without change for allowing later comparisons based on object-id.
+See also [`GroupTreatintterms`](@ref).
 """
-groupterms(treatintterms::TermSet, xterms::TermSet) =
-    (treatintterms = treatintterms, xterms = xterms)
+grouptreatintterms(treatintterms::TermSet) = (treatintterms=treatintterms,)
 
 """
-    GroupTerms <: StatsStep
+    GroupTreatintterms <: StatsStep
 
-Call [`DiffinDiffsBase.groupterms`](@ref)
-to obtain one of the instances of `treatintterms` and `xterms`
-that have been grouped by `==`
+Call [`DiffinDiffsBase.grouptreatintterms`](@ref)
+to obtain one of the instances of `treatintterms`
+that have been grouped by equality (`hash`)
 for allowing later comparisons based on object-id.
 
 This step is only useful when working with [`@specset`](@ref) and [`proceed`](@ref).
 """
-const GroupTerms = StatsStep{:GroupTerms, typeof(groupterms), false}
+const GroupTreatintterms = StatsStep{:GroupTreatintterms, typeof(grouptreatintterms), false}
 
-required(::GroupTerms) = (:treatintterms, :xterms)
+default(::GroupTreatintterms) = (treatintterms=TermSet(),)
+
+"""
+    groupxterms(xterms)
+
+Return the argument without change for allowing later comparisons based on object-id.
+See also [`GroupXterms`](@ref).
+"""
+groupxterms(xterms::TermSet) = (xterms=xterms,)
+
+"""
+    GroupXterms <: StatsStep
+
+Call [`DiffinDiffsBase.groupxterms`](@ref)
+to obtain one of the instances of `xterms`
+that have been grouped by equality (`hash`)
+for allowing later comparisons based on object-id.
+
+This step is only useful when working with [`@specset`](@ref) and [`proceed`](@ref).
+"""
+const GroupXterms = StatsStep{:GroupXterms, typeof(groupxterms), false}
+
+default(::GroupXterms) = (xterms=TermSet(),)
 
 function _checkscales(col1::AbstractArray, col2::AbstractArray, treatvars::Vector{Symbol})
     if col1 isa ScaledArrOrSub || col2 isa ScaledArrOrSub
@@ -159,11 +180,12 @@ Exclude rows with missing data or violate the overlap condition
 and find rows with data from treated units.
 See also [`CheckVars`](@ref).
 """
-function checkvars!(data, tr::AbstractTreatment, pr::AbstractParallel,
+function checkvars!(data, pr::AbstractParallel,
         yterm::AbstractTerm, treatname::Symbol, esample::BitVector, aux::BitVector,
-        treatintterms::TermSet, xterms::TermSet)
+        treatintterms::TermSet, xterms::TermSet, ::Type, @nospecialize(trvars::Tuple),
+        tr::AbstractTreatment)
     # Do not check eltype of treatintterms
-    treatvars = union([treatname], termvars(tr), termvars(pr))
+    treatvars = union([treatname], trvars, termvars(pr))
     checktreatvars(tr, pr, treatvars, data)
 
     allvars = union(treatvars, termvars(yterm), termvars(xterms))
@@ -202,9 +224,40 @@ Call [`DiffinDiffsBase.checkvars!`](@ref) to exclude invalid rows for relevant v
 """
 const CheckVars = StatsStep{:CheckVars, typeof(checkvars!), true}
 
-required(::CheckVars) = (:data, :tr, :pr, :yterm, :treatname, :esample, :aux)
-default(::CheckVars) = (treatintterms=TermSet(), xterms=TermSet())
-copyargs(::CheckVars) = (6,)
+required(::CheckVars) = (:data, :pr, :yterm, :treatname, :esample, :aux,
+    :treatintterms, :xterms)
+transformed(::CheckVars, @nospecialize(nt::NamedTuple)) =
+    (typeof(nt.tr), (termvars(nt.tr)...,))
+
+combinedargs(step::CheckVars, allntargs) =
+    combinedargs(step, allntargs, typeof(allntargs[1].tr))
+
+combinedargs(::CheckVars, allntargs, ::Type{DynamicTreatment{SharpDesign}}) =
+    (allntargs[1].tr,)
+
+copyargs(::CheckVars) = (5,)
+
+"""
+    groupsample(esample)
+
+Return the argument without change for allowing later comparisons based on object-id.
+See also [`GroupSample`](@ref).
+"""
+groupsample(esample::BitVector) = (esample=esample,)
+
+"""
+    GroupSample <: StatsStep
+
+Call [`DiffinDiffsBase.groupsample`](@ref)
+to obtain one of the instances of `esample`
+that have been grouped by equality (`hash`)
+for allowing later comparisons based on object-id.
+
+This step is only useful when working with [`@specset`](@ref) and [`proceed`](@ref).
+"""
+const GroupSample = StatsStep{:GroupSample, typeof(groupsample), false}
+
+required(::GroupSample) = (:esample,)
 
 """
     makeweights(args...)

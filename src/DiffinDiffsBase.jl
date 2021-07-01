@@ -109,8 +109,10 @@ export cb,
        @specset,
 
        CheckData,
-       GroupTerms,
+       GroupTreatintterms,
+       GroupXterms,
        CheckVars,
+       GroupSample,
        MakeWeights,
 
        DiffinDiffsEstimator,
@@ -135,7 +137,12 @@ export cb,
        TransformedDIDResult,
        TransSubDIDResult,
        lincom,
-       rescale
+       rescale,
+       ExportFormat,
+       StataPostHDF,
+       getexportformat,
+       setexportformat!,
+       post!
 
 include("tables.jl")
 include("utils.jl")
