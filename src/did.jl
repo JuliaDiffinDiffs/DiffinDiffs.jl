@@ -4,7 +4,8 @@
 Estimation procedure for regression-based difference-in-differences.
 """
 const RegressionBasedDID = DiffinDiffsEstimator{:RegressionBasedDID,
-    Tuple{CheckData, GroupTerms, CheckVcov, CheckVars, CheckFEs, MakeWeights, MakeFESolver,
+    Tuple{CheckData, GroupTreatintterms, GroupXterms, CheckVcov, CheckVars, GroupSample,
+    ParseFEterms, GroupFEterms, MakeFEs, CheckFEs, MakeWeights, MakeFESolver,
     MakeYXCols, MakeTreatCols, SolveLeastSquares, EstVcov, SolveLeastSquaresWeights}}
 
 const Reg = RegressionBasedDID
@@ -64,7 +65,7 @@ struct RegressionBasedDIDResult{TR<:AbstractTreatment, CohortInteracted} <: DIDR
     xterms::Vector{AbstractTerm}
     contrasts::Union{Dict{Symbol, Any}, Nothing}
     weightname::Union{Symbol, Nothing}
-    fenames::Vector{Symbol}
+    fenames::Vector{String}
     nfeiterations::Union{Int, Nothing}
     feconverged::Union{Bool, Nothing}
     nfesingledropped::Int

@@ -26,73 +26,173 @@ exclude rows that are invalid for variance-covariance estimator.
 """
 const CheckVcov = StatsStep{:CheckVcov, typeof(checkvcov!), true}
 
+# Get esample and aux directly from CheckData
 required(::CheckVcov) = (:data, :esample, :aux)
 default(::CheckVcov) = (vce=Vcov.robust(),)
 copyargs(::CheckVcov) = (2,)
 
 """
+    parsefeterms!(xterms)
+
+Extract any `FixedEffectTerm` or interaction of `FixedEffectTerm` from `xterms`
+and determine whether any intercept term should be omitted.
+See also [`ParseFEterms`](@ref).
+"""
+function parsefeterms!(xterms::TermSet)
+    feterms = Set{FETerm}()
+    has_fe_intercept = false
+    for t in xterms
+        result = _parsefeterm(t)
+        if result !== nothing
+            push!(feterms, result)
+            delete!(xterms, t)
+        end
+    end
+    if !isempty(feterms)
+        if any(t->isempty(t[2]), feterms)
+            has_fe_intercept = true
+            for t in xterms
+                t isa Union{ConstantTerm,InterceptTerm} && delete!(xterms, t)
+            end
+            push!(xterms, InterceptTerm{false}())
+        end
+    end
+    return (xterms=xterms, feterms=feterms, has_fe_intercept=has_fe_intercept)
+end
+
+const ParseFEterms = StatsStep{:ParseFEterms, typeof(parsefeterms!), true}
+
+required(::ParseFEterms) = (:xterms,)
+
+"""
+    groupfeterms(feterms)
+
+Return the argument without change for allowing later comparisons based on object-id.
+See also [`GroupFEterms`](@ref).
+"""
+groupfeterms(feterms::Set{FETerm}) = (feterms=feterms,)
+
+"""
+    GroupFEterms <: StatsStep
+
+Call [`InteractionWeightedDIDs.groupfeterms`](@ref)
+to obtain one of the instances of `feterms`
+that have been grouped by equality (`hash`)
+for allowing later comparisons based on object-id.
+
+This step is only useful when working with [`@specset`](@ref) and [`proceed`](@ref).
+"""
+const GroupFEterms = StatsStep{:GroupFEterms, typeof(groupfeterms), false}
+
+required(::GroupFEterms) = (:feterms,)
+
+"""
+    makefes(args...)
+
+Construct `FixedEffect`s from `data` (the full sample).
+See also [`MakeFEs`](@ref).
+"""
+function makefes(data, allfeterms::Vector{FETerm})
+    # Must use Dict instead of IdDict since the same feterm can be in multiple feterms
+    allfes = Dict{FETerm,FixedEffect}()
+    for t in allfeterms
+        haskey(allfes, t) && continue
+        if isempty(t[2])
+            allfes[t] = FixedEffect((getcolumn(data, n) for n in t[1])...)
+        else
+            allfes[t] = FixedEffect((getcolumn(data, n) for n in t[1])...;
+                interaction=_multiply(data, t[2]))
+        end
+    end
+    return (allfes=allfes,)
+end
+
+"""
+    MakeFEs <: StatsStep
+
+Call [`InteractionWeightedDIDs.makefes`](@ref)
+to construct `FixedEffect`s from `data` (the full sample).
+"""
+const MakeFEs = StatsStep{:MakeFEs, typeof(makefes), false}
+
+required(::MakeFEs) = (:data,)
+combinedargs(::MakeFEs, allntargs) = (FETerm[t for nt in allntargs for t in nt.feterms],)
+
+"""
     checkfes!(args...)
 
-Extract any `FixedEffectTerm` from `xterms`,
-drop singleton observations for any fixed effect
-and determine whether intercept term should be omitted.
+Drop any singleton observation from fixed effects over the relevant subsample.
 See also [`CheckFEs`](@ref).
 """
-function checkfes!(data, esample::BitVector, xterms::TermSet, drop_singletons::Bool)
-    fes, fenames, has_fe_intercept = parse_fixedeffect!(data, xterms)
+function checkfes!(feterms::Set{FETerm}, allfes::Dict{FETerm,FixedEffect},
+        esample::BitVector, drop_singletons::Bool)
     nsingle = 0
-    if !isempty(fes)
+    nfe = length(feterms)
+    if nfe > 0
+        fes = Vector{FixedEffect}(undef, nfe)
+        fenames = Vector{String}(undef, nfe)
+        # Loop together to ensure the orders are the same
+        for (i, t) in enumerate(feterms)
+            fes[i] = allfes[t]
+            fenames[i] = getfename(t)
+        end
+        # Determine the unique order based on names
+        order = sortperm(fenames)
+        fes = fes[order]
+        fenames = fenames[order]
+
         if drop_singletons
             for fe in fes
                 nsingle += drop_singletons!(esample, fe)
             end
         end
+        sum(esample) == 0 && error("no nonmissing data")
+
+        for i in 1:nfe
+            fes[i] = fes[i][esample]
+        end
+        return (esample=esample, fes=fes, fenames=fenames, nsingle=nsingle)
+    else
+        return (esample=esample, fes=FixedEffect[], fenames=String[], nsingle=0)
     end
-    sum(esample) == 0 && error("no nonmissing data")
-    return (xterms=xterms, esample=esample, fes=fes, fenames=fenames,
-        has_fe_intercept=has_fe_intercept, nsingle=nsingle)
 end
 
 """
     CheckFEs <: StatsStep
 
 Call [`InteractionWeightedDIDs.checkfes!`](@ref)
-to extract any `FixedEffectTerm` from `xterms`
-and drop singleton observations for any fixed effect.
+to drop any singleton observation from fixed effects over the relevant subsample.
 """
-const CheckFEs = StatsStep{:CheckFixedEffects, typeof(checkfes!), true}
+const CheckFEs = StatsStep{:CheckFEs, typeof(checkfes!), true}
 
-required(::CheckFEs) = (:data, :esample, :xterms)
+required(::CheckFEs) = (:feterms, :allfes, :esample)
 default(::CheckFEs) = (drop_singletons=true,)
-copyargs(::CheckFEs) = (2,3)
+copyargs(::CheckFEs) = (3,)
 
 """
-    makefesolver!(args...)
+    makefesolver(args...)
 
 Construct `FixedEffects.AbstractFixedEffectSolver`.
 See also [`MakeFESolver`](@ref).
 """
-function makefesolver!(fes::Vector{FixedEffect}, weights::AbstractWeights,
-        esample::BitVector, nfethreads::Int)
+function makefesolver(fes::Vector{FixedEffect}, weights::AbstractWeights, nfethreads::Int)
     if !isempty(fes)
-        fes = FixedEffect[fe[esample] for fe in fes]
         feM = AbstractFixedEffectSolver{Float64}(fes, weights, Val{:cpu}, nfethreads)
-        return (feM=feM, fes=fes)
+        return (feM=feM,)
     else
-        return (feM=nothing, fes=fes)
+        return (feM=nothing,)
     end
 end
 
 """
     MakeFESolver <: StatsStep
 
-Call [`InteractionWeightedDIDs.makefesolver!`](@ref) to construct the fixed effect solver.
+Call [`InteractionWeightedDIDs.makefesolver`](@ref) to construct the fixed effect solver.
 """
-const MakeFESolver = StatsStep{:MakeFESolver, typeof(makefesolver!), true}
+const MakeFESolver = StatsStep{:MakeFESolver, typeof(makefesolver), true}
 
-required(::MakeFESolver) = (:fes, :weights, :esample)
+required(::MakeFESolver) = (:fes, :weights)
 default(::MakeFESolver) = (nfethreads=Threads.nthreads(),)
-copyargs(::MakeFESolver) = (1,)
 
 function _makeyxcols!(yxterms::Dict, yxcols::Dict, yxschema, data, t::AbstractTerm)
     ct = apply_schema(t, yxschema, StatisticalModel)
@@ -291,6 +391,7 @@ transformed(::MakeTreatCols, @nospecialize(nt::NamedTuple)) = (nt.tr.time,)
 # Obtain the relative time periods excluded by all tr
 # and the treatment groups excluded by all pr in allntargs
 function combinedargs(::MakeTreatCols, allntargs)
+    # exc cannot be IdDict for comparing different types of one
     exc = Dict{Int,Int}()
     notreat = IdDict{ValidTimeType,Int}()
     for nt in allntargs

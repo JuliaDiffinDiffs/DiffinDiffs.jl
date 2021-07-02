@@ -19,7 +19,7 @@ Vcov = "ec2bfdc2-55df-4fc9-b9ae-4958c2cf2486"
 [compat]
 DataAPI = "1.5"
 DataFrames = "1"
-DiffinDiffsBase = "0.3.2"
+DiffinDiffsBase = "0.3.3"
 FixedEffectModels = "1.5"
 FixedEffects = "2"
 Reexport = "0.2, 1"

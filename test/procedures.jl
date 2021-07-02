@@ -14,36 +14,104 @@
         (data=hrs, esample=trues(size(hrs,1)), aux=trues(size(hrs,1)))
 end
 
+@testset "ParseFEterms" begin
+    hrs = exampledata(:hrs)
+
+    ret = parsefeterms!(TermSet())
+    @test (ret...,) == (TermSet(), Set{FETerm}(), false)
+    ts = TermSet((term(1), term(:male)))
+    ret = parsefeterms!(ts)
+    @test (ret...,) == (ts, Set{FETerm}(), false)
+
+    ts = TermSet(term(1)+term(:male)+fe(:hhidpn))
+    ret = parsefeterms!(ts)
+    @test (ret...,) == (TermSet(InterceptTerm{false}(), term(:male)),
+        Set(([:hhidpn]=>Symbol[],)), true)
+
+    ts = TermSet(fe(:wave)+fe(:hhidpn))
+    ret = parsefeterms!(ts)
+    @test (ret...,) == (TermSet(InterceptTerm{false}()),
+        Set(([:hhidpn]=>Symbol[], [:wave]=>Symbol[])), true)
+
+    # Verify that no change is made on intercept
+    ts = TermSet((term(:male), fe(:hhidpn)&term(:wave)))
+    ret = parsefeterms!(ts)
+    @test (ret...,) == (TermSet(term(:male)), Set(([:hhidpn]=>[:wave],)), false)
+
+    ts = TermSet((term(:male), fe(:hhidpn)&term(:wave)))
+    nt = (xterms=ts,)
+    @test ParseFEterms()(nt) == (xterms=TermSet(term(:male)),
+        feterms=Set(([:hhidpn]=>[:wave],)), has_fe_intercept=false)
+end
+
+@testset "GroupFEterms" begin
+    nt = (feterms=Set(([:hhidpn]=>[:wave],)),)
+    @test groupfeterms(nt...) === nt
+    _byid(GroupFEterms()) == false
+    @test GroupFEterms()(nt) === nt
+end
+
+@testset "MakeFEs" begin
+    hrs = exampledata("hrs")
+    @test makefes(hrs, FETerm[]) == (allfes=Dict{FETerm,FixedEffect}(),)
+
+    feterms = [[:hhidpn]=>Symbol[], [:hhidpn,:wave]=>[:male]]
+    ret = makefes(hrs, feterms)
+    @test ret == (allfes=Dict{FETerm,FixedEffect}(feterms[1]=>FixedEffect(hrs.hhidpn),
+        feterms[2]=>FixedEffect(hrs.hhidpn, hrs.wave, interaction=_multiply(hrs, [:male]))),)
+
+    allntargs = NamedTuple[(feterms=Set{FETerm}(),), (feterms=Set(feterms),),
+        (feterms=Set(([:hhidpn]=>Symbol[],)),)]
+    @test Set(combinedargs(MakeFEs(), allntargs)...) ==
+        Set(push!(feterms, [:hhidpn]=>Symbol[]))
+
+    nt = (data=hrs, feterms=feterms)
+    @test MakeFEs()(nt) == merge(nt, ret)
+end
+
 @testset "CheckFEs" begin
     hrs = exampledata("hrs")
-    nt = (data=hrs, esample=trues(size(hrs,1)), xterms=TermSet(term(:white)), drop_singletons=true)
-    @test checkfes!(nt...) == (xterms=TermSet(term(:white)),
-        esample=trues(size(hrs,1)), fes=FixedEffect[], fenames=Symbol[],
-        has_fe_intercept=false, nsingle=0)
-    nt = merge(nt, (xterms=TermSet(fe(:hhidpn)),))
-    @test checkfes!(nt...) == (xterms=TermSet(InterceptTerm{false}()),
-        esample=trues(size(hrs,1)), fes=[FixedEffect(hrs.hhidpn)], fenames=[:fe_hhidpn],
-        has_fe_intercept=true, nsingle=0)
+    N = size(hrs, 1)
+    nt = (feterms=Set{FETerm}(), allfes=Dict{FETerm,FixedEffect}(),
+        esample=trues(N), drop_singletons=true)
+    @test checkfes!(nt...) == (esample=nt.esample, fes=FixedEffect[],
+        fenames=String[], nsingle=0)
+
+    feterm = [:hhidpn]=>Symbol[]
+    allfes = makefes(hrs, [[:hhidpn]=>Symbol[], [:wave]=>[:male]]).allfes
+    nt = merge(nt, (feterms=Set((feterm,)), allfes=allfes))
+    @test checkfes!(nt...) == (esample=trues(N), fes=[FixedEffect(hrs.hhidpn)],
+        fenames=["fe_hhidpn"], nsingle=0)
     
+    # fes are sorted by name
+    feterms = Set(([:wave]=>Symbol[], [:hhidpn]=>Symbol[]))
+    allfes = makefes(hrs, [[:hhidpn]=>Symbol[], [:wave]=>Symbol[]]).allfes
+    nt = merge(nt, (feterms=feterms, allfes=allfes))
+    @test checkfes!(nt...) == (esample=trues(N),
+        fes=[FixedEffect(hrs.hhidpn), FixedEffect(hrs.wave)],
+        fenames=["fe_hhidpn", "fe_wave"], nsingle=0)
+
     df = DataFrame(hrs)
     df = df[(df.wave.==7).|((df.wave.==8).&(df.wave_hosp.==8)), :]
     N = size(df, 1)
-    nt = merge(nt, (data=df, esample=trues(N), xterms=TermSet(fe(:hhidpn))))
+    feterm = [:hhidpn]=>Symbol[]
+    allfes = makefes(df, [[:hhidpn]=>Symbol[]]).allfes
+    nt = merge(nt, (feterms=Set((feterm,)), allfes=allfes, esample=trues(N)))
     kept = df.wave_hosp.==8
-    @test checkfes!(nt...) == (xterms=TermSet(InterceptTerm{false}()), esample=kept,
-        fes=[FixedEffect(df.hhidpn)], fenames=[:fe_hhidpn], has_fe_intercept=true,
-        nsingle=N-sum(kept))
+    @test checkfes!(nt...) == (esample=kept, fes=[FixedEffect(df.hhidpn)[kept]],
+        fenames=["fe_hhidpn"], nsingle=N-sum(kept))
 
     df = df[df.wave.==7, :]
     N = size(df, 1)
-    nt = merge(nt, (data=df, esample=trues(N), xterms=TermSet(fe(:hhidpn))))
+    allfes = makefes(df, [[:hhidpn]=>Symbol[]]).allfes
+    nt = merge(nt, (allfes=allfes, esample=trues(N)))
     @test_throws ErrorException checkfes!(nt...)
 
+    nt = merge(nt, (esample=trues(N),))
     @test_throws ErrorException CheckFEs()(nt)
-    nt = merge(nt, (drop_singletons=false, esample=trues(N),
-        xterms=TermSet(fe(:hhidpn))))
-    @test CheckFEs()(nt) == merge(nt, (xterms=TermSet(InterceptTerm{false}()),
-        fes=[FixedEffect(df.hhidpn)], fenames=[:fe_hhidpn], has_fe_intercept=true, nsingle=0))
+    nt = merge(nt, (esample=trues(N), drop_singletons=false))
+    @test CheckFEs()(nt) == merge(nt, (fes=[FixedEffect(df.hhidpn)],
+        fenames=["fe_hhidpn"], nsingle=0))
 end
 
 @testset "MakeFESolver" begin
@@ -51,11 +119,11 @@ end
     N = size(hrs, 1)
     fes = FixedEffect[FixedEffect(hrs.hhidpn)]
     fenames = [:fe_hhidpn]
-    nt = (fes=fes, weights=uweights(N), esample=trues(N), default(MakeFESolver())...)
-    ret = makefesolver!(nt...)
+    nt = (fes=fes, weights=uweights(N), default(MakeFESolver())...)
+    ret = makefesolver(nt...)
     @test ret.feM isa FixedEffects.FixedEffectSolverCPU{Float64}
     nt = merge(nt, (fes=FixedEffect[],))
-    @test makefesolver!(nt...) == (feM=nothing, fes=FixedEffect[])
+    @test makefesolver(nt...) == (feM=nothing,)
     @test MakeFESolver()(nt) == merge(nt, (feM=nothing,))
 end
 

@@ -1,23 +1,10 @@
-@testset "parse_fixedeffect!" begin
-    hrs = exampledata(:hrs)
+@testset "_parsefeterm" begin
+    @test _parsefeterm(term(:male)) === nothing
+    @test _parsefeterm(fe(:hhidpn)) == ([:hhidpn]=>Symbol[])
+    @test _parsefeterm(fe(:hhidpn)&fe(:wave)&term(:male)) == ([:hhidpn, :wave]=>[:male])
+end
 
-    @test parse_fixedeffect!(hrs, TermSet()) == (FixedEffect[], Symbol[], false)
-    ts = TermSet((term(1),term(:male)))
-    @test parse_fixedeffect!(hrs, ts) == (FixedEffect[], Symbol[], false)
-
-    ts = TermSet(term(1)+term(:male)+fe(:hhidpn))
-    @test parse_fixedeffect!(hrs, ts) == ([FixedEffect(hrs.hhidpn)], [:fe_hhidpn], true)
-    @test ts == TermSet((InterceptTerm{false}(), term(:male)))
-
-    # Verify that fes are sorted by name
-    ts = TermSet(fe(:wave)+fe(:hhidpn))
-    @test parse_fixedeffect!(hrs, ts) == ([FixedEffect(hrs.hhidpn), FixedEffect(hrs.wave)],
-        [:fe_hhidpn, :fe_wave], true)
-    @test ts == TermSet(InterceptTerm{false}())
-
-    # Verify that no change is made on intercept
-    ts = TermSet((term(:male), fe(:hhidpn)&term(:wave)))
-    ret = parse_fixedeffect!(hrs, ts)
-    @test ret[2] == [Symbol("fe_hhidpn&wave")]
-    @test ts == TermSet(term(:male))
+@testset "getfename" begin
+    @test getfename([:hhidpn]=>Symbol[]) == "fe_hhidpn"
+    @test getfename([:hhidpn, :wave]=>[:male]) == "fe_hhidpn&fe_wave&male"
 end

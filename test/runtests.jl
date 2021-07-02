@@ -4,10 +4,11 @@ using InteractionWeightedDIDs
 using DataFrames
 using Dates: Date, Year
 using DiffinDiffsBase: ValidTimeType, @fieldequal,
-    required, default, transformed, combinedargs, valid_didargs
-using FixedEffectModels: Combination, nunique
+    required, default, transformed, combinedargs, _byid, valid_didargs
+using FixedEffectModels: Combination, nunique, _multiply
 using FixedEffects
-using InteractionWeightedDIDs: parse_fixedeffect!, checkvcov!, checkfes!, makefesolver!,
+using InteractionWeightedDIDs: FETerm, _parsefeterm, getfename,
+    checkvcov!, parsefeterms!, groupfeterms, makefes, checkfes!, makefesolver,
     _feresiduals!, makeyxcols, maketreatcols, solveleastsquares!, estvcov,
     solveleastsquaresweights
 using LinearAlgebra

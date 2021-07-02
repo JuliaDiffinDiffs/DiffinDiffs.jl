@@ -1,29 +1,26 @@
-function parse_fixedeffect!(data, ts::TermSet)
-    fes = FixedEffect[]
-    ids = Symbol[]
-    has_fe_intercept = false
-    for term in ts
-        result = _parse_fixedeffect(data, term)
-        if result !== nothing
-            push!(fes, result[1])
-            push!(ids, result[2])
-            delete!(ts, term)
-        end
+# A vector of fixed effects paired with a vector of interactions (empty if not interacted)
+const FETerm = Pair{Vector{Symbol},Vector{Symbol}}
+
+# Parse fixed effects from a generic term
+function _parsefeterm(@nospecialize(t::AbstractTerm))
+    if has_fe(t)
+        s = fesymbol(t)
+        return [s]=>Symbol[]
     end
-    order = sortperm(ids)
-    fes .= fes[order]
-    ids .= ids[order]
-    if !isempty(fes)
-        if any(fe->fe.interaction isa UnitWeights, fes)
-            has_fe_intercept = true
-            for t in ts
-                t isa Union{ConstantTerm,InterceptTerm} && delete!(ts, t)
-            end
-            push!(ts, InterceptTerm{false}())
-        end
-    end
-    return fes, ids, has_fe_intercept
 end
+
+# Parse fixed effects from an InteractionTerm
+function _parsefeterm(@nospecialize(t::InteractionTerm))
+    fes = (x for x in t.terms if has_fe(x))
+    interactions = (x for x in t.terms if !has_fe(x))
+    if !isempty(fes)
+        fes = sort!([fesymbol(x) for x in fes])
+        feints = sort!([Symbol(x) for x in interactions])
+        return fes=>feints
+    end
+end
+
+getfename(feterm::FETerm) = join(vcat("fe_".*string.(feterm[1]), feterm[2]), "&")
 
 # Count the number of singletons dropped
 function drop_singletons!(esample, fe::FixedEffect)

@@ -3,7 +3,7 @@ module InteractionWeightedDIDs
 using Base: Callable
 using DataAPI: refarray
 using FixedEffectModels: FixedEffectTerm, Combination,
-    fe, _parse_fixedeffect, invsym!, isnested, nunique
+    fe, fesymbol, _multiply, invsym!, isnested, nunique
 using FixedEffects
 using LinearAlgebra: Cholesky, Factorization, Symmetric, cholesky!, diag
 using Reexport
@@ -26,6 +26,9 @@ export Vcov,
        fe
 
 export CheckVcov,
+       ParseFEterms,
+       GroupFEterms,
+       MakeFEs,
        CheckFEs,
        MakeFESolver,
        MakeYXCols,

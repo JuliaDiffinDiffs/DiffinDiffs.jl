@@ -209,19 +209,25 @@ end
 @testset "@specset" begin
     hrs = exampledata("hrs")
     # The first two specs are identical hence no repetition of steps should occur
-    # The third spec should only share the first three steps with the others
-    r = @specset [verbose] begin
-        @did(Reg, dynamic(:wave, -1), notyettreated(11), data=hrs,
-            yterm=term(:oop_spend), treatname=:wave_hosp, treatintterms=(),
+    # The third spec should share all the steps until SolveLeastSquares
+    # The fourth and fifth specs should not add tasks for MakeFEs and MakeYXCols
+    # The sixth spec should not add any task for MakeFEs
+    r = @specset [verbose] data=hrs yterm=term(:oop_spend) treatname=:wave_hosp begin
+        @did(Reg, dynamic(:wave, -1), notyettreated(11),
             xterms=(fe(:wave)+fe(:hhidpn)))
-        @did(Reg, dynamic(:wave, -1), notyettreated(11), data=hrs,
-            yterm=term(:oop_spend), treatname=:wave_hosp, treatintterms=[],
+        @did(Reg, dynamic(:wave, -1), notyettreated(11),
             xterms=[fe(:hhidpn), fe(:wave)])
-        @did(Reg, dynamic(:wave, -1), nevertreated(11), data=hrs,
-            yterm=term(:oop_spend), treatname=:wave_hosp, treatintterms=(),
+        @did(Reg, dynamic(:wave, -2:-1), notyettreated(11),
+            xterms=[fe(:hhidpn), fe(:wave)])
+        @did(Reg, dynamic(:wave, -1), notyettreated(11),
+            xterms=[term(:male), fe(:hhidpn), fe(:wave)])
+        @did(Reg, dynamic(:wave, -1), notyettreated(11),
+            treatintterms=TermSet(:male), xterms=[fe(:hhidpn), fe(:wave)])
+        @did(Reg, dynamic(:wave, -1), nevertreated(11),
             xterms=(fe(:wave)+fe(:hhidpn)))
     end
-    @test r[1] == didspec(Reg, dynamic(:wave, -1), notyettreated(11), data=hrs,
+    # Results might differ due to yxterms that include terms from other specs
+    @test r[4] == didspec(Reg, dynamic(:wave, -1), notyettreated(11), data=hrs,
         yterm=term(:oop_spend), treatname=:wave_hosp, treatintterms=(),
-        xterms=TermSet(fe(:wave), fe(:hhidpn)))()
+        xterms=TermSet(term(:male), fe(:wave), fe(:hhidpn)))()
 end
