@@ -544,7 +544,7 @@ required(::EstVcov) = (:data, :esample, :vce, :coef, :X, :crossx, :residuals, :x
 """
     solveleastsquaresweights(args...)
 
-Solve the cell-level weights assigned by least-sqaures.
+Solve the cell-level weights assigned by least squares.
 See also [`SolveLeastSquaresWeights`](@ref).
 """
 function solveleastsquaresweights(::DynamicTreatment{SharpDesign},
@@ -616,7 +616,7 @@ end
     SolveLeastSquaresWeights <: StatsStep
 
 Call [`InteractionWeightedDIDs.solveleastsquaresweights`](@ref)
-to solve the cell-level weights assigned by least-sqaures.
+to solve the cell-level weights assigned by least squares.
 """
 const SolveLeastSquaresWeights = StatsStep{:SolveLeastSquaresWeights,
     typeof(solveleastsquaresweights), true}

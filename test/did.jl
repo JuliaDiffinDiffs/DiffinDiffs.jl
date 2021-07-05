@@ -17,6 +17,7 @@
     @test coef(r) === r.coef
     @test vcov(r) === r.vcov
     @test vce(r) === r.vce
+    @test treatment(r) == dynamic(:wave, -1)
     @test nobs(r) == 2624
     @test outcomename(r) == "oop_spend"
     @test coefnames(r) == ["wave_hosp: $w & rel: $r"
@@ -32,9 +33,12 @@
     @test coefinds(r) == r.coefinds
     @test ncovariate(r) == 0
 
+    @test has_lsweights(r)
     @test r.ycellweights == r.ycellcounts
     @test r.ycellcounts == repeat([252, 176, 163, 65], inner=4)
     @test all(i->r.coef[i] ≈ sum(r.lsweights[:,i].*r.ycellmeans), 1:ntreatcoef(r))
+
+    @test has_fe(r)
 
     @test sprint(show, r) == "Regression-based DID result"
     pv = VERSION < v"1.6.0" ? " <1e-7" : "<1e-07"
@@ -133,7 +137,7 @@
     @test vcov(tr)[1] ≈ 4 * vcov(sr)[1]
 end
 
-@testset "AggregatedRegBasedDIDResult" begin
+@testset "AggregatedRegDIDResult" begin
     hrs = exampledata("hrs")
     r = @did(Reg, data=hrs, dynamic(:wave, -1), notyettreated(11),
         vce=Vcov.cluster(:hhidpn), yterm=term(:oop_spend), treatname=:wave_hosp,
@@ -142,6 +146,7 @@ end
     @test coef(a) == coef(r)
     @test vcov(a) == vcov(r)
     @test vce(a) == vce(r)
+    @test treatment(a) == dynamic(:wave, -1)
     @test nobs(a) == nobs(r)
     @test outcomename(a) == outcomename(r)
     @test coefnames(a) === a.coefnames
@@ -156,6 +161,8 @@ end
     @test responsename(a) == "oop_spend"
     @test coefinds(a) === a.coefinds
     @test ncovariate(a) == 0
+
+    @test !has_lsweights(a)
 
     pv = VERSION < v"1.6.0" ? "<1e-4 " : "<1e-04"
     @test sprint(show, a) === """
@@ -184,6 +191,7 @@ end
     @test coef(a, "rel: 1") ≈ 529.76686 atol=1e-5
     @test coef(a, "rel: 2") ≈ 800.10647 atol=1e-5
 
+    @test has_lsweights(a)
     @test a.cellweights == a.cellcounts
     @test a.cellcounts == [163, 339, 591, 428, 252]
     @test all(i->a.coef[i] ≈ sum(a.lsweights[:,i].*r.ycellmeans), 1:ntreatcoef(a))
@@ -227,7 +235,98 @@ end
             xterms=(fe(:wave)+fe(:hhidpn)))
     end
     # Results might differ due to yxterms that include terms from other specs
-    @test r[4] == didspec(Reg, dynamic(:wave, -1), notyettreated(11), data=hrs,
+    @test r[2][4] == didspec(Reg, dynamic(:wave, -1), notyettreated(11), data=hrs,
         yterm=term(:oop_spend), treatname=:wave_hosp, treatintterms=(),
         xterms=TermSet(term(:male), fe(:wave), fe(:hhidpn)))()
+end
+
+@testset "contrast" begin
+    hrs = exampledata("hrs")
+    r1 = @did(Reg, data=hrs, dynamic(:wave, -1), notyettreated(11),
+        vce=Vcov.cluster(:hhidpn), yterm=term(:oop_spend), treatname=:wave_hosp,
+        treatintterms=(), xterms=(fe(:wave)+fe(:hhidpn)), solvelsweights=true)
+    r2 = agg(r1, :rel)
+    c1 = contrast(r1)
+    @test size(c1) == (16, 10)
+    @test parent(c1) == [r1]
+    c2 = contrast(r1, r2)
+    @test size(c2) == (16, 15)
+    @test c2[1] == r1.ycellmeans[1]
+    @test c2[1,2] == r1.lsweights[1]
+    @test IndexStyle(typeof(c2)) == IndexLinear()
+    
+    @test c2.r == r1.lsweights.r == r2.lsweights.r
+    @test c2.c.name[1] == "cellmeans"
+    @test c2.c.name[2] == r1.coefnames[c2.c.icoef[2]]
+    @test parent(c2)[1] === r1
+    @test parent(c2)[2] === r2
+
+    sort!(c1, rev=true)
+    @test c1.r == sort(r1.lsweights.r, rev=true)
+
+    @test view(c1, :) == c1
+    v = view(c1, :wave=>x->x==10)
+    @test v.m == c1.m[c1.r.wave.==10,:]
+    v = view(c1, 1:10)
+    @test v.m == c1.m[1:10,:]
+    @test v.r == view(c1.r, 1:10)
+    v = view(c1, [:wave=>x->x==10, :wave_hosp=>x->x==10])
+    @test v.m == c1.m[(c1.r.wave.==10).&(c1.r.wave_hosp.==10),:]
+    @test v.r == view(c1.r, (c1.r.wave.==10).&(c1.r.wave_hosp.==10))
+end
+
+@testset "post!" begin
+    hrs = exampledata("hrs")
+    r1 = @did(Reg, data=hrs, dynamic(:wave, -1), notyettreated(11),
+        vce=Vcov.cluster(:hhidpn), yterm=term(:oop_spend), treatname=:wave_hosp,
+        treatintterms=(), xterms=(fe(:wave)+fe(:hhidpn)), solvelsweights=true)
+    c1 = contrast(r1)
+    gl = Dict{String,Any}()
+    gr = Dict{String,Any}()
+    gd = Dict{String,Any}()
+    post!(gl, gr, gd, StataPostHDF(), c1, model="m")
+    @test gl["model"] == "m"
+    @test gl["depvar"] == "l_2"
+    @test gl["b"] == r1.lsweights[:,1]
+    @test gr["depvar"] == "r_3"
+    @test gr["b"] == r1.lsweights[:,2]
+    @test gd["depvar"] == "d_2_3"
+    @test gd["b"] == (r1.lsweights[:,1].-r1.lsweights[:,2]).*r1.ycellmeans
+    cnames = string.(1:16)
+    @test all(g->g["coefnames"]==cnames, (gl, gr, gd))
+    @test all(g->!haskey(g, "at"), (gl, gr, gd))
+
+    gl = Dict{String,Any}()
+    gr = Dict{String,Any}()
+    gd = Dict{String,Any}()
+    post!(gl, gr, gd, StataPostHDF(), c1,
+        lefttag="x", righttag="y", colnames=16:-1:1, at=1:16)
+    @test gl["depvar"] == "l_x"
+    @test gl["b"] == r1.lsweights[:,1]
+    @test gr["depvar"] == "r_y"
+    @test gr["b"] == r1.lsweights[:,2]
+    cnames = string.(16:-1:1)
+    @test all(g->g["coefnames"]==cnames, (gl, gr, gd))
+    @test all(g->g["at"]==1:16, (gl, gr, gd))
+
+    gl = Dict{String,Any}()
+    gr = Dict{String,Any}()
+    gd = Dict{String,Any}()
+    post!(gl, gr, gd, StataPostHDF(), c1, eqnames=1:16)
+    cnames = [string(i,":",i) for i in 1:16]
+    @test all(g->g["coefnames"]==cnames, (gl, gr, gd))
+    
+    gl = Dict{String,Any}()
+    gr = Dict{String,Any}()
+    gd = Dict{String,Any}()
+    post!(gl, gr, gd, StataPostHDF(), c1, eqnames=1:16, colnames=16:-1:1)
+    cnames = [string(i,":",17-i) for i in 1:16]
+    @test all(g->g["coefnames"]==cnames, (gl, gr, gd))
+
+    gl = Dict{String,Any}()
+    gr = Dict{String,Any}()
+    gd = Dict{String,Any}()
+    @test_throws ArgumentError post!(gl, gr, gd, StataPostHDF(), c1, eqnames=1:2)
+    @test_throws ArgumentError post!(gl, gr, gd, StataPostHDF(), c1, colnames=1:2)
+    @test_throws ArgumentError post!(gl, gr, gd, StataPostHDF(), c1, at=1:2)
 end

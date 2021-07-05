@@ -19,7 +19,8 @@ using DiffinDiffsBase: ValidTimeType, termvars, isintercept, parse_intercept!,
 
 import Base: show
 import DiffinDiffsBase: required, default, transformed, combinedargs, copyargs,
-    valid_didargs, result, vce, nobs, outcomename, weights, treatnames, dof_residual, agg
+    valid_didargs, result, vce, treatment, nobs, outcomename, weights, treatnames,
+    dof_residual, agg, post!, _parse_subset
 import FixedEffectModels: has_fe
 
 export Vcov,
@@ -40,7 +41,11 @@ export CheckVcov,
        RegressionBasedDID,
        Reg,
        RegressionBasedDIDResult,
-       AggregatedRegBasedDIDResult
+       has_fe,
+       AggregatedRegDIDResult,
+       has_lsweights,
+       ContrastResult,
+       contrast
 
 include("utils.jl")
 include("procedures.jl")

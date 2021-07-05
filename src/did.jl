@@ -4,7 +4,8 @@
 Estimation procedure for regression-based difference-in-differences.
 """
 const RegressionBasedDID = DiffinDiffsEstimator{:RegressionBasedDID,
-    Tuple{CheckData, GroupTreatintterms, GroupXterms, CheckVcov, CheckVars, GroupSample,
+    Tuple{CheckData, GroupTreatintterms, GroupXterms, GroupContrasts,
+    CheckVcov, CheckVars, GroupSample,
     ParseFEterms, GroupFEterms, MakeFEs, CheckFEs, MakeWeights, MakeFESolver,
     MakeYXCols, MakeTreatCols, SolveLeastSquares, EstVcov, SolveLeastSquaresWeights}}
 
@@ -26,9 +27,9 @@ function valid_didargs(d::Type{Reg}, ::DynamicTreatment{SharpDesign},
         vce=get(args, :vce, Vcov.RobustCovariance())::Vcov.CovarianceEstimator,
         treatintterms=treatintterms::TermSet,
         xterms=xterms::TermSet,
+        contrasts=get(args, :contrasts, nothing)::Union{Dict{Symbol,Any},Nothing},
         drop_singletons=get(args, :drop_singletons, true)::Bool,
         nfethreads=get(args, :nfethreads, Threads.nthreads())::Int,
-        contrasts=get(args, :contrasts, nothing)::Union{Dict{Symbol,Any},Nothing},
         fetol=get(args, :fetol, 1e-8)::Float64,
         femaxiter=get(args, :femaxiter, 10000)::Int,
         cohortinteracted=get(args, :cohortinteracted, true)::Bool,
@@ -38,11 +39,11 @@ function valid_didargs(d::Type{Reg}, ::DynamicTreatment{SharpDesign},
 end
 
 """
-    RegressionBasedDIDResult{TR<:AbstractTreatment, CohortInteracted} <: DIDResult
+    RegressionBasedDIDResult{TR,CohortInteracted,Haslsweights} <: DIDResult{TR}
 
 Estimation results from regression-based difference-in-differences.
 """
-struct RegressionBasedDIDResult{TR<:AbstractTreatment, CohortInteracted} <: DIDResult
+struct RegressionBasedDIDResult{TR,CohortInteracted,Haslsweights} <: DIDResult{TR}
     coef::Vector{Float64}
     vcov::Matrix{Float64}
     vce::CovarianceEstimator
@@ -81,7 +82,8 @@ function result(::Type{Reg}, @nospecialize(nt::NamedTuple))
     cnames = _treatnames(nt.treatcells)
     cnames = append!(cnames, coefnames.(nt.xterms))[nt.basiscols]
     coefinds = Dict(cnames .=> 1:length(cnames))
-    didresult = RegressionBasedDIDResult{typeof(nt.tr), nt.cohortinteracted}(
+    didresult = RegressionBasedDIDResult{typeof(nt.tr),
+        nt.cohortinteracted, nt.lsweights!==nothing}(
         nt.coef, nt.vcov_mat, nt.vce, nt.tr, nt.pr, nt.cellweights, nt.cellcounts,
         nt.esample, sum(nt.esample), nt.dof_resid, nt.F, nt.p,
         yname, cnames, coefinds, nt.treatcells, nt.treatname, nt.yxterms,
@@ -164,12 +166,12 @@ function show(io::IO, ::MIME"text/plain", r::RegressionBasedDIDResult;
 end
 
 """
-    AggregatedRegBasedDIDResult{P<:RegressionBasedDIDResult, I} <: AggregatedDIDResult{P}
+    AggregatedRegDIDResult{TR,Haslsweights,P<:RegressionBasedDIDResult,I} <: AggregatedDIDResult{TR,P}
 
 Estimation results aggregated from a [`RegressionBasedDIDResult`](@ref).
 See also [`agg`](@ref).
 """
-struct AggregatedRegBasedDIDResult{P<:RegressionBasedDIDResult, I} <: AggregatedDIDResult{P}
+struct AggregatedRegDIDResult{TR,Haslsweights,P<:RegressionBasedDIDResult,I} <: AggregatedDIDResult{TR,P}
     parent::P
     inds::I
     coef::Vector{Float64}
@@ -181,6 +183,9 @@ struct AggregatedRegBasedDIDResult{P<:RegressionBasedDIDResult, I} <: Aggregated
     coefinds::Dict{String, Int}
     treatcells::VecColumnTable
     lsweights::Union{TableIndexedMatrix{Float64, Matrix{Float64}, VecColumnTable, VecColumnTable}, Nothing}
+    ycellmeans::Union{Vector{Float64}, Nothing}
+    ycellweights::Union{Vector{Float64}, Nothing}
+    ycellcounts::Union{Vector{Int}, Nothing}
 end
 
 function agg(r::RegressionBasedDIDResult{<:DynamicTreatment}, names=nothing;
@@ -226,13 +231,183 @@ function agg(r::RegressionBasedDIDResult{<:DynamicTreatment}, names=nothing;
         lswtmat = view(r.lsweights.m, :, inds) * cweights
         lswt = TableIndexedMatrix(lswtmat, r.lsweights.r, tcells)
     end
-    return AggregatedRegBasedDIDResult{typeof(r), typeof(inds)}(r, inds, cf, v, cweights,
-        cellweights, cellcounts, cnames, coefinds, tcells, lswt)
+    return AggregatedRegDIDResult{typeof(r.tr), lswt!==nothing, typeof(r), typeof(inds)}(
+        r, inds, cf, v, cweights, cellweights, cellcounts, cnames, coefinds, tcells,
+        lswt, r.ycellmeans, r.ycellweights, r.ycellcounts)
 end
 
-vce(r::AggregatedRegBasedDIDResult) = vce(parent(r))
-nobs(r::AggregatedRegBasedDIDResult) = nobs(parent(r))
-outcomename(r::AggregatedRegBasedDIDResult) = outcomename(parent(r))
-weights(r::AggregatedRegBasedDIDResult) = weights(parent(r))
-treatnames(r::AggregatedRegBasedDIDResult) = coefnames(r)
-dof_residual(r::AggregatedRegBasedDIDResult) = dof_residual(parent(r))
+vce(r::AggregatedRegDIDResult) = vce(parent(r))
+treatment(r::AggregatedRegDIDResult) = treatment(parent(r))
+nobs(r::AggregatedRegDIDResult) = nobs(parent(r))
+outcomename(r::AggregatedRegDIDResult) = outcomename(parent(r))
+weights(r::AggregatedRegDIDResult) = weights(parent(r))
+treatnames(r::AggregatedRegDIDResult) = coefnames(r)
+dof_residual(r::AggregatedRegDIDResult) = dof_residual(parent(r))
+
+"""
+    RegDIDResultOrAgg{TR,Haslsweights}
+
+Union type of [`RegressionBasedDIDResult`](@ref) and [`AggregatedRegDIDResult`](@ref).
+"""
+const RegDIDResultOrAgg{TR,Haslsweights} =
+    Union{RegressionBasedDIDResult{TR,<:Any,Haslsweights},
+    AggregatedRegDIDResult{TR,Haslsweights}}
+
+"""
+    has_lsweights(r::RegDIDResultOrAgg)
+
+Test whether `r` contains computed least-sqaure weights (`r.lsweights!==nothing`).
+"""
+has_lsweights(::RegDIDResultOrAgg{TR,H}) where {TR,H} = H
+
+"""
+    ContrastResult{T,M,R,C} <: AbstractMatrix{T}
+
+Matrix type that holds least-square weights obtained from one or more
+[`RegDIDResultOrAgg`](@ref)s computed over the same set of cells
+and cell-level averages.
+See also [`contrast`](@ref).
+
+The least-square weights are stored in a `Matrix` that can be retrieved
+with property name `:m`,
+where the weights for each treatment coefficient
+are stored columnwise starting from the second column and
+the first column contains the cell-level averages.
+The indices for cells can be accessed with property name `:r`;
+and indices for identifying the coefficients can be accessed with property name `:c`.
+The [`RegDIDResultOrAgg`](@ref)s used to generate the `ContrastResult`
+can be accessed by calling `parent`.
+"""
+struct ContrastResult{T,M,R,C} <: AbstractMatrix{T}
+    rs::Vector{RegDIDResultOrAgg}
+    m::TableIndexedMatrix{T,M,R,C}
+    function ContrastResult(rs::Vector{RegDIDResultOrAgg},
+            m::TableIndexedMatrix{T,M,R,C}) where {T,M,R,C}
+        cnames = columnnames(m.c)
+        cnames[1]==:iresult && cnames[2]==:icoef && cnames[3]==:name || throw(ArgumentError(
+            "Table paired with column indices has unaccepted column names"))
+        return new{T,M,R,C}(rs, m)
+    end
+end
+
+_getmat(cr::ContrastResult) = getfield(cr, :m)
+Base.size(cr::ContrastResult) = size(_getmat(cr))
+Base.getindex(cr::ContrastResult, i) = _getmat(cr)[i]
+Base.getindex(cr::ContrastResult, i, j) = _getmat(cr)[i,j]
+Base.IndexStyle(::Type{<:ContrastResult{T,M}}) where {T,M} = IndexStyle(M)
+Base.getproperty(cr::ContrastResult, n::Symbol) = getproperty(_getmat(cr), n)
+Base.parent(cr::ContrastResult) = getfield(cr, :rs)
+
+"""
+    contrast(r1::RegDIDResultOrAgg, rs::RegDIDResultOrAgg...)
+
+Construct a [`ContrastResult`](@ref) by collecting the computed least-square weights
+from each of the [`RegDIDResultOrAgg`](@ref).
+"""
+function contrast(r1::RegDIDResultOrAgg, rs::RegDIDResultOrAgg...)
+    has_lsweights(r1) && all(r->has_lsweights(r), rs) || throw(ArgumentError(
+        "Results must contain computed least-sqaure weights"))
+    ri = r1.lsweights.r
+    ncoef = ntreatcoef(r1)
+    m = r1.lsweights.m
+    for r in rs
+        r.lsweights.r == ri || throw(ArgumentError(
+            "Cells for least-square weights comparisons must be identical across the inputs"))
+        ncoef += ntreatcoef(r)
+    end
+    rs = RegDIDResultOrAgg[r1, rs...]
+    m = hcat(r1.ycellmeans, (r.lsweights.m for r in rs)...)
+    rinds = vcat(0, (fill(i+1, ntreatcoef(r)) for (i, r) in enumerate(rs))...)
+    cinds = vcat(0, (1:ntreatcoef(r) for r in rs)...)
+    names = vcat("cellmeans", (treatnames(r) for r in rs)...)
+    ci = VecColumnTable((iresult=rinds, icoef=cinds, name=names))
+    return ContrastResult(rs, TableIndexedMatrix(m, ri, ci))
+end
+
+function Base.:(==)(x::ContrastResult, y::ContrastResult)
+    # Assume no missing
+    x.m == y.m || return false
+    x.r == y.r || return false
+    x.c == y.c || return false
+    return parent(x) == parent(y)
+end
+
+function Base.sort!(cr::ContrastResult; @nospecialize(kwargs...))
+    p = sortperm(cr.r; kwargs...)
+    @inbounds for col in cr.r
+        col .= col[p]
+    end
+    @inbounds cr.m .= cr.m[p,:]
+    return cr
+end
+
+_parse_subset(cr::ContrastResult, by::Pair) = (inds = apply(cr.r, by); return inds)
+
+function _parse_subset(cr::ContrastResult, inds)
+    eltype(inds) <: Pair || return inds
+    inds = apply_and(cr.r, inds...)
+    return inds
+end
+
+_parse_subset(::ContrastResult, ::Colon) = Colon()
+
+function Base.view(cr::ContrastResult, subset)
+    inds = _parse_subset(cr, subset)
+    r = view(cr.r, inds)
+    m = view(cr.m, inds, :)
+    return ContrastResult(parent(cr), TableIndexedMatrix(m, r, cr.c))
+end
+
+function _checklengthmatch(v, name::String, N::Int)
+    length(v) == N || throw(ArgumentError(
+        "The length of $name ($(length(v))) does not match the number of rows of cr ($(N))"))
+end
+
+_checklengthmatch(v::Nothing, name::String, N::Int) = nothing
+
+"""
+    post!(gl, gr, gd, ::StataPostHDF, cr::ContrastResult, left::Int=2, right::Int=3; kwargs...)
+
+Export the least-square weights for coefficients indexed by `left` and `right`
+from `cr` for Stata module [`posthdf`](https://github.com/junyuan-chen/posthdf).
+The contribution of each cell to the difference between two coefficients
+are computed and also exported.
+The weights and contributions are stored as coefficient estimates
+in three groups `gl`, `gr` and `gd` respectively.
+The groups can be `HDF5.Group`s or objects that can be indexed by strings.
+
+# Keywords
+- `lefttag::String=string(left)`: name to be used as `depvar` in Stata after being prefixed by `"l_"` for the coefficient indexed by `left`.
+- `righttag::String=string(right)`: name to be used as `depvar` in Stata after being prefixed by `"r_"` for the coefficient indexed by `right`.
+- `model::String="InteractionWeightedDIDs.ContrastResult"`: name of the model.
+- `eqnames::Union{AbstractVector, Nothing}=nothing`: equation names prefixed to coefficient names in Stata.
+- `colnames::Union{AbstractVector, Nothing}=nothing`: column names used as coefficient names in Stata.
+- `at::Union{AbstractVector{<:Real}, Nothing}=nothing`: the `at` vector in Stata.
+"""
+function post!(gl, gr, gd, ::StataPostHDF, cr::ContrastResult, left::Int=2, right::Int=3;
+        lefttag::String=string(left), righttag::String=string(right),
+        model::String="InteractionWeightedDIDs.ContrastResult",
+        eqnames::Union{AbstractVector, Nothing}=nothing,
+        colnames::Union{AbstractVector, Nothing}=nothing,
+        at::Union{AbstractVector{<:Real}, Nothing}=nothing)
+    N = size(cr.m, 1)
+    _checklengthmatch(eqnames, "eqnames", N)
+    _checklengthmatch(colnames, "colnames", N)
+    _checklengthmatch(at, "at", N)
+    gl["depvar"] = string("l_", lefttag)
+    wtl = view(cr.m, :, left)[:]
+    gl["b"] = wtl
+    gr["depvar"] = string("r_", righttag)
+    wtr = view(cr.m, :, right)[:]
+    gr["b"] = wtr
+    gd["depvar"] = string("d_", lefttag, "_", righttag)
+    diff = (wtl.-wtr).*view(cr.m,:,1)[:]
+    gd["b"] = diff
+    colnames === nothing && (colnames = 1:N)
+    cnames = eqnames === nothing ? string.(colnames) : string.(eqnames, ":", colnames)
+    for g in (gl, gr, gd)
+        g["model"] = model
+        g["coefnames"] = cnames
+        at === nothing || (g["at"] = at)
+    end
+end
