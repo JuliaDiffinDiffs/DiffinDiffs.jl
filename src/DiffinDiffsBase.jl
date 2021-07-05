@@ -14,7 +14,7 @@ using PooledArrays: _label
 using PrettyTables: pretty_table
 using Reexport
 using StatsBase: CoefTable, Weights, stderror, uweights
-using StatsFuns: tdistccdf, tdistinvcdf
+using StatsFuns: normccdf, norminvcdf, tdistccdf, tdistinvcdf
 @reexport using StatsModels
 using StatsModels: Schema
 using StructArrays: StructArray
@@ -111,6 +111,7 @@ export cb,
        CheckData,
        GroupTreatintterms,
        GroupXterms,
+       GroupContrasts,
        CheckVars,
        GroupSample,
        MakeWeights,
@@ -124,6 +125,7 @@ export cb,
        DIDResult,
        AggregatedDIDResult,
        vce,
+       treatment,
        outcomename,
        treatnames,
        treatcells,

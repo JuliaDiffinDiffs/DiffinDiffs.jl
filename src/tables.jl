@@ -333,4 +333,4 @@ end
 Base.size(tm::TableIndexedMatrix) = size(tm.m)
 Base.getindex(tm::TableIndexedMatrix, i) = tm.m[i]
 Base.getindex(tm::TableIndexedMatrix, i, j) = tm.m[i,j]
-Base.IndexStyle(tm::TableIndexedMatrix) = IndexStyle(tm.m)
+Base.IndexStyle(::Type{<:TableIndexedMatrix{T,M}}) where {T,M} = IndexStyle(M)

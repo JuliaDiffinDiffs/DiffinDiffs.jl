@@ -172,10 +172,11 @@ macro did(args...)
 end
 
 """
-    AbstractDIDResult <: StatisticalModel
+    AbstractDIDResult{TR<:AbstractTreatment} <: StatisticalModel
 
 Interface supertype for all types that
-collect estimation results for difference-in-differences.
+collect estimation results for difference-in-differences
+with treatment of type `TR`.
 
 # Interface definition
 | Required methods | Default definition | Brief description |
@@ -183,6 +184,8 @@ collect estimation results for difference-in-differences.
 | `coef(r)` | `r.coef` | Vector of point estimates for all coefficients including covariates |
 | `vcov(r)` | `r.vcov` | Variance-covariance matrix for estimates in `coef` |
 | `vce(r)` | `r.vce` | Covariance estimator |
+| `confint(r)` | Based on t or normal distribution | Confidence interval for estimates in `coef` |
+| `treatment(r)` | `r.tr` | Treatment specification |
 | `nobs(r)` | `r.nobs` | Number of observations (table rows) involved in estimation |
 | `outcomename(r)` | `r.yname` | Name of the outcome variable |
 | `coefnames(r)` | `r.coefnames` | Names (`Vector{String}`) of all coefficients including covariates |
@@ -193,29 +196,31 @@ collect estimation results for difference-in-differences.
 | `treatvcov(r)` | `(N = ntreatcoef(r); view(vcov(r), 1:N, 1:N))` | A view of variance-covariance matrix for treatment coefficients |
 | `treatnames(r)` | `coefnames(r)[1:ntreatcoef(r)]` | Names (`Vector{String}`) of treatment coefficients |
 | **Optional methods** | | |
-| `parent(r)` | `r.parent` | Result object from which `r` is generated |
-| `dof_residual(r)` | `r.dof_residual` | Residual degrees of freedom |
+| `parent(r)` | `r.parent` or `r` | Result object from which `r` is generated |
+| `dof_residual(r)` | `r.dof_residual` or `nothing` | Residual degrees of freedom |
 | `responsename(r)` | `outcomename(r)` | Name of the outcome variable |
-| `coefinds(r)` | `r.coefinds` | Lookup table (`Dict{String,Int}`) from `coefnames` to integer indices (for retrieving estimates by name) |
+| `coefinds(r)` | `r.coefinds` or `nothing` | Lookup table (`Dict{String,Int}`) from `coefnames` to integer indices (for retrieving estimates by name) |
 | `ncovariate(r)` | `length(coef(r)) - ntreatcoef(r)` | Number of covariate coefficients |
 """
-abstract type AbstractDIDResult <: StatisticalModel end
+abstract type AbstractDIDResult{TR<:AbstractTreatment} <: StatisticalModel end
 
 """
-    DIDResult <: AbstractDIDResult
-
-Supertype for all types that collect estimation results
-directly obtained from [`DiffinDiffsEstimator`](@ref).
-"""
-abstract type DIDResult <: AbstractDIDResult end
-
-"""
-    AggregatedDIDResult{P<:DIDResult} <: AbstractDIDResult
+    DIDResult{TR} <: AbstractDIDResult{TR}
 
 Supertype for all types that collect estimation results
-aggregated from a [`DIDResult`](@ref).
+directly obtained from [`DiffinDiffsEstimator`](@ref)
+with treatment of type `TR`.
 """
-abstract type AggregatedDIDResult{P<:DIDResult} <: AbstractDIDResult end
+abstract type DIDResult{TR} <: AbstractDIDResult{TR} end
+
+"""
+    AggregatedDIDResult{TR,P<:DIDResult} <: AbstractDIDResult{TR}
+
+Supertype for all types that collect estimation results
+aggregated from a [`DIDResult`](@ref) of type `P`
+with treatment of type `TR`.
+"""
+abstract type AggregatedDIDResult{TR,P<:DIDResult} <: AbstractDIDResult{TR} end
 
 """
     coef(r::AbstractDIDResult)
@@ -341,10 +346,22 @@ where the first vector collects the lower bounds for all intervals
 and the second one collects the upper bounds.
 """
 function confint(r::AbstractDIDResult; level::Real=0.95)
-    scale = tdistinvcdf(dof_residual(r), 1 - (1 - level) / 2)
+    dofr = dof_residual(r)
+    if dofr === nothing
+        scale = norminvcdf(1 - (1 - level) / 2)
+    else
+        scale = tdistinvcdf(dofr, 1 - (1 - level) / 2)
+    end
     se = stderror(r)
     return coef(r) .- scale .* se, coef(r) .+ scale .* se
 end
+
+"""
+    treatment(r::AbstractDIDResult)
+
+Return the treatment specification.
+"""
+treatment(r::AbstractDIDResult) = r.tr
 
 """
     nobs(r::AbstractDIDResult)
@@ -417,14 +434,15 @@ treatnames(r::AbstractDIDResult) = coefnames(r)[1:ntreatcoef(r)]
 
 Return the `AbstractDIDResult` from which `r` is generated.
 """
-parent(r::AbstractDIDResult) = r.parent
+parent(r::AbstractDIDResult) = hasfield(typeof(r), :parent) ? r.parent : r
 
 """
     dof_residual(r::AbstractDIDResult)
 
 Return the residual degrees of freedom.
 """
-dof_residual(r::AbstractDIDResult) = r.dof_residual
+dof_residual(r::AbstractDIDResult) =
+    hasfield(typeof(r), :dof_residual) ? r.dof_residual : nothing
 
 """
     responsename(r::AbstractDIDResult)
@@ -440,7 +458,7 @@ responsename(r::AbstractDIDResult) = outcomename(r)
 Return the map from coefficient names to integer indices
 for retrieving estimates by name.
 """
-coefinds(r::AbstractDIDResult) = r.coefinds
+coefinds(r::AbstractDIDResult) = hasfield(typeof(r), :coefinds) ? r.coefinds : nothing
 
 """
     ncovariate(r::AbstractDIDResult)
@@ -461,13 +479,20 @@ agg(r::DIDResult) = error("agg is not implemented for $(typeof(r))")
 function coeftable(r::AbstractDIDResult; level::Real=0.95)
     cf = coef(r)
     se = stderror(r)
-    zs = cf ./ se
-    pv = 2 .* tdistccdf.(dof_residual(r), abs.(zs))
+    ts = cf ./ se
+    dofr = dof_residual(r)
+    if dofr === nothing
+        pv = 2 .* normccdf.(abs.(ts))
+        tname = "z"
+    else
+        pv = 2 .* tdistccdf.(dofr, abs.(ts))
+        tname = "t"
+    end
     cil, ciu = confint(r)
     cnames = coefnames(r)
     levstr = isinteger(level*100) ? string(Integer(level*100)) : string(level*100)
-    return CoefTable(Vector[cf, se, zs, pv, cil, ciu],
-        ["Estimate","Std. Error","t", "Pr(>|t|)", "Lower $levstr%", "Upper $levstr%"],
+    return CoefTable(Vector[cf, se, ts, pv, cil, ciu],
+        ["Estimate", "Std. Error", tname, "Pr(>|$tname|)", "Lower $levstr%", "Upper $levstr%"],
         ["$(cnames[i])" for i = 1:length(cf)], 4, 3)
 end
 
@@ -572,20 +597,20 @@ checktreatindex(inds::AbstractVector{Bool}, tinds) = true
 checktreatindex(inds, tinds) = true
 
 """
-    SubDIDResult{P<:AbstractDIDResult,I,TI} <: AbstractDIDResult
+    SubDIDResult{TR,P<:AbstractDIDResult,I,TI} <: AbstractDIDResult{TR}
 
 A view into a DID result of type `P` with indices for all coefficients of type `I`
 and indices for treatment coefficients of type `TI`.
 See also [`view(r::AbstractDIDResult, inds)`](@ref).
 """
-struct SubDIDResult{P<:AbstractDIDResult,I,TI} <: AbstractDIDResult
+struct SubDIDResult{TR,P<:AbstractDIDResult,I,TI} <: AbstractDIDResult{TR}
     parent::P
     inds::I
     treatinds::TI
     coefinds::Dict{String,Int}
 end
 
-@propagate_inbounds function SubDIDResult(p::AbstractDIDResult, inds)
+@propagate_inbounds function SubDIDResult(p::AbstractDIDResult{TR}, inds) where {TR}
     @boundscheck if !checkindex(Bool, axes(coef(p), 1), inds)
         throw(BoundsError(p, inds))
     end
@@ -593,7 +618,7 @@ end
     checktreatindex(inds, tinds)
     cnames = view(coefnames(p), inds)
     cfinds = Dict{String,Int}(n=>i for (i,n) in enumerate(cnames))
-    return SubDIDResult{typeof(p), typeof(inds), typeof(tinds)}(p, inds, tinds, cfinds)
+    return SubDIDResult{TR, typeof(p), typeof(inds), typeof(tinds)}(p, inds, tinds, cfinds)
 end
 
 """
@@ -607,6 +632,7 @@ from `r` at the given index or indices `inds` without constructing a copied subs
 coef(r::SubDIDResult) = view(coef(parent(r)), r.inds)
 vcov(r::SubDIDResult) = view(vcov(parent(r)), r.inds, r.inds)
 vce(r::SubDIDResult) = vce(parent(r))
+treatment(r::SubDIDResult) = treatment(parent(r))
 nobs(r::SubDIDResult) = nobs(parent(r))
 outcomename(r::SubDIDResult) = outcomename(parent(r))
 coefnames(r::SubDIDResult) = view(coefnames(parent(r)), r.inds)
@@ -620,7 +646,7 @@ dof_residual(r::SubDIDResult) = dof_residual(parent(r))
 responsename(r::SubDIDResult) = responsename(parent(r))
 
 """
-    TransformedDIDResult{P,M} <: AbstractDIDResult
+    TransformedDIDResult{TR,P,M} <: AbstractDIDResult{TR}
 
 Estimation results obtained from a linear transformation
 of all coefficient estimates from [`DIDResult`](@ref).
@@ -630,19 +656,19 @@ See also [`TransSubDIDResult`](@ref), [`lincom`](@ref) and [`rescale`](@ref).
 - `P`: type of the result that is transformed.
 - `M`: type of the matrix representing the linear transformation.
 """
-struct TransformedDIDResult{P,M} <: AbstractDIDResult
+struct TransformedDIDResult{TR,P,M} <: AbstractDIDResult{TR}
     parent::P
     linmap::M
     coef::Vector{Float64}
     vcov::Matrix{Float64}
-    function TransformedDIDResult(r::AbstractDIDResult, linmap::AbstractMatrix{<:Real},
-            cf::Vector{Float64}, v::Matrix{Float64})
-        return new{typeof(r), typeof(linmap)}(r, linmap, cf, v)
+    function TransformedDIDResult(r::AbstractDIDResult{TR}, linmap::AbstractMatrix{<:Real},
+            cf::Vector{Float64}, v::Matrix{Float64}) where {TR}
+        return new{TR, typeof(r), typeof(linmap)}(r, linmap, cf, v)
     end
 end
 
 """
-    TransSubDIDResult{P,M,I,TI} <: AbstractDIDResult
+    TransSubDIDResult{TR,P,M,I,TI} <: AbstractDIDResult{TR}
 
 Estimation results obtained from a linear transformation
 of a subset of coefficient estimates from [`DIDResult`](@ref).
@@ -654,7 +680,7 @@ See also [`TransformedDIDResult`](@ref), [`lincom`](@ref) and [`rescale`](@ref).
 - `I`: type of indices for all coefficients.
 - `TI`: type of indices for treatment coefficients.
 """
-struct TransSubDIDResult{P,M,I,TI} <: AbstractDIDResult
+struct TransSubDIDResult{TR,P,M,I,TI} <: AbstractDIDResult{TR}
     parent::P
     linmap::M
     coef::Vector{Float64}
@@ -662,8 +688,8 @@ struct TransSubDIDResult{P,M,I,TI} <: AbstractDIDResult
     inds::I
     treatinds::TI
     coefinds::Dict{String,Int}
-    function TransSubDIDResult(r::AbstractDIDResult, linmap::AbstractMatrix{<:Real},
-            cf::Vector{Float64}, v::Matrix{Float64}, inds)
+    function TransSubDIDResult(r::AbstractDIDResult{TR}, linmap::AbstractMatrix{<:Real},
+            cf::Vector{Float64}, v::Matrix{Float64}, inds) where {TR}
         if !checkindex(Bool, axes(coef(r), 1), inds)
             throw(BoundsError(r, inds))
         end
@@ -671,14 +697,15 @@ struct TransSubDIDResult{P,M,I,TI} <: AbstractDIDResult
         checktreatindex(inds, tinds)
         cnames = view(coefnames(r), inds)
         cfinds = Dict{String,Int}(n=>i for (i,n) in enumerate(cnames))
-        return new{typeof(r), typeof(linmap), typeof(inds), typeof(tinds)}(
+        return new{TR, typeof(r), typeof(linmap), typeof(inds), typeof(tinds)}(
             r, linmap, cf, v, inds, tinds, cfinds)
     end
 end
 
-const TransOrTransSub = Union{TransformedDIDResult, TransSubDIDResult}
+const TransOrTransSub{TR} = Union{TransformedDIDResult{TR}, TransSubDIDResult{TR}}
 
 vce(r::TransOrTransSub) = vce(parent(r))
+treatment(r::TransOrTransSub) = treatment(parent(r))
 nobs(r::TransOrTransSub) = nobs(parent(r))
 outcomename(r::TransOrTransSub) = outcomename(parent(r))
 coefnames(r::TransformedDIDResult) = coefnames(parent(r))
@@ -813,26 +840,62 @@ Set the default [`ExportFormat`](@ref) for [`post!`](@ref).
 setexportformat!(format::ExportFormat) = (DefaultExportFormat[1] = format)
 
 """
-    post!(f, r::AbstractDIDResult; kwargs...)
+    post!(f, r; kwargs...)
 
 Export result `r` in a default [`ExportFormat`](@ref).
 
 The default format can be retrieved via [`getexportformat`](@ref)
 and modified via [`setexportformat!`](@ref).
+The keyword arguments that can be accepted depend on the format
+and the type of `r`.
 """
-post!(f, r::AbstractDIDResult; kwargs...) =
+post!(f, r; kwargs...) =
     post!(f, getexportformat(), r; kwargs...)
 
+_statafield(v::Symbol) = string(v)
+_statafield(v::Union{Real, String, Vector{<:Real}, Vector{String}, Matrix{<:Real}}) = v
+_statafield(v::Vector{Symbol}) = string.(v)
+_statafield(::Nothing) = ""
+_statafield(v) = nothing
+
+function _postfields!(f, r::AbstractDIDResult,
+        fields::AbstractVector{<:Union{Symbol, Pair{String,Symbol}}})
+    for k in fields
+        if k isa Symbol
+            s = string(k)
+            n = k
+        else
+            s, n = k
+        end
+        v = _statafield(getfield(r, n))
+        v === nothing && throw(ArgumentError(
+            "Field $n has a type that cannot be posted via posthdf"))
+        f[s] = v
+    end
+end
+
+_postat!(f, r::AbstractDIDResult, at) = nothing
+_postat!(f, r::AbstractDIDResult, at::AbstractVector) = (f["at"] = at)
+_postat!(f, r::AbstractDIDResult{<:DynamicTreatment}, at::Bool) =
+    at && (f["at"] = treatcells(r).rel)
+
 """
-    post!(f, ::StataPostHDF, r::AbstractDIDResult; model="DiffinDiffsBase.AbstractDIDResult")
+    post!(f, ::StataPostHDF, r::AbstractDIDResult; kwargs...)
 
 Export result `r` for Stata module
 [`posthdf`](https://github.com/junyuan-chen/posthdf).
 A subset of field values from `r` are placed in `f` by setting key-value pairs,
 where `f` can be either an `HDF5.Group` or any object that can be indexed by strings.
+
+# Keywords
+- `model::String=repr(typeof(r))`: name of the model.
+- `fields::Union{AbstractVector{<:Union{Symbol, Pair{String,Symbol}}}, Nothing}=nothing`: additional fields to be exported; alternative names can be specified with `Pair`s.
+- `at::Union{AbstractVector{<:Real}, Bool, Nothing}=nothing`: post the `at` vector in Stata.
 """
 function post!(f, ::StataPostHDF, r::AbstractDIDResult;
-        model::String="DiffinDiffsBase.AbstractDIDResult")
+        model::String=repr(typeof(r)),
+        fields::Union{AbstractVector{<:Union{Symbol, Pair{String,Symbol}}}, Nothing}=nothing,
+        at::Union{AbstractVector{<:Real}, Bool, Nothing}=nothing)
     f["model"] = model
     f["b"] = coef(r)
     f["V"] = vcov(r)
@@ -842,5 +905,15 @@ function post!(f, ::StataPostHDF, r::AbstractDIDResult;
     f["coefnames"] = convert(AbstractVector{String}, coefnames(r))
     f["weights"] = (w = weights(r); w === nothing ? "" : string(w))
     f["ntreatcoef"] = ntreatcoef(r)
+    dofr = dof_residual(r)
+    dofr === nothing || (f["df_r"] = dofr)
+    fields === nothing || _postfields!(f, r, fields)
+    if at !== nothing
+        pat = _postat!(f, r, at)
+        pat === nothing && throw(ArgumentError(
+            "Keyword argument of type $(typeof(at)) is not accepted."))
+        pat == false || length(pat) != length(coef(r)) && throw(ArgumentError(
+            "The length of at ($(length(pat))) does not match the length of b ($(length(coef(r))))"))
+    end
     return f
 end

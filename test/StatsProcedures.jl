@@ -348,19 +348,19 @@ end
     a = "a0"
     r = @specset [verbose keepall] a=a begin
         StatsSpec(testformatter(testparser(Any[RP], Dict{Symbol,Any}(:b=>"b")))...) end
-    @test r == [(a="a0", b="b", c="a0b", result="a0a0b")]
+    @test r[2] == [(a="a0", b="b", c="a0b", result="a0a0b")]
 
     r = @specset [verbose keep=:a] a=a begin
         StatsSpec(testformatter(testparser(Any[RP], Dict{Symbol,Any}(:b=>"b")))...) end
-    @test r == [(a="a0", result="a0a0b")]
+    @test r[2] == [(a="a0", result="a0a0b")]
 
     r = @specset [verbose keep=[:a]] a=a begin
         StatsSpec(testformatter(testparser(Any[RP], Dict{Symbol,Any}(:b=>"b")))...) end
-    @test r == [(a="a0", result="a0a0b")]
+    @test r[2] == [(a="a0", result="a0a0b")]
 
     r = @specset [verbose pause=1] a=a begin
         StatsSpec(testformatter(testparser(Any[RP], Dict{Symbol,Any}(:b=>"b")))...) end
-    @test r == ["b"]
+    @test r[2] == ["b"]
     
     s0 = @specset [noproceed] for i in 1:3
         a = "a"*string(i)
@@ -387,7 +387,7 @@ end
         StatsSpec(testformatter(testparser(Any[RP], Dict{Symbol,Any}(:a=>a, :b=>"b")))...)(;)
         StatsSpec(testformatter(testparser(Any[RP], Dict{Symbol,Any}(:a=>a, :b=>"b1")))...)(;)
     end
-    @test r == ["a1a1b", "a1a1b1", "a2a2b", "a2a2b1", "a3a3b", "a3a3b1"]
+    @test r[2] == ["a1a1b", "a1a1b1", "a2a2b", "a2a2b1", "a3a3b", "a3a3b1"]
 
     r = @specset RP a="a1" begin
         StatsSpec(testformatter(testparser(Any[], Dict{Symbol,Any}(:b=>"b")))...)(;)
@@ -395,5 +395,5 @@ end
             StatsSpec(testformatter(testparser(Any[], Dict{Symbol,Any}(:a=>"a"*"$i", :b=>"b")))...)(;)
         end
     end
-    @test r == ["a1a1b", "a2a2b", "a3a3b"]
+    @test r[2] == ["a1a1b", "a2a2b", "a3a3b"]
 end

@@ -74,6 +74,22 @@ end
     end
 end
 
+@testset "GroupContrasts" begin
+    @testset "groupcontrasts" begin
+        nt = (contrasts=Dict{Symbol,Any}(),)
+        @test groupcontrasts(nt...) == nt
+    end
+
+    @testset "StatsStep" begin
+        @test sprint(show, GroupContrasts()) == "GroupContrasts"
+        @test sprint(show, MIME("text/plain"), GroupContrasts()) ==
+            "GroupContrasts (StatsStep that calls DiffinDiffsBase.groupcontrasts)"
+        @test _byid(GroupContrasts()) == false
+        nt = (contrasts=nothing,)
+        @test GroupContrasts()() == nt
+    end
+end
+
 @testset "CheckVars" begin
     @testset "checkvars!" begin
         hrs = exampledata("hrs")

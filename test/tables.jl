@@ -216,7 +216,7 @@ end
     @test size(tm) == size(m)
     @test tm[1] == 1
     @test tm[1, 1] == 1
-    @test IndexStyle(tm) == IndexLinear()
+    @test IndexStyle(typeof(tm)) == IndexLinear()
 
     @test_throws ArgumentError TableIndexedMatrix(m, 1:10, c)
     r1 = VecColumnTable((a=collect(1:11),))

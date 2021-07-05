@@ -293,6 +293,7 @@ end
     @test length(cfint) == 2
     @test all(cfint[1] + cfint[2] .≈ 2 * coef(r))
 
+    @test treatment(r) === TR
     @test nobs(r) == 6
     @test outcomename(r) == "y"
     @test coefnames(r) == r.coefnames
@@ -302,7 +303,7 @@ end
     @test treatcoef(r) == r.coef[1:4]
     @test treatvcov(r) == r.vcov[1:4, 1:4]
     @test treatnames(r) == r.coefnames[1:4]
-    @test_throws ErrorException parent(r)
+    @test parent(r) === r
     @test dof_residual(r) == 5
     @test responsename(r) == "y"
     @test coefinds(r) == r.coefinds
@@ -321,6 +322,21 @@ end
         rel: 2 & c: 2       4.0         4.0  1.00    0.3632   -6.28233   14.2823$w
         c5                  5.0         5.0  1.00    0.3632   -7.85291   17.8529$w
         c6                  6.0         6.0  1.00    0.3632   -9.42349   21.4235$w
+        ─────────────────────────────────────────────────────────────────────────"""
+    
+    r = TestResultBARE(2, 2)
+    @test dof_residual(r) === nothing
+    @test coefinds(r) === nothing
+
+    w = VERSION < v"1.6.0" ? " " : ""
+    @test sprint(show, r) == """
+        ─────────────────────────────────────────────────────────────────────────
+                       Estimate  Std. Error     z  Pr(>|z|)  Lower 95%  Upper 95%
+        ─────────────────────────────────────────────────────────────────────────
+        rel: 1 & c: 1       1.0         1.0  1.00    0.3173  -0.959964    2.95996
+        rel: 1 & c: 2       2.0         2.0  1.00    0.3173  -1.91993     5.91993
+        rel: 2 & c: 1       3.0         3.0  1.00    0.3173  -2.87989     8.87989
+        rel: 2 & c: 2       4.0         4.0  1.00    0.3173  -3.83986    11.8399$w
         ─────────────────────────────────────────────────────────────────────────"""
 end
 
@@ -399,6 +415,7 @@ end
     @test coef(sr) == coef(r)
     @test vcov(sr) == vcov(r)
     @test vce(sr) === nothing
+    @test treatment(sr) === TR
     @test nobs(sr) == nobs(r)
     @test outcomename(sr) == outcomename(r)
     @test coefnames(sr) == coefnames(r)
@@ -418,6 +435,7 @@ end
     @test coef(sr) == coef(r)[[1,3,5]]
     @test vcov(sr) == vcov(r)[[1,3,5],[1,3,5]]
     @test vce(sr) === nothing
+    @test treatment(sr) === TR
     @test nobs(sr) == nobs(r)
     @test outcomename(sr) == outcomename(r)
     @test coefnames(sr) == coefnames(r)[[1,3,5]]
@@ -445,6 +463,7 @@ end
     @test coef(tr) === tr.coef
     @test vcov(tr) === tr.vcov
     @test vce(tr) === nothing
+    @test treatment(tr) === TR
     @test nobs(tr) == nobs(r)
     @test outcomename(tr) == outcomename(r)
     @test coefnames(tr) === coefnames(r)
@@ -470,6 +489,7 @@ end
     @test coef(tr) === tr.coef
     @test vcov(tr) === tr.vcov
     @test vce(tr) === nothing
+    @test treatment(tr) === TR
     @test nobs(tr) == nobs(r)
     @test outcomename(tr) == outcomename(r)
     @test coefnames(tr) == coefnames(r)[inds]
@@ -554,7 +574,7 @@ end
     f = Dict{String,Any}()
     r = TestResult(2, 2)
     post!(f, r)
-    @test f["model"] == "DiffinDiffsBase.AbstractDIDResult"
+    @test f["model"] == "TestResult{TestTreatment}"
     @test f["b"] == coef(r)
     @test f["V"] == vcov(r)
     @test f["vce"] == "nothing"
@@ -563,4 +583,32 @@ end
     @test f["coefnames"][1] == "rel: 1 & c: 1"
     @test f["weights"] == "w"
     @test f["ntreatcoef"] == 4
+
+    f = Dict{String,Any}()
+    fds = Union{Symbol, Pair{String,Symbol}}[Symbol("extra$i") for i in 1:8]
+    fds[1] = "e1"=>:extra1
+    post!(f, StataPostHDF(), r, model="test", fields=fds, at=1:6)
+    @test f["e1"] == 1
+    @test f["extra2"] == "a"
+    @test f["extra3"] == "a"
+    @test f["extra4"] == [1.0]
+    @test f["extra5"] == ["a"]
+    @test f["extra6"] == [1.0 2.0]
+    @test f["extra7"] == ["a"]
+    @test f["extra8"] == ""
+
+    f = Dict{String,Any}()
+    @test_throws ArgumentError post!(f, StataPostHDF(), r, fields=[:extra9])
+    f = Dict{String,Any}()
+    @test_throws ArgumentError post!(f, StataPostHDF(), r, at=false)
+    f = Dict{String,Any}()
+    @test_throws ArgumentError post!(f, StataPostHDF(), r, at=1:2)
+
+    r1 = TestResultBARE(2, 2)
+    f = Dict{String,Any}()
+    post!(f, StataPostHDF(), r1, at=true)
+    @test f["at"] == treatcells(r1).rel
+    f = Dict{String,Any}()
+    post!(f, StataPostHDF(), r1, at=false)
+    @test !haskey(f, "at")
 end

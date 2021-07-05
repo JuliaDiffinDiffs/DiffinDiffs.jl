@@ -8,7 +8,8 @@ using DiffinDiffsBase: @fieldequal, unpack, @unpack, checktable, hastreat, parse
     isintercept, isomitsintercept, parse_intercept!,
     ncol, nrow, _mult!,
     _f, _byid, groupargs, copyargs, pool,
-    checkdata!, grouptreatintterms, groupxterms, checkvars!, groupsample, makeweights,
+    checkdata!, grouptreatintterms, groupxterms, groupcontrasts,
+    checkvars!, groupsample, makeweights,
     _totermset!, parse_didargs!, _treatnames, _parse_bycells!, _parse_subset, _nselected,
     treatindex, checktreatindex, DefaultExportFormat
 using LinearAlgebra: Diagonal

@@ -88,6 +88,28 @@ const GroupXterms = StatsStep{:GroupXterms, typeof(groupxterms), false}
 
 default(::GroupXterms) = (xterms=TermSet(),)
 
+"""
+    groupcontrasts(contrasts)
+
+Return the argument without change for allowing later comparisons based on object-id.
+See also [`GroupContrasts`](@ref).
+"""
+groupcontrasts(contrasts::Union{Dict{Symbol,Any},Nothing}) = (contrasts=contrasts,)
+
+"""
+    GroupContrasts <: StatsStep
+
+Call [`DiffinDiffsBase.groupcontrasts`](@ref)
+to obtain one of the instances of `contrasts`
+that have been grouped by equality (`hash`)
+for allowing later comparisons based on object-id.
+
+This step is only useful when working with [`@specset`](@ref) and [`proceed`](@ref).
+"""
+const GroupContrasts = StatsStep{:GroupContrasts, typeof(groupcontrasts), false}
+
+default(::GroupContrasts) = (contrasts=nothing,)
+
 function _checkscales(col1::AbstractArray, col2::AbstractArray, treatvars::Vector{Symbol})
     if col1 isa ScaledArrOrSub || col2 isa ScaledArrOrSub
         col1 isa ScaledArrOrSub && col2 isa ScaledArrOrSub ||
