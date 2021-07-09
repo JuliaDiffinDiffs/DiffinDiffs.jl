@@ -34,9 +34,9 @@
     @test ncovariate(r) == 0
 
     @test has_lsweights(r)
-    @test r.ycellweights == r.ycellcounts
-    @test r.ycellcounts == repeat([252, 176, 163, 65], inner=4)
-    @test all(i->r.coef[i] ≈ sum(r.lsweights[:,i].*r.ycellmeans), 1:ntreatcoef(r))
+    @test r.cellweights == r.cellcounts
+    @test r.cellcounts == repeat([252, 176, 163, 65], inner=4)
+    @test all(i->r.coef[i] ≈ sum(r.lsweights[:,i].*r.cellymeans), 1:ntreatcoef(r))
 
     @test has_fe(r)
 
@@ -82,7 +82,7 @@
     r = @did(Reg, data=hrs, dynamic(:wave, -1), notyettreated([11]),
         vce=Vcov.cluster(:hhidpn), yterm=term(:oop_spend), treatname=:wave_hosp,
         treatintterms=(), cohortinteracted=false, lswtnames=(:wave_hosp, :wave))
-    @test all(i->r.coef[i] ≈ sum(r.lsweights[:,i].*r.ycellmeans), 1:ntreatcoef(r))
+    @test all(i->r.coef[i] ≈ sum(r.lsweights[:,i].*r.cellymeans), 1:ntreatcoef(r))
 
     @test sprint(show, MIME("text/plain"), r) == """
         ──────────────────────────────────────────────────────────────────────
@@ -192,9 +192,9 @@ end
     @test coef(a, "rel: 2") ≈ 800.10647 atol=1e-5
 
     @test has_lsweights(a)
-    @test a.cellweights == a.cellcounts
-    @test a.cellcounts == [163, 339, 591, 428, 252]
-    @test all(i->a.coef[i] ≈ sum(a.lsweights[:,i].*r.ycellmeans), 1:ntreatcoef(a))
+    @test a.treatweights == a.treatcounts
+    @test a.treatcounts == [163, 339, 591, 428, 252]
+    @test all(i->a.coef[i] ≈ sum(a.lsweights[:,i].*r.cellymeans), 1:ntreatcoef(a))
 
     a1 = agg(r, (:rel,), subset=:rel=>isodd)
     @test length(coef(a1)) == 2
@@ -238,6 +238,15 @@ end
     @test r[2][4] == didspec(Reg, dynamic(:wave, -1), notyettreated(11), data=hrs,
         yterm=term(:oop_spend), treatname=:wave_hosp, treatintterms=(),
         xterms=TermSet(term(:male), fe(:wave), fe(:hhidpn)))()
+
+    r = @specset data=hrs yterm=term(:oop_spend) treatname=:wave_hosp begin
+        @did(Reg, dynamic(:wave, -2:-1), nevertreated(11),
+            xterms=(fe(:wave)+fe(:hhidpn)))
+        @did(Reg, dynamic(:wave, -1), nevertreated(11),
+            xterms=[fe(:hhidpn), fe(:wave)])
+    end
+    @test r[2][1] == @did(Reg, data=hrs, yterm=term(:oop_spend), treatname=:wave_hosp,
+        dynamic(:wave, -2:-1), nevertreated(11), xterms=(fe(:wave)+fe(:hhidpn)))
 end
 
 @testset "contrast" begin
@@ -251,12 +260,12 @@ end
     @test parent(c1) == [r1]
     c2 = contrast(r1, r2)
     @test size(c2) == (16, 15)
-    @test c2[1] == r1.ycellmeans[1]
+    @test c2[1] == r1.cellymeans[1]
     @test c2[1,2] == r1.lsweights[1]
     @test IndexStyle(typeof(c2)) == IndexLinear()
     
     @test c2.r == r1.lsweights.r == r2.lsweights.r
-    @test c2.c.name[1] == "cellmeans"
+    @test c2.c.name[1] == "cellymeans"
     @test c2.c.name[2] == r1.coefnames[c2.c.icoef[2]]
     @test parent(c2)[1] === r1
     @test parent(c2)[2] === r2
@@ -291,7 +300,7 @@ end
     @test gr["depvar"] == "r_3"
     @test gr["b"] == r1.lsweights[:,2]
     @test gd["depvar"] == "d_2_3"
-    @test gd["b"] == (r1.lsweights[:,1].-r1.lsweights[:,2]).*r1.ycellmeans
+    @test gd["b"] == (r1.lsweights[:,1].-r1.lsweights[:,2]).*r1.cellymeans
     cnames = string.(1:16)
     @test all(g->g["coefnames"]==cnames, (gl, gr, gd))
     @test all(g->!haskey(g, "at"), (gl, gr, gd))

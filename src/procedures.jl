@@ -342,18 +342,18 @@ function maketreatcols(data, treatname::Symbol, treatintterms::TermSet,
     # Generate treatment indicators
     ntcells = length(treatrows)
     treatcols = Vector{Vector{Float64}}(undef, ntcells)
-    cellweights = Vector{Float64}(undef, ntcells)
-    cellcounts = Vector{Int}(undef, ntcells)
+    treatweights = Vector{Float64}(undef, ntcells)
+    treatcounts = Vector{Int}(undef, ntcells)
     @inbounds for i in 1:ntcells
         rs = treatrows[i]
         tcol = zeros(nobs)
         tcol[rs] .= 1.0
         treatcols[i] = tcol
-        cellcounts[i] = length(rs)
+        treatcounts[i] = length(rs)
         if weights isa UnitWeights
-            cellweights[i] = cellcounts[i]
+            treatweights[i] = treatcounts[i]
         else
-            cellweights[i] = sum(view(weights, rs))
+            treatweights[i] = sum(view(weights, rs))
         end
     end
 
@@ -370,8 +370,8 @@ function maketreatcols(data, treatname::Symbol, treatintterms::TermSet,
 
     return (cells=cells::VecColumnTable, rows=rows::Vector{Vector{Int}},
         treatcells=treatcells::VecColumnTable, treatrows=treatrows::Vector{Vector{Int}},
-        treatcols=treatcols::Vector{Vector{Float64}}, cellweights=cellweights,
-        cellcounts=cellcounts)
+        treatcols=treatcols::Vector{Vector{Float64}}, treatweights=treatweights,
+        treatcounts=treatcounts)
 end
 
 """
@@ -419,6 +419,7 @@ See also [`SolveLeastSquares`](@ref).
 function solveleastsquares!(tr::DynamicTreatment{SharpDesign}, pr::TrendOrUnspecifiedPR,
         yterm::AbstractTerm, xterms::TermSet, yxterms::Dict, yxcols::Dict,
         treatcells::VecColumnTable, treatcols::Vector,
+        treatweights::Vector, treatcounts::Vector,
         cohortinteracted::Bool, has_fe_intercept::Bool)
 
     y = yxcols[yxterms[yterm]]
@@ -433,6 +434,9 @@ function solveleastsquares!(tr::DynamicTreatment{SharpDesign}, pr::TrendOrUnspec
     end
     treatcells = VecColumnTable(treatcells, tinds)
     tcols = view(treatcols, tinds)
+    # Copy the relevant weights and counts
+    tweights = treatweights[tinds]
+    tcounts = treatcounts[tinds]
 
     has_intercept, has_omitsintercept = parse_intercept!(xterms)
     xwidth = 0
@@ -453,6 +457,7 @@ function solveleastsquares!(tr::DynamicTreatment{SharpDesign}, pr::TrendOrUnspec
 
     X = hcat(tcols..., (yxcols[x] for x in xs)...)
     
+    # Check collinearity
     ntcols = length(tcols)
     basiscols = trues(size(X,2))
     if size(X, 2) > ntcols
@@ -471,7 +476,8 @@ function solveleastsquares!(tr::DynamicTreatment{SharpDesign}, pr::TrendOrUnspec
     return (coef=coef::Vector{Float64}, X=X::Matrix{Float64},
         crossx=crossx::Cholesky{Float64,Matrix{Float64}},
         residuals=residuals::Vector{Float64}, treatcells=treatcells::VecColumnTable,
-        xterms=xs::Vector{AbstractTerm}, basiscols=basiscols::BitVector)
+        xterms=xs::Vector{AbstractTerm}, basiscols=basiscols::BitVector,
+        treatweights=tweights::Vector{Float64}, treatcounts=tcounts::Vector{Int})
 end
 
 """
@@ -483,7 +489,8 @@ solve the least squares problem for regression coefficients and residuals.
 const SolveLeastSquares = StatsStep{:SolveLeastSquares, typeof(solveleastsquares!), true}
 
 required(::SolveLeastSquares) = (:tr, :pr, :yterm, :xterms, :yxterms, :yxcols,
-    :treatcells, :treatcols, :cohortinteracted, :has_fe_intercept)
+    :treatcells, :treatcols, :treatweights, :treatcounts,
+    :cohortinteracted, :has_fe_intercept)
 copyargs(::SolveLeastSquares) = (4,)
 
 function _vce(data, esample::BitVector,
@@ -545,6 +552,8 @@ required(::EstVcov) = (:data, :esample, :vce, :coef, :X, :crossx, :residuals, :x
     solveleastsquaresweights(args...)
 
 Solve the cell-level weights assigned by least squares.
+If `lswtnames` is not specified,
+cells are defined by the partition based on treatment time and calendar time.
 See also [`SolveLeastSquaresWeights`](@ref).
 """
 function solveleastsquaresweights(::DynamicTreatment{SharpDesign},
@@ -555,11 +564,10 @@ function solveleastsquaresweights(::DynamicTreatment{SharpDesign},
         feM::Union{AbstractFixedEffectSolver, Nothing}, fetol::Real, femaxiter::Int,
         weights::AbstractWeights)
 
-    solvelsweights || return (lsweights=nothing, ycellmeans=nothing, ycellweights=nothing,
-        ycellcounts=nothing)
+    solvelsweights || return (lsweights=nothing, cellymeans=nothing, cellweights=nothing,
+        cellcounts=nothing)
     cellnames = propertynames(cells)
     length(lswtnames) == 0 && (lswtnames = cellnames)
-    nlswt = length(lswtnames)
     for n in lswtnames
         n in cellnames || throw(ArgumentError("$n is invalid for lswtnames"))
     end
@@ -588,9 +596,9 @@ function solveleastsquaresweights(::DynamicTreatment{SharpDesign},
     d = Matrix{Float64}(undef, length(yresid), 1)
     nlswtrow = length(lswtrows)
     lswtmat = Matrix{Float64}(undef, nlswtrow, nt)
-    ycellmeans = zeros(nlswtrow)
-    ycellweights = zeros(nlswtrow)
-    ycellcounts = zeros(Int, nlswtrow)
+    cellymeans = zeros(nlswtrow)
+    cellweights = zeros(nlswtrow)
+    cellcounts = zeros(Int, nlswtrow)
     @inbounds for i in 1:nlswtrow
         # Reinitialize d for reuse
         fill!(d, 0.0)
@@ -598,18 +606,18 @@ function solveleastsquaresweights(::DynamicTreatment{SharpDesign},
             rs = rows[r]
             d[rs] .= 1.0
             wts = view(weights, rs)
-            ycellmeans[i] += sum(view(yresid, rs).*wts)
-            ycellweights[i] += sum(wts)
-            ycellcounts[i] += length(rs)
+            cellymeans[i] += sum(view(yresid, rs).*wts)
+            cellweights[i] += sum(wts)
+            cellcounts[i] += length(rs)
         end
         feM === nothing || _feresiduals!(d, feM, fetol, femaxiter)
         weights isa UnitWeights || (d .*= sqrt.(weights))
         lswtmat[i,:] .= view((crossx \ (X'd)), 1:nt)
     end
-    ycellmeans ./= ycellweights
+    cellymeans ./= cellweights
     lswt = TableIndexedMatrix(lswtmat, lswtcells, treatcells)
-    return (lsweights=lswt, ycellmeans=ycellmeans, ycellweights=ycellweights,
-        ycellcounts=ycellcounts)
+    return (lsweights=lswt, cellymeans=cellymeans, cellweights=cellweights,
+        cellcounts=cellcounts)
 end
 
 """
@@ -617,6 +625,8 @@ end
 
 Call [`InteractionWeightedDIDs.solveleastsquaresweights`](@ref)
 to solve the cell-level weights assigned by least squares.
+If `lswtnames` is not specified,
+cells are defined by the partition based on treatment time and calendar time.
 """
 const SolveLeastSquaresWeights = StatsStep{:SolveLeastSquaresWeights,
     typeof(solveleastsquaresweights), true}

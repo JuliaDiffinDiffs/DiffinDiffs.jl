@@ -225,7 +225,7 @@ end
     @test length(ret.rows) == 20
     @test size(ret.treatcells) == (12, 2)
     @test length(ret.treatcols) == length(ret.treatrows) == 12
-    @test length(ret.cellweights) == length(ret.cellcounts) == length(ret.treatrows)
+    @test length(ret.treatweights) == length(ret.treatcounts) == length(ret.treatrows)
     @test ret.cells.wave_hosp == repeat(8:11, inner=5)
     @test ret.cells.wave == repeat(7:11, 4)
     @test ret.rows[end] == findall((hrs.wave_hosp.==11).&(hrs.wave.==11))
@@ -235,8 +235,8 @@ end
     @test ret.treatrows[1] == findall((hrs.wave_hosp.==8).&(hrs.wave.==8))
     col = convert(Vector{Float64}, (hrs.wave_hosp.==8).&(hrs.wave.==8))
     @test ret.treatcols[1] == col
-    @test ret.cellweights == ret.cellcounts
-    w = ret.cellweights
+    @test ret.treatweights == ret.treatcounts
+    w = ret.treatweights
     @test all(w[ret.treatcells.wave_hosp.==8].==252)
     @test all(w[ret.treatcells.wave_hosp.==9].==176)
     @test all(w[ret.treatcells.wave_hosp.==10].==163)
@@ -247,7 +247,7 @@ end
     @test length(ret1.rows) == 40
     @test size(ret1.treatcells) == (24, 3)
     @test length(ret1.treatcols) == length(ret1.treatrows) == 24
-    @test length(ret1.cellweights) == length(ret1.cellcounts) == length(ret1.treatrows)
+    @test length(ret1.treatweights) == length(ret1.treatcounts) == length(ret1.treatrows)
     @test ret1.cells.wave_hosp == repeat(8:11, inner=10)
     @test ret1.cells.wave == repeat(repeat(7:11, inner=2), 4)
     @test ret1.cells.male == repeat(0:1, 20)
@@ -258,7 +258,7 @@ end
     @test ret1.treatrows[1] == findall((hrs.wave_hosp.==8).&(hrs.wave.==8).&(hrs.male.==0))
     col1 = convert(Vector{Float64}, (hrs.wave_hosp.==8).&(hrs.wave.==8).&(hrs.male.==0))
     @test ret1.treatcols[1] == col1
-    @test ret1.cellweights == ret1.cellcounts
+    @test ret1.treatweights == ret1.treatcounts
 
     nt = merge(nt, (cohortinteracted=false, treatintterms=TermSet()))
     ret2 = maketreatcols(nt..., tr.time, Dict(-1=>1), IdDict{ValidTimeType,Int}(11=>1))
@@ -267,12 +267,12 @@ end
     @test ret2.rows == ret.rows
     @test size(ret2.treatcells) == (6, 1)
     @test length(ret2.treatcols) == length(ret2.treatrows) == 6
-    @test length(ret2.cellweights) == length(ret2.cellcounts) == length(ret2.treatrows)
+    @test length(ret2.treatweights) == length(ret2.treatcounts) == length(ret2.treatrows)
     @test ret2.treatcells.rel == [-3, -2, 0, 1, 2, 3]
     @test ret2.treatrows[1] == findall((hrs.wave.-hrs.wave_hosp.==-3).&(hrs.wave_hosp.!=11))
     col2 = convert(Vector{Float64}, (hrs.wave.-hrs.wave_hosp.==-3).&(hrs.wave_hosp.!=11))
     @test ret2.treatcols[1] == col2
-    @test ret2.cellweights == ret2.cellcounts
+    @test ret2.treatweights == ret2.treatcounts
 
     nt = merge(nt, (treatintterms=TermSet(term(:male)),))
     ret3 = maketreatcols(nt..., tr.time, Dict(-1=>1), IdDict{ValidTimeType,Int}(11=>1))
@@ -282,7 +282,7 @@ end
     @test ret3.rows == ret1.rows
     @test size(ret3.treatcells) == (12, 2)
     @test length(ret3.treatcols) == length(ret3.treatrows) == 12
-    @test length(ret3.cellweights) == length(ret3.cellcounts) == length(ret3.treatrows)
+    @test length(ret3.treatweights) == length(ret3.treatcounts) == length(ret3.treatrows)
     @test ret3.treatcells.rel == repeat([-3, -2, 0, 1, 2, 3], inner=2)
     @test ret3.treatcells.male == repeat(0:1, 6)
     @test ret3.treatrows[1] ==
@@ -301,8 +301,8 @@ end
     defaults = (default(MakeTreatCols())...,)
     _feresiduals!(col, feM, defaults[2:3]...)
     @test ret.treatcols[1] == (col.*sqrt.(wt))[:]
-    @test ret.cellcounts == [252, 252, 252, 251, 176, 176, 176, 175, 162, 160, 163, 162]
-    @test ret.cellweights[1] == 1776173
+    @test ret.treatcounts == [252, 252, 252, 251, 176, 176, 176, 175, 162, 160, 163, 162]
+    @test ret.treatweights[1] == 1776173
 
     allntargs = NamedTuple[(tr=tr, pr=pr)]
     @test combinedargs(MakeTreatCols(), allntargs) ==
@@ -332,8 +332,8 @@ end
     @test ret1.treatcells[2] == ret.treatcells[2]
     @test ret1.treatrows == ret.treatrows
     @test ret1.treatcols == ret.treatcols
-    @test ret1.cellweights == ret.cellweights
-    @test ret1.cellcounts == ret.cellcounts
+    @test ret1.treatweights == ret.treatweights
+    @test ret1.treatcounts == ret.treatcounts
 
     rot = ifelse.(isodd.(hrs.hhidpn), 1, 2)
     df.wave = RotatingTimeArray(rot, hrs.wave)
@@ -360,13 +360,13 @@ end
     @test ret3.treatcells[2] == ret2.treatcells[2]
     @test ret3.treatrows == ret2.treatrows
     @test ret3.treatcols == ret2.treatcols
-    @test ret3.cellweights == ret2.cellweights
-    @test ret3.cellcounts == ret2.cellcounts
+    @test ret3.treatweights == ret2.treatweights
+    @test ret3.treatcounts == ret2.treatcounts
 
     nt = merge(nt, (data=hrs, tr=tr, pr=pr))
     @test MakeTreatCols()(nt) == merge(nt, (cells=ret.cells, rows=ret.rows,
         treatcells=ret.treatcells, treatrows=ret.treatrows, treatcols=ret.treatcols,
-        cellweights=ret.cellweights, cellcounts=ret.cellcounts))
+        treatweights=ret.treatweights, treatcounts=ret.treatcounts))
 end
 
 @testset "SolveLeastSquares" begin
@@ -384,10 +384,14 @@ end
         yxterms[term(:male)]=>hrs.male, yxterms[term(:spouse)]=>hrs.spouse)
     col0 = convert(Vector{Float64}, (hrs.wave_hosp.==10).&(hrs.wave.==10))
     col1 = convert(Vector{Float64}, (hrs.wave_hosp.==10).&(hrs.wave.==11))
-    treatcells0 = VecColumnTable((rel=[0, 1], wave_hosp=[10, 10]))
-    treatcols0 = [col0, col1]
+    col2 = convert(Vector{Float64}, (hrs.wave_hosp.==11).&(hrs.wave.==11))
+    treatcells0 = VecColumnTable((wave_hosp=[10, 10, 11], rel=[0, 1, 0]))
+    treatcols0 = [col0, col1, col2]
+    treatcounts0 = [sum(c.==1) for c in treatcols0]
+    treatweights0 = convert(Vector{Float64}, treatcounts0)
     nt = (tr=tr, pr=pr, yterm=term(:oop_spend), xterms=TermSet(term(1)), yxterms=yxterms,
         yxcols=yxcols0, treatcells=treatcells0, treatcols=treatcols0,
+        treatweights=treatweights0, treatcounts=treatcounts0,
         cohortinteracted=true, has_fe_intercept=false)
     ret = solveleastsquares!(nt...)
     # Compare estimates with Stata
@@ -424,15 +428,18 @@ end
     @test sum(ret1.basiscols) == 3
 
     treatcells1 = VecColumnTable((rel=[0, 1, 1, 1], wave_hosp=[10, 10, 0, 1]))
-    treatcols1 = push!(copy(treatcols0), ones(N), ones(N))
+    treatcols1 = push!(treatcols0[1:2], ones(N), ones(N))
+    treatweights1 = push!(copy(treatweights0), 10.0)
+    treatcounts1 = push!(copy(treatcounts0), 10)
     # basecol is rather conservative in dropping collinear columns
     # If there are three constant columns, it may be that only one of them gets dropped
     # Also need to have at least one term in xterms for basiscol to work
     yxcols2 = Dict(yxterms[term(:oop_spend)]=>hrs.oop_spend, yxterms[term(:male)]=>hrs.male)
     nt1 = merge(nt1, (xterms=TermSet(term(:male), term(0)), treatcells=treatcells1,
-        yxcols=yxcols2, treatcols=treatcols1))
+        yxcols=yxcols2, treatcols=treatcols1, treatweights=treatweights1,
+        treatcounts=treatcounts1))
     @test_throws ErrorException solveleastsquares!(nt1...)
-    
+
     @test SolveLeastSquares()(nt) == merge(nt, ret)
 end
 
@@ -557,8 +564,8 @@ end
     @test lswt[lswt.r.wave_hosp.==10, 1] ≈ [-1/3, -1/3, -1/3, 1, 0] atol=fetol
     @test lswt[lswt.r.wave_hosp.==10, 2] ≈ [-1/3, -1/3, -1/3, 0, 1] atol=fetol
     @test all(x->isapprox(x, 0, atol=fetol), lswt[lswt.r.wave_hosp.!=10, :])
-    @test ret.ycellweights == ret.ycellcounts == length.(rows)
-    @test all(i->ret.ycellmeans[i] ≈ sum(y[rows[i]])/length(rows[i]), 1:length(rows))
+    @test ret.cellweights == ret.cellcounts == length.(rows)
+    @test all(i->ret.cellymeans[i] ≈ sum(y[rows[i]])/length(rows[i]), 1:length(rows))
 
     nt0 = merge(nt, (lswtnames=(:no,),))
     @test_throws ArgumentError solveleastsquaresweights(nt0...)
@@ -602,7 +609,7 @@ end
     @test lswt[lswt.r.wave.==10, 1] ≈ lswt[lswt.r.wave.==11, 2]
     @test lswt[lswt.r.wave.==11, 1] ≈ lswt[lswt.r.wave.==10, 2]
     y1 = y .- cf[3].*x
-    @test all(i->ret.ycellmeans[i] == sum(y1[rows[i]])/length(rows[i]), 1:length(rows))
+    @test all(i->ret.cellymeans[i] == sum(y1[rows[i]])/length(rows[i]), 1:length(rows))
 
     @test SolveLeastSquaresWeights()(nt) == merge(nt, ret)
 end

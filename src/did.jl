@@ -2,6 +2,29 @@
     RegressionBasedDID <: DiffinDiffsEstimator
 
 Estimation procedure for regression-based difference-in-differences.
+
+A `StatsSpec` for this procedure accepts the following arguments:
+
+| Key | Type restriction | Default value | Description |
+|:---|:---|:---|:---|
+| `data` | | | A `Tables.jl`-compatible data table |
+| `tr` | `DynamicTreatment{SharpDesign}` | | Treatment specification |
+| `pr` | `TrendOrUnspecifiedPR{Unconditional,Exact}` | | Parallel trend assumption |
+| `yterm` | `AbstractTerm` | | A term for outcome variable |
+| `treatname` | `Symbol` | | Column name for the variable representing treatment time |
+| `subset` | `Union{BitVector,Nothing}` | `nothing` | Rows from `data` to be used for estimation |
+| `weightname` | `Union{Symbol,Nothing}` | `nothing` | Column name of the sample weight variable |
+| `vce` | `Vcov.CovarianceEstimator` | `Vcov.CovarianceEstimator` | Variance-covariance estimator |
+| `treatintterms` | `TermSet` | `TermSet()` | Terms interacted with the treatment indicators |
+| `xterms` | `TermSet` | `TermSet()` | Terms for covariates and fixed effects |
+| `contrasts` | `Union{Dict{Symbol,Any},Nothing}` | `nothing` | Contrast coding to be processed by `StatsModels.jl` |
+| `drop_singletons` | `Bool` | `true` | Drop singleton observations for fixed effects |
+| `nfethreads` | `Int` | `Threads.nthreads()` | Number of threads to be used for solving fixed effects |
+| `fetol` | `Float64` | `1e-8` | Tolerance level for the fixed effect solver |
+| `femaxiter` | `Int` | `10000` | Maximum number of iterations allowed for the fixed effect solver |
+| `cohortinteracted` | `Bool` | `true` | Interact treatment indicators by treatment time |
+| `solvelsweights` | `Bool` | `false` | Solve the cell-level least-square weights with default cell partition |
+| `lswtnames` | Iterable of `Symbol`s | `tuple()` | Column names from `treatcells` defining the cell partition used for solving least-square weights |
 """
 const RegressionBasedDID = DiffinDiffsEstimator{:RegressionBasedDID,
     Tuple{CheckData, GroupTreatintterms, GroupXterms, GroupContrasts,
@@ -9,6 +32,11 @@ const RegressionBasedDID = DiffinDiffsEstimator{:RegressionBasedDID,
     ParseFEterms, GroupFEterms, MakeFEs, CheckFEs, MakeWeights, MakeFESolver,
     MakeYXCols, MakeTreatCols, SolveLeastSquares, EstVcov, SolveLeastSquaresWeights}}
 
+"""
+    Reg <: DiffinDiffsEstimator
+
+Alias for [`RegressionBasedDID`](@ref).
+"""
 const Reg = RegressionBasedDID
 
 function valid_didargs(d::Type{Reg}, ::DynamicTreatment{SharpDesign},
@@ -42,6 +70,38 @@ end
     RegressionBasedDIDResult{TR,CohortInteracted,Haslsweights} <: DIDResult{TR}
 
 Estimation results from regression-based difference-in-differences.
+
+# Fields
+- `coef::Vector{Float64}`: coefficient estimates.
+- `vcov::Matrix{Float64}`: variance-covariance matrix for the estimates.
+- `vce::CovarianceEstimator`: variance-covariance estiamtor.
+- `tr::TR`: treatment specification.
+- `pr::AbstractParallel`: parallel trend assumption.
+- `treatweights::Vector{Float64}`: total sample weights from observations for which the corresponding treatment indicator takes one.
+- `treatcounts::Vector{Int}`: total number of observations for which the corresponding treatment indicator takes one.
+- `esample::BitVector`: indicator for the rows from `data` involved in estimation.
+- `nobs::Int`: number of observations involved in estimation.
+- `dof_residual::Int`: residual degree of freedom.
+- `F::Float64`: F-statistic for overall significance of regression model.
+- `p::Float64`: p-value corresponding to the F-statistic.
+- `yname::String`: name of the outcome variable.
+- `coefnames::Vector{String}`: coefficient names.
+- `coefinds::Dict{String, Int}`: a map from `coefnames` to integer indices for retrieving estimates by name.
+- `treatcells::VecColumnTable`: a tabular description of cells where a treatment indicator takes one.
+- `treatname::Symbol`: column name for the variable representing treatment time.
+- `yxterms::Dict{AbstractTerm, AbstractTerm}`: a map from all specified terms to concrete terms.
+- `yterm::AbstractTerm`: the specified term for outcome variable.
+- `xterms::Vector{AbstractTerm}`: the specified terms for covariates and fixed effects.
+- `contrasts::Union{Dict{Symbol, Any}, Nothing}`: contrast coding to be processed by `StatsModels.jl`.
+- `weightname::Union{Symbol, Nothing}`: column name of the sample weight variable.
+- `fenames::Vector{String}`: names of the fixed effects.
+- `nfeiterations::Union{Int, Nothing}`: number of iterations for the fixed effect solver to reach convergence.
+- `feconverged::Union{Bool, Nothing}`: whether the fixed effect solver has converged.
+- `nfesingledropped::Int`: number of singleton observations for fixed effects that have been dropped.
+- `lsweights::Union{TableIndexedMatrix, Nothing}`: cell-level least-square weights.
+- `cellymeans::Union{Vector{Float64}, Nothing}`: cell-level averages of the outcome variable.
+- `cellweights::Union{Vector{Float64}, Nothing}`: total sample weights for each cell.
+- `cellcounts::Union{Vector{Int}, Nothing}`: number of observations for each cell.
 """
 struct RegressionBasedDIDResult{TR,CohortInteracted,Haslsweights} <: DIDResult{TR}
     coef::Vector{Float64}
@@ -49,8 +109,8 @@ struct RegressionBasedDIDResult{TR,CohortInteracted,Haslsweights} <: DIDResult{T
     vce::CovarianceEstimator
     tr::TR
     pr::AbstractParallel
-    cellweights::Vector{Float64}
-    cellcounts::Vector{Int}
+    treatweights::Vector{Float64}
+    treatcounts::Vector{Int}
     esample::BitVector
     nobs::Int
     dof_residual::Int
@@ -71,9 +131,9 @@ struct RegressionBasedDIDResult{TR,CohortInteracted,Haslsweights} <: DIDResult{T
     feconverged::Union{Bool, Nothing}
     nfesingledropped::Int
     lsweights::Union{TableIndexedMatrix{Float64, Matrix{Float64}, VecColumnTable, VecColumnTable}, Nothing}
-    ycellmeans::Union{Vector{Float64}, Nothing}
-    ycellweights::Union{Vector{Float64}, Nothing}
-    ycellcounts::Union{Vector{Int}, Nothing}
+    cellymeans::Union{Vector{Float64}, Nothing}
+    cellweights::Union{Vector{Float64}, Nothing}
+    cellcounts::Union{Vector{Int}, Nothing}
 end
 
 function result(::Type{Reg}, @nospecialize(nt::NamedTuple))
@@ -84,12 +144,12 @@ function result(::Type{Reg}, @nospecialize(nt::NamedTuple))
     coefinds = Dict(cnames .=> 1:length(cnames))
     didresult = RegressionBasedDIDResult{typeof(nt.tr),
         nt.cohortinteracted, nt.lsweights!==nothing}(
-        nt.coef, nt.vcov_mat, nt.vce, nt.tr, nt.pr, nt.cellweights, nt.cellcounts,
+        nt.coef, nt.vcov_mat, nt.vce, nt.tr, nt.pr, nt.treatweights, nt.treatcounts,
         nt.esample, sum(nt.esample), nt.dof_resid, nt.F, nt.p,
         yname, cnames, coefinds, nt.treatcells, nt.treatname, nt.yxterms,
         yterm, nt.xterms, nt.contrasts, nt.weightname,
         nt.fenames, nt.nfeiterations, nt.feconverged, nt.nsingle,
-        nt.lsweights, nt.ycellmeans, nt.ycellweights, nt.ycellcounts)
+        nt.lsweights, nt.cellymeans, nt.cellweights, nt.cellcounts)
     return merge(nt, (result=didresult,))
 end
 
@@ -170,6 +230,22 @@ end
 
 Estimation results aggregated from a [`RegressionBasedDIDResult`](@ref).
 See also [`agg`](@ref).
+
+# Fields
+- `parent::P`: the [`RegressionBasedDIDResult`](@ref) from which the results are generated.
+- `inds::I`: indices of the coefficient estimates from `parent` used to generate the results.
+- `coef::Vector{Float64}`: coefficient estimates.
+- `vcov::Matrix{Float64}`: variance-covariance matrix for the estimates.
+- `coefweights::Matrix{Float64}`: coefficient weights used to aggregate the coefficient estimates from `parent`.
+- `treatweights::Vector{Float64}`: sum of `treatweights` from `parent` over combined `treatcells`.
+- `treatcounts::Vector{Int}`: sum of `treatcounts` from `parent` over combined `treatcells`.
+- `coefnames::Vector{String}`: coefficient names.
+- `coefinds::Dict{String, Int}`: a map from `coefnames` to integer indices for retrieving estimates by name.
+- `treatcells::VecColumnTable`: cells combined from the `treatcells` from `parent`.
+- `lsweights::Union{TableIndexedMatrix, Nothing}`: cell-level least-square weights.
+- `cellymeans::Union{Vector{Float64}, Nothing}`: cell-level averages of the outcome variable.
+- `cellweights::Union{Vector{Float64}, Nothing}`: total sample weights for each cell.
+- `cellcounts::Union{Vector{Int}, Nothing}`: number of observations for each cell.
 """
 struct AggregatedRegDIDResult{TR,Haslsweights,P<:RegressionBasedDIDResult,I} <: AggregatedDIDResult{TR,P}
     parent::P
@@ -177,17 +253,28 @@ struct AggregatedRegDIDResult{TR,Haslsweights,P<:RegressionBasedDIDResult,I} <: 
     coef::Vector{Float64}
     vcov::Matrix{Float64}
     coefweights::Matrix{Float64}
-    cellweights::Vector{Float64}
-    cellcounts::Vector{Int}
+    treatweights::Vector{Float64}
+    treatcounts::Vector{Int}
     coefnames::Vector{String}
     coefinds::Dict{String, Int}
     treatcells::VecColumnTable
     lsweights::Union{TableIndexedMatrix{Float64, Matrix{Float64}, VecColumnTable, VecColumnTable}, Nothing}
-    ycellmeans::Union{Vector{Float64}, Nothing}
-    ycellweights::Union{Vector{Float64}, Nothing}
-    ycellcounts::Union{Vector{Int}, Nothing}
+    cellymeans::Union{Vector{Float64}, Nothing}
+    cellweights::Union{Vector{Float64}, Nothing}
+    cellcounts::Union{Vector{Int}, Nothing}
 end
 
+"""
+    agg(r::RegressionBasedDIDResult{<:DynamicTreatment}, names=nothing; kwargs...)
+
+Aggregate coefficient estimates from `r` by values taken by
+the columns from `r.treatcells` indexed by `names`
+with weights proportional to `treatweights` within each relative time.
+
+# Keywords
+- `bys=nothing`: columnwise transformations over `r.treatcells` before grouping by `names`.
+- `subset=nothing`: subset of treatment coefficients used for aggregation.
+"""
 function agg(r::RegressionBasedDIDResult{<:DynamicTreatment}, names=nothing;
         bys=nothing, subset=nothing)
     inds = subset === nothing ? Colon() : _parse_subset(r, subset, false)
@@ -200,19 +287,19 @@ function agg(r::RegressionBasedDIDResult{<:DynamicTreatment}, names=nothing;
     ncell = length(rows)
     pcf = view(treatcoef(r), inds)
     cweights = zeros(length(pcf), ncell)
-    pcellweights = view(r.cellweights, inds)
-    pcellcounts = view(r.cellcounts, inds)
+    ptreatweights = view(r.treatweights, inds)
+    ptreatcounts = view(r.treatcounts, inds)
     # Ensure the weights for each relative time always sum up to one
     rels = view(r.treatcells.rel, inds)
     for (i, rs) in enumerate(rows)
         if length(rs) > 1
             relgroups = _groupfind(view(rels, rs))
-            for inds in values(relgroups)
-                if length(inds) > 1
-                    cwts = view(pcellweights, view(rs, inds))
-                    cweights[view(rs, inds), i] .= cwts ./ sum(cwts)
+            for ids in values(relgroups)
+                if length(ids) > 1
+                    cwts = view(ptreatweights, view(rs, ids))
+                    cweights[view(rs, ids), i] .= cwts ./ sum(cwts)
                 else
-                    cweights[rs[inds[1]], i] = 1.0
+                    cweights[rs[ids[1]], i] = 1.0
                 end
             end
         else
@@ -221,8 +308,8 @@ function agg(r::RegressionBasedDIDResult{<:DynamicTreatment}, names=nothing;
     end
     cf = cweights' * pcf
     v = cweights' * view(treatvcov(r), inds, inds) * cweights
-    cellweights = [sum(pcellweights[rows[i]]) for i in 1:ncell]
-    cellcounts = [sum(pcellcounts[rows[i]]) for i in 1:ncell]
+    treatweights = [sum(ptreatweights[rows[i]]) for i in 1:ncell]
+    treatcounts = [sum(ptreatcounts[rows[i]]) for i in 1:ncell]
     cnames = _treatnames(tcells)
     coefinds = Dict(cnames .=> keys(cnames))
     if r.lsweights === nothing
@@ -232,8 +319,8 @@ function agg(r::RegressionBasedDIDResult{<:DynamicTreatment}, names=nothing;
         lswt = TableIndexedMatrix(lswtmat, r.lsweights.r, tcells)
     end
     return AggregatedRegDIDResult{typeof(r.tr), lswt!==nothing, typeof(r), typeof(inds)}(
-        r, inds, cf, v, cweights, cellweights, cellcounts, cnames, coefinds, tcells,
-        lswt, r.ycellmeans, r.ycellweights, r.ycellcounts)
+        r, inds, cf, v, cweights, treatweights, treatcounts, cnames, coefinds, tcells,
+        lswt, r.cellymeans, r.cellweights, r.cellcounts)
 end
 
 vce(r::AggregatedRegDIDResult) = vce(parent(r))
@@ -272,7 +359,7 @@ The least-square weights are stored in a `Matrix` that can be retrieved
 with property name `:m`,
 where the weights for each treatment coefficient
 are stored columnwise starting from the second column and
-the first column contains the cell-level averages.
+the first column contains the cell-level averages of outcome variable.
 The indices for cells can be accessed with property name `:r`;
 and indices for identifying the coefficients can be accessed with property name `:c`.
 The [`RegDIDResultOrAgg`](@ref)s used to generate the `ContrastResult`
@@ -316,10 +403,10 @@ function contrast(r1::RegDIDResultOrAgg, rs::RegDIDResultOrAgg...)
         ncoef += ntreatcoef(r)
     end
     rs = RegDIDResultOrAgg[r1, rs...]
-    m = hcat(r1.ycellmeans, (r.lsweights.m for r in rs)...)
+    m = hcat(r1.cellymeans, (r.lsweights.m for r in rs)...)
     rinds = vcat(0, (fill(i+1, ntreatcoef(r)) for (i, r) in enumerate(rs))...)
     cinds = vcat(0, (1:ntreatcoef(r) for r in rs)...)
-    names = vcat("cellmeans", (treatnames(r) for r in rs)...)
+    names = vcat("cellymeans", (treatnames(r) for r in rs)...)
     ci = VecColumnTable((iresult=rinds, icoef=cinds, name=names))
     return ContrastResult(rs, TableIndexedMatrix(m, ri, ci))
 end
