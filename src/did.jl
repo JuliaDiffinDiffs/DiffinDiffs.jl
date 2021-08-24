@@ -179,8 +179,8 @@ collect estimation results for difference-in-differences
 with treatment of type `TR`.
 
 # Interface definition
-| Required methods | Default definition | Brief description |
-|---|---|---|
+| Required method | Default definition | Brief description |
+|:---|:---|:---|
 | `coef(r)` | `r.coef` | Vector of point estimates for all coefficients including covariates |
 | `vcov(r)` | `r.vcov` | Variance-covariance matrix for estimates in `coef` |
 | `vce(r)` | `r.vce` | Covariance estimator |
@@ -189,8 +189,8 @@ with treatment of type `TR`.
 | `nobs(r)` | `r.nobs` | Number of observations (table rows) involved in estimation |
 | `outcomename(r)` | `r.yname` | Name of the outcome variable |
 | `coefnames(r)` | `r.coefnames` | Names (`Vector{String}`) of all coefficients including covariates |
-| `treatcells(r)` | `r.treatcells` | Tables.jl-compatible tabular description of treatment coefficients in the order of `coefnames` (without covariates) |
-| `weights(r)` | `r.weights` | Column name of the weight variable (if specified) |
+| `treatcells(r)` | `r.treatcells` | `Tables.jl`-compatible tabular description of treatment coefficients in the order of `coefnames` (without covariates) |
+| `weights(r)` | `r.weights` | Name of the column containing sample weights (if specified) |
 | `ntreatcoef(r)` | `size(treatcells(r), 1)` | Number of treatment coefficients |
 | `treatcoef(r)` | `view(coef(r), 1:ntreatcoef(r))` | A view of treatment coefficients |
 | `treatvcov(r)` | `(N = ntreatcoef(r); view(vcov(r), 1:N, 1:N))` | A view of variance-covariance matrix for treatment coefficients |
@@ -388,7 +388,7 @@ coefnames(r::AbstractDIDResult) = r.coefnames
 """
     treatcells(r::AbstractDIDResult)
 
-Return a Tables.jl-compatible tabular description of treatment coefficients
+Return a `Tables.jl`-compatible tabular description of treatment coefficients
 in the order of coefnames (without covariates).
 """
 treatcells(r::AbstractDIDResult) = r.treatcells
@@ -550,7 +550,7 @@ end
 
 # Helper functions for handling subset option that may involves Pairs
 _parse_subset(r::AbstractDIDResult, by::Pair, fill_x::Bool) =
-    (inds = apply(treatcells(r), by); fill_x && _fill_x!(r, inds); return inds)
+    (inds = apply_and(treatcells(r), by); fill_x && _fill_x!(r, inds); return inds)
 
 function _parse_subset(r::AbstractDIDResult, inds, fill_x::Bool)
     eltype(inds) <: Pair || return inds
@@ -911,7 +911,7 @@ function post!(f, ::StataPostHDF, r::AbstractDIDResult;
     if at !== nothing
         pat = _postat!(f, r, at)
         pat === nothing && throw(ArgumentError(
-            "Keyword argument of type $(typeof(at)) is not accepted."))
+            "Keyword argument `at` of type $(typeof(at)) is not accepted."))
         pat == false || length(pat) != length(coef(r)) && throw(ArgumentError(
             "The length of at ($(length(pat))) does not match the length of b ($(length(coef(r))))"))
     end

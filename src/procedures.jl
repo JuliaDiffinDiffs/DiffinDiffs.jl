@@ -11,7 +11,8 @@ function checkdata!(data, subset::Union{BitVector, Nothing}, weightname::Union{S
     if subset !== nothing
         length(subset) == nrow || throw(DimensionMismatch(
             "data contain $(nrow) rows while subset has $(length(subset)) elements"))
-        esample = subset
+        # Do not modify subset in-place
+        esample = copy(subset)
     else
         esample = trues(nrow)
     end
@@ -146,16 +147,16 @@ function checktreatvars(::DynamicTreatment{SharpDesign},
     end
 end
 
-function _overlaptime(tr::DynamicTreatment, tr_rows::BitVector, data)
+function _overlaptime(tr::DynamicTreatment, esample::BitVector, tr_rows::BitVector, data)
     timeref = refarray(getcolumn(data, tr.time))
-    control_time = Set(view(timeref, .!tr_rows))
-    treated_time = Set(view(timeref, tr_rows))
+    control_time = Set(view(timeref, .!tr_rows.&esample))
+    treated_time = Set(view(timeref, tr_rows.&esample))
     return intersect(control_time, treated_time), control_time, treated_time
 end
 
 function overlap!(esample::BitVector, tr_rows::BitVector, aux::BitVector, tr::DynamicTreatment,
         ::NeverTreatedParallel{Unconditional}, treatname::Symbol, data)
-    overlap_time, control_time, treated_time = _overlaptime(tr, tr_rows, data)
+    overlap_time, control_time, treated_time = _overlaptime(tr, esample, tr_rows, data)
     if !(length(control_time)==length(treated_time)==length(overlap_time))
         aux[esample] .= view(refarray(getcolumn(data, tr.time)), esample) .∈ (overlap_time,)
         esample[esample] .&= view(aux, esample)
@@ -165,13 +166,12 @@ end
 
 function overlap!(esample::BitVector, tr_rows::BitVector, aux::BitVector, tr::DynamicTreatment,
         pr::NotYetTreatedParallel{Unconditional}, treatname::Symbol, data)
-    overlap_time, _c, _t = _overlaptime(tr, tr_rows, data)
     timecol = getcolumn(data, tr.time)
+    # First exclude cohorts not suitable for comparisons
     if !(eltype(timecol) <: RotatingTimeValue)
         invpool = invrefpool(timecol)
         e = invpool === nothing ? Set(pr.e) : Set(invpool[c] for c in pr.e)
         ecut = invpool === nothing ? pr.ecut[1] : invpool[pr.ecut[1]]
-        filter!(x -> x < ecut, overlap_time)
         isvalidcohort = x -> x < ecut || x in e
     else
         invpool = invrefpool(timecol.time)
@@ -182,12 +182,18 @@ function overlap!(esample::BitVector, tr_rows::BitVector, aux::BitVector, tr::Dy
             e = Set(RotatingTimeValue(c.rotation, invpool[c.time]) for c in pr.e)
             ecut = IdDict(e.rotation=>invpool[e.time] for e in pr.ecut)
         end
-        filter!(x -> x.time < ecut[x.rotation], overlap_time)
         isvalidcohort = x -> x.time < ecut[x.rotation] || x in e
     end
-    aux[esample] .= view(refarray(timecol), esample) .∈ (overlap_time,)
-    esample[esample] .&= view(aux, esample)
     aux[esample] .= isvalidcohort.(view(refarray(getcolumn(data, treatname)), esample))
+    esample[esample] .&= view(aux, esample)
+    # Check overlaps among the remaining cohorts only
+    overlap_time, _c, _t = _overlaptime(tr, esample, tr_rows, data)
+    if !(eltype(timecol) <: RotatingTimeValue)
+        filter!(x -> x < ecut, overlap_time)
+    else
+        filter!(x -> x.time < ecut[x.rotation], overlap_time)
+    end
+    aux[esample] .= view(refarray(timecol), esample) .∈ (overlap_time,)
     esample[esample] .&= view(aux, esample)
     tr_rows .&= esample
 end

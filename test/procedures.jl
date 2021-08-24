@@ -5,9 +5,11 @@
         ret = checkdata!(nt...)
         @test ret.esample == trues(size(hrs,1))
 
-        nt = merge(nt, (weightname=:rwthh, subset=hrs.male.==1))
+        ismale = hrs.male.==1
+        nt = merge(nt, (weightname=:rwthh, subset=ismale))
         ret = checkdata!(nt...)
-        @test ret.esample == BitArray(hrs.male)
+        @test ret.esample == ismale
+        @test ret.esample !== ismale
 
         df = DataFrame(hrs)
         allowmissing!(df, :rwthh)
@@ -113,6 +115,11 @@ end
         @test checkvars!(nt...) ==
             (esample=.!(hrs.wave_hosp.∈(10,)).& .!(hrs.wave.∈((10,11),)),
             tr_rows=(.!(hrs.wave_hosp.∈((10,11),)).& .!(hrs.wave.∈((10,11),))))
+
+        nt = merge(nt, (pr=notyettreated(10),
+            esample=.!((hrs.wave_hosp.==10).&(hrs.wave.==9))))
+        @test checkvars!(nt...) == (esample=(hrs.wave.<9).&(hrs.wave_hosp.<=10),
+            tr_rows=(hrs.wave.<9).&(hrs.wave_hosp.<=9))
 
         nt = merge(nt, (pr=us, treatintterms=TermSet(term(:male)),
             xterms=TermSet(term(:white)), esample=trues(N)))

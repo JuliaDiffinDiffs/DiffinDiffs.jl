@@ -22,7 +22,7 @@ show(io::IO, ::Unconditional) =
 """
     unconditional()
 
-Alias of [`Unconditional()`](@ref).
+Alias for [`Unconditional()`](@ref).
 """
 unconditional() = Unconditional()
 
@@ -56,7 +56,7 @@ show(io::IO, ::Exact) =
 """
     exact()
 
-Alias of [`Exact()`](@ref).
+Alias for [`Exact()`](@ref).
 """
 exact() = Exact()
 
@@ -252,7 +252,7 @@ See also [`notyettreated`](@ref).
 
 # Fields
 - `e::Tuple{Vararg{ValidTimeType}}`: group indices for units that received the treatment relatively late.
-- `ecut::Tuple{Vararg{ValidTimeType}}`: user-specified period(s) when units in a group in `e` started to receive treatment.
+- `ecut::Tuple{Vararg{ValidTimeType}}`: user-specified period(s) when units in a group in `e` started to receive treatment or show anticipation effects.
 - `c::C`: an instance of [`ParallelCondition`](@ref).
 - `s::S`: an instance of [`ParallelStrength`](@ref).
 

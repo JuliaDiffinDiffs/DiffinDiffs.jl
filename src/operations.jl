@@ -44,7 +44,7 @@ are the same within each group.
 Instead of directly providing the relevant portions of columns as
 [`VecColumnTable`](@ref)``,
 one may specify the `names` of columns from
-`data` of any Tables.jl-compatible table type
+`data` of any `Tables.jl`-compatible table type
 over selected rows indicated by `esample`.
 Note that unless `esample` covers all rows of `data`,
 the row indices are those for the subsample selected based on `esample`
@@ -170,7 +170,7 @@ the [`ScaledArray`](@ref) `time`.
 If `time` is a [`RotatingTimeArray`](@ref) with the `time` field being a [`ScaledArray`](@ref),
 the returned array is also a [`RotatingTimeArray`](@ref)
 with the `time` field being the converted [`ScaledArray`](@ref).
-Alternative, the arrays may be specified with a Tables.jl-compatible `data` table
+Alternative, the arrays may be specified with a `Tables.jl`-compatible `data` table
 and column indices `colname` and `timename`.
 See also [`settime`](@ref).
 
@@ -229,7 +229,7 @@ as a table containing the relevant columns or as arrays.
 that is returned by [`settime`](@ref).
 
 # Arguments
-- `data`: a Tables.jl-compatible data table.
+- `data`: a `Tables.jl`-compatible data table.
 - `idname::Union{Symbol,Integer}`: the name of the column in `data` that contains unit IDs.
 - `timename::Union{Symbol,Integer}`: the name of the column in `data` that contains time values.
 - `id::AbstractArray`: the array containing unit IDs (only needed for the alternative method).

@@ -156,7 +156,7 @@ end
 # Check whether the input data is a column table
 function checktable(data)
     istable(data) ||
-        throw(ArgumentError("data of type $(typeof(data)) is not Tables.jl-compatible"))
+        throw(ArgumentError("data of type $(typeof(data)) is not `Tables.jl`-compatible"))
     Tables.columnaccess(data) ||
         throw(ArgumentError("data of type $(typeof(data)) is not a column table"))
 end

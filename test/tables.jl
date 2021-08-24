@@ -189,7 +189,10 @@ end
     @test apply(cols, :a=>identity) == cols.a
     @test apply(cols, 2=>identity) == cols.b
     @test apply(cols, (:a,2)=>(x,y)->x+y) == cols.a .+ cols.b
-    @test apply(cols, :a=>identity, :b=>identity) == cols.a
+    r = apply(cols, (:a,)=>isodd)
+    @test r == isodd.(cols.a)
+    @test r isa Vector{Bool}
+    @test_throws MethodError apply(cols, :a=>identity, :b=>identity)
 
     inds = trues(10)
     apply_and!(inds, cols, :a=>isodd)
@@ -201,11 +204,28 @@ end
     apply_and!(inds, cols, :a=>isodd, :a=>isodd)
     @test inds == isodd.(cols.a)
     inds = trues(10)
-    apply_and!(inds, cols, :a=>isodd, :b=>isodd)
+    @test all(apply_and!(inds, cols, :a=>cols.a))
+    inds = trues(10)
+    @test all(.!(apply_and!(inds, cols, 2=>cols.a)))
+    inds = trues(10)
+    apply_and!(inds, cols, :a=>isodd, 2=>isodd)
     @test inds == falses(10)
 
-    @test apply_and(cols, :a=>isodd) == isodd.(cols.a)
-    @test apply_and(cols, :a=>isodd, :b=>isodd) == falses(10)
+    @test all(apply_and(cols, :a=>cols.a))
+    r = apply_and(cols, :a=>isodd)
+    @test r == isodd.(cols.a)
+    @test r isa BitArray
+    @test all(apply_and(cols, 2=>cols.b))
+    @test apply_and(cols, :a=>isodd, 2=>isodd) == falses(10)
+end
+
+@testset "_parse_subset" begin
+    cols = VecColumnTable((a=collect(1:10), b=collect(2:11)))
+    @test _parse_subset(cols, :a=>isodd) == isodd.(cols.a)
+    inds = trues(2)
+    @test _parse_subset(cols, inds) === inds
+    @test _parse_subset(cols, (:a=>isodd, 2=>isodd)) == falses(10)
+    @test _parse_subset(cols, :) === Colon()
 end
 
 @testset "TableIndexedMatrix" begin

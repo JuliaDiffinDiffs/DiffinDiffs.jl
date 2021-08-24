@@ -486,7 +486,6 @@ function proceed(sps::Vector{<:StatsSpec};
     paused = false
     @inbounds for step in steps
         tasks = _byid(step) ? tasks_byid : tasks_byeq
-        ntask = 0
         verbose && print("Running ", step, "...")
         # Group arguments by objectid or isequal
         for i in _sharedby(step)
@@ -495,6 +494,10 @@ function proceed(sps::Vector{<:StatsSpec};
                 push!(get!(Vector{Int}, tasks, groupargs(step, traces[j])), j)
             end
         end
+        ntask = length(tasks)
+        nprocs = length(_sharedby(step))
+        verbose && print("Scheduled ", ntask, ntask > 1 ? " tasks" : " task", " for ",
+            nprocs, nprocs > 1 ? " procedures" : " procedure", "...\n")
 
         for (gargs, ids) in tasks
             # Handle potential in-place operations on mutable objects
@@ -514,11 +517,9 @@ function proceed(sps::Vector{<:StatsSpec};
                 traces[id] = merge(traces[id], ret)
             end
         end
-        ntask = length(tasks)
         ntask_total += ntask
         empty!(tasks)
-        nprocs = length(_sharedby(step))
-        verbose && print("Finished ", ntask, ntask > 1 ? " tasks" : " task", " for ",
+        verbose && print("  Finished ", ntask, ntask > 1 ? " tasks" : " task", " for ",
             nprocs, nprocs > 1 ? " procedures\n" : " procedure\n")
         step_count += 1
         step_count === pause && (paused = true) && break
