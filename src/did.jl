@@ -278,9 +278,10 @@ with weights proportional to `treatweights` within each relative time.
 function agg(r::RegressionBasedDIDResult{<:DynamicTreatment}, names=nothing;
         bys=nothing, subset=nothing)
     inds = subset === nothing ? Colon() : _parse_subset(r, subset, false)
-    ptcells = treatcells(r)
-    bycells = view(ptcells, inds)
-    _parse_bycells!(getfield(bycells, :columns), ptcells, bys)
+    bycells = view(treatcells(r), inds)
+    isempty(bycells) && throw(ArgumentError(
+        "No coefficient left for aggregation after taking the subset"))
+    _parse_bycells!(getfield(bycells, :columns), bycells, bys)
     names === nothing || (bycells = subcolumns(bycells, names, nomissing=false))
 
     tcells, rows = cellrows(bycells, findcell(bycells))
@@ -386,28 +387,43 @@ Base.getproperty(cr::ContrastResult, n::Symbol) = getproperty(_getmat(cr), n)
 Base.parent(cr::ContrastResult) = getfield(cr, :rs)
 
 """
-    contrast(r1::RegDIDResultOrAgg, rs::RegDIDResultOrAgg...)
+    contrast(r1::RegDIDResultOrAgg, rs::RegDIDResultOrAgg...; kwargs)
 
 Construct a [`ContrastResult`](@ref) by collecting the computed least-square weights
 from each of the [`RegDIDResultOrAgg`](@ref).
+
+# Keywords
+- `subset=nothing`: indices for cells to be included (rows in output).
+- `coefs=nothing`: indices for coefficients from each result to be included (columns in output).
 """
-function contrast(r1::RegDIDResultOrAgg, rs::RegDIDResultOrAgg...)
+function contrast(r1::RegDIDResultOrAgg, rs::RegDIDResultOrAgg...;
+        subset=nothing, coefs=nothing)
     has_lsweights(r1) && all(r->has_lsweights(r), rs) || throw(ArgumentError(
         "Results must contain computed least-sqaure weights"))
     ri = r1.lsweights.r
-    ncoef = ntreatcoef(r1)
-    m = r1.lsweights.m
-    for r in rs
-        r.lsweights.r == ri || throw(ArgumentError(
-            "Cells for least-square weights comparisons must be identical across the inputs"))
-        ncoef += ntreatcoef(r)
-    end
+    rinds = subset === nothing ? Colon() : _parse_subset(ri, subset)
+    # Make a copy to avoid accidentally overwriting cells for DIDResult
+    ri = deepcopy(view(ri, rinds))
+    dcoefs = coefs === nothing ? NamedTuple() : IdDict{Int,Any}(coefs)
     rs = RegDIDResultOrAgg[r1, rs...]
-    m = hcat(r1.cellymeans, (r.lsweights.m for r in rs)...)
-    rinds = vcat(0, (fill(i+1, ntreatcoef(r)) for (i, r) in enumerate(rs))...)
-    cinds = vcat(0, (1:ntreatcoef(r) for r in rs)...)
-    names = vcat("cellymeans", (treatnames(r) for r in rs)...)
-    ci = VecColumnTable((iresult=rinds, icoef=cinds, name=names))
+    m = Vector{Array}(undef, length(rs)+1)
+    m[1] = view(r1.cellymeans, rinds)
+    iresult = [0]
+    icoef = [0]
+    names = ["cellymeans"]
+    for (i, r) in enumerate(rs)
+        view(r.lsweights.r, rinds) == ri || throw(ArgumentError(
+            "Cells for least-square weights comparisons must be identical across the inputs"))
+        cinds = get(dcoefs, i, nothing)
+        cinds = cinds === nothing ? (1:ntreatcoef(r)) : _parse_subset(treatcells(r), cinds)
+        m[i+1] = view(r.lsweights.m, rinds, cinds)
+        ic = view(1:ntreatcoef(r), cinds)
+        push!(iresult, (i for k in 1:length(ic))...)
+        append!(icoef, ic)
+        append!(names, view(treatnames(r), cinds))
+    end
+    m = hcat(m...)
+    ci = VecColumnTable((iresult=iresult, icoef=icoef, name=names))
     return ContrastResult(rs, TableIndexedMatrix(m, ri, ci))
 end
 
@@ -428,18 +444,8 @@ function Base.sort!(cr::ContrastResult; @nospecialize(kwargs...))
     return cr
 end
 
-_parse_subset(cr::ContrastResult, by::Pair) = (inds = apply(cr.r, by); return inds)
-
-function _parse_subset(cr::ContrastResult, inds)
-    eltype(inds) <: Pair || return inds
-    inds = apply_and(cr.r, inds...)
-    return inds
-end
-
-_parse_subset(::ContrastResult, ::Colon) = Colon()
-
 function Base.view(cr::ContrastResult, subset)
-    inds = _parse_subset(cr, subset)
+    inds = _parse_subset(cr.r, subset)
     r = view(cr.r, inds)
     m = view(cr.m, inds, :)
     return ContrastResult(parent(cr), TableIndexedMatrix(m, r, cr.c))

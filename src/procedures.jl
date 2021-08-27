@@ -508,7 +508,7 @@ function _vce(data, esample::BitVector, vce::Vcov.ClusterCovariance,
     concrete_vce = Vcov.materialize(cludata, vce)
     dof_absorb = 0
     for fe in fes
-        dof_absorb += any(c->isnested(fe, c.refs), concrete_vce.clusters) ? 1 : nunique(fe)
+        dof_absorb += any(c->isnested(fe, c.groups), concrete_vce.clusters) ? 1 : nunique(fe)
     end
     return concrete_vce, dof_absorb
 end

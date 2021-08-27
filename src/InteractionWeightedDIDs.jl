@@ -20,7 +20,7 @@ using DiffinDiffsBase: ValidTimeType, termvars, isintercept, parse_intercept!,
 import Base: show
 import DiffinDiffsBase: required, default, transformed, combinedargs, copyargs,
     valid_didargs, result, vce, treatment, nobs, outcomename, weights, treatnames,
-    dof_residual, agg, post!, _parse_subset
+    dof_residual, agg, post!
 import FixedEffectModels: has_fe
 
 export Vcov,

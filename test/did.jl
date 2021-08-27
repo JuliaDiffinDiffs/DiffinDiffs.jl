@@ -212,6 +212,11 @@ end
     @test length(coef(a1)) == 2
     @test coef(a1, "rel: false") ≈ sum(coef(a, "rel: $r") for r in ["-2", "0", "2"])
     @test coef(a1, "rel: true") ≈ sum(coef(a, "rel: $r") for r in ["-3", "1"])
+
+    a2 = agg(r, :rel, bys=:rel=>isodd, subset=:rel=>isodd)
+    @test coef(a2) == coef(a1, 2:2)
+
+    @test_throws ArgumentError agg(r, subset=:rel=>x->x>10)
 end
 
 @testset "@specset" begin
@@ -267,9 +272,12 @@ end
     @test c2.r == r1.lsweights.r == r2.lsweights.r
     @test c2.c.name[1] == "cellymeans"
     @test c2.c.name[2] == r1.coefnames[c2.c.icoef[2]]
+    @test c2.c.iresult == [0, (1 for i in 1:9)..., (2 for i in 1:5)...]
+    @test c2.c.icoef == [0, 1:9..., 1:5...]
     @test parent(c2)[1] === r1
     @test parent(c2)[2] === r2
 
+    @test c1.r !== r1.lsweights.r
     sort!(c1, rev=true)
     @test c1.r == sort(r1.lsweights.r, rev=true)
 
@@ -282,6 +290,25 @@ end
     v = view(c1, [:wave=>x->x==10, :wave_hosp=>x->x==10])
     @test v.m == c1.m[(c1.r.wave.==10).&(c1.r.wave_hosp.==10),:]
     @test v.r == view(c1.r, (c1.r.wave.==10).&(c1.r.wave_hosp.==10))
+
+    c3 = contrast(r1, r2, subset=:wave=>7, coefs=1=>(:wave_hosp,2)=>(x,y)->x+y==8)
+    @test size(c3) == (4, 8)
+    @test parent(c3)[1] === r1
+    @test c3.c.name[2] == "wave_hosp: 8 & rel: 0"
+    @test c3.c.name[3] == "wave_hosp: 10 & rel: -2"
+    @test c3.c.iresult == [0, (1 for i in 1:2)..., (2 for i in 1:5)...]
+    @test c3.c.icoef == [0, 1, 8, 1:5...]
+    @test all(c3.r.wave.==7)
+    ri = r1.lsweights.r.wave.==7
+    @test c3[:,1] == r1.cellymeans[ri]
+    @test c3[:,2:end] == c2[ri,[2,9,11:15...]]
+
+    c4 = contrast(r1, r2, subset=1:3, coefs=(1=>1:2, 2=>:))
+    @test size(c4) == (3, 8)
+    @test c4.c.iresult == [0, (1 for i in 1:2)..., (2 for i in 1:5)...]
+    @test c4.c.icoef == [0:2..., 1:5...]
+    @test c4.r == view(r1.lsweights.r, 1:3)
+    @test c4[:,2:end] == c2[1:3,[2,3,11:15...]]
 end
 
 @testset "post!" begin
