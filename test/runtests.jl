@@ -7,7 +7,6 @@ using Dates: Date, Year
 using DiffinDiffsBase: @fieldequal, unpack, @unpack, checktable, hastreat, parse_treat,
     isintercept, isomitsintercept, parse_intercept!,
     ncol, nrow, _mult!,
-    _f, _byid, groupargs, copyargs, pool,
     checkdata!, grouptreatintterms, groupxterms, groupcontrasts,
     checkvars!, groupsample, makeweights,
     _totermset!, parse_didargs!, _treatnames, _parse_bycells!, _parse_subset, _nselected,
@@ -17,10 +16,12 @@ using Missings: allowmissing, disallowmissing
 using PooledArrays: PooledArray
 using StatsBase: Weights, UnitWeights
 using StatsModels: termvars
+using StatsProcedures: _f, _byid, groupargs, copyargs, pool
 using Tables: table
 
 import Base: ==, show
-import DiffinDiffsBase: required, valid_didargs, result
+import DiffinDiffsBase: valid_didargs
+import StatsProcedures: required, result
 
 include("testutils.jl")
 
@@ -33,7 +34,6 @@ const tests = [
     "treatments",
     "parallels",
     "operations",
-    "StatsProcedures",
     "procedures",
     "did"
 ]

@@ -94,41 +94,6 @@ macro unpack(functionname)
 end
 
 """
-    _args_kwargs(exprs)
-
-Return an expression of `Vector{Any}` and an expression of `Dict{Symbol,Any}`
-where the latter collect any `Expr` in `exprs` with `head` being `:(=)`
-and the former collects the rest.
-This function is useful for preparing arguments for [`parse_didargs!`](@ref)
-inside a macro such as [`@did`](@ref).
-"""
-function _args_kwargs(exprs)
-    args = :(Any[])
-    kwargs = :(Dict{Symbol,Any}())
-    for expr in exprs
-        if expr isa Expr && expr.head==:(=)
-            key = Expr(:quote, expr.args[1])
-            push!(kwargs.args, Expr(:call, :(=>), key, expr.args[2]))
-        else
-            push!(args.args, expr)
-        end
-    end
-    return args, kwargs
-end
-
-"""
-    ≊(x::NamedTuple, y::NamedTuple)
-
-Test whether two instances of `NamedTuple` contain
-the same set of key-value pairs while ignoring the order.
-
-See https://discourse.julialang.org/t/check-equality-of-two-namedtuples-with-order-of-the-fields-ignored
-"""
-≊(x::NamedTuple{N1,T1}, y::NamedTuple{N2,T2}) where {N1,T1,N2,T2} =
-    length(N1) === length(union(N1,N2)) &&
-        all(k->getfield(x,k)==getfield(y,k), keys(x))
-
-"""
     exampledata()
 
 Return the names of available example datasets.

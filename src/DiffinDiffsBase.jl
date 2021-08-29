@@ -17,6 +17,8 @@ using StatsBase: CoefTable, Weights, stderror, uweights
 using StatsFuns: normccdf, norminvcdf, tdistccdf, tdistinvcdf
 @reexport using StatsModels
 using StatsModels: Schema
+@reexport using StatsProcedures
+using StatsProcedures: ≊, _args_kwargs, _parse!
 using StructArrays: StructArray
 using Tables
 using Tables: AbstractColumns, istable, columnnames, getcolumn
@@ -27,6 +29,7 @@ import Missings: allowmissing, disallowmissing
 import StatsBase: coef, vcov, confint, nobs, dof_residual, responsename, coefnames, weights,
     coeftable
 import StatsModels: concrete_term, schema, termvars, lag, lead
+import StatsProcedures: required, default, transformed, combinedargs, copyargs, _show_args
 
 # Reexport objects from StatsBase
 export coef, vcov, stderror, confint, nobs, dof_residual, responsename, coefnames, weights,
@@ -100,14 +103,6 @@ export cb,
        diff!,
        diff,
 
-       StatsStep,
-       AbstractStatsProcedure,
-       SharedStatsStep,
-       PooledStatsProcedure,
-       StatsSpec,
-       proceed,
-       @specset,
-
        CheckData,
        GroupTreatintterms,
        GroupXterms,
@@ -154,7 +149,6 @@ include("treatments.jl")
 include("parallels.jl")
 include("terms.jl")
 include("operations.jl")
-include("StatsProcedures.jl")
 include("procedures.jl")
 include("did.jl")
 
