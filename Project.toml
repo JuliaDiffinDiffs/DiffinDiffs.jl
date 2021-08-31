@@ -1,7 +1,7 @@
 name = "InteractionWeightedDIDs"
 uuid = "4fda0319-85a0-4a01-849e-821b918731ee"
 authors = ["Junyuan Chen <norman.chen.git@gmail.com>"]
-version = "0.2.1"
+version = "0.3.0"
 
 [deps]
 DataAPI = "9a962f9c-6df0-11e9-0e5d-c546b8b5ee8a"
