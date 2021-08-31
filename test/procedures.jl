@@ -551,15 +551,15 @@ end
     X = hcat(col0, col1)
     crossx = cholesky!(Symmetric(X'X))
     cf = crossx \ (X'y)
-    treatcells = VecColumnTable((rel=[0, 1],))
+    tcells = VecColumnTable((rel=[0, 1],))
 
     nt = (tr=tr, solvelsweights=true, lswtnames=(), cells=cells, rows=rows,
-        X=X, crossx=crossx, coef=cf, treatcells=treatcells, yterm=yterm, xterms=AbstractTerm[],
+        X=X, crossx=crossx, coef=cf, treatcells=tcells, yterm=yterm, xterms=AbstractTerm[],
         yxterms=yxterms, yxcols=yxcols, feM=feM, fetol=1e-8, femaxiter=10000, weights=wt)
     ret = solveleastsquaresweights(nt...)
     lswt = ret.lsweights
     @test lswt.r === cells
-    @test lswt.c === treatcells
+    @test lswt.c === tcells
     @test lswt[lswt.r.wave_hosp.==10, 1] ≈ [-1/3, -1/3, -1/3, 1, 0] atol=fetol
     @test lswt[lswt.r.wave_hosp.==10, 1] ≈ [-1/3, -1/3, -1/3, 1, 0] atol=fetol
     @test lswt[lswt.r.wave_hosp.==10, 2] ≈ [-1/3, -1/3, -1/3, 0, 1] atol=fetol

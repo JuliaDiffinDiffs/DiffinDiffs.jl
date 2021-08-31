@@ -3,8 +3,7 @@ using InteractionWeightedDIDs
 
 using DataFrames
 using Dates: Date, Year
-using DiffinDiffsBase: ValidTimeType, @fieldequal,
-    required, default, transformed, combinedargs, _byid, valid_didargs
+using DiffinDiffsBase: ValidTimeType, @fieldequal, valid_didargs
 using FixedEffectModels: Combination, nunique, _multiply
 using FixedEffects
 using InteractionWeightedDIDs: FETerm, _parsefeterm, getfename,
@@ -13,6 +12,7 @@ using InteractionWeightedDIDs: FETerm, _parsefeterm, getfename,
     solveleastsquaresweights
 using LinearAlgebra
 using StatsBase: Weights, uweights
+using StatsProcedures: required, default, transformed, combinedargs, _byid
 
 import Base: ==
 

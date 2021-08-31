@@ -10,18 +10,19 @@ using Reexport
 using StatsBase: AbstractWeights, CovarianceEstimator, UnitWeights, PValue, TestStat, NoQuote
 using StatsFuns: fdistccdf
 using StatsModels: coefnames
+using StatsProcedures: _count!
 using Tables
 using Tables: getcolumn, columnnames
 using Vcov
 @reexport using DiffinDiffsBase
 using DiffinDiffsBase: ValidTimeType, termvars, isintercept, parse_intercept!,
-    _count!, _groupfind, _treatnames, _parse_bycells!, _parse_subset
+    _groupfind, _treatnames, _parse_bycells!, _parse_subset
 
 import Base: show
-import DiffinDiffsBase: required, default, transformed, combinedargs, copyargs,
-    valid_didargs, result, vce, treatment, nobs, outcomename, weights, treatnames,
+import DiffinDiffsBase: valid_didargs, vce, treatment, nobs, outcomename, weights, treatnames,
     dof_residual, agg, post!
 import FixedEffectModels: has_fe
+import StatsProcedures: required, default, transformed, combinedargs, copyargs, result
 
 export Vcov,
        fe
@@ -37,7 +38,7 @@ export CheckVcov,
        SolveLeastSquares,
        EstVcov,
        SolveLeastSquaresWeights,
-       
+
        RegressionBasedDID,
        Reg,
        RegressionBasedDIDResult,
