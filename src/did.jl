@@ -156,8 +156,9 @@ macro did(args...)
     noproceed = false
     didargs = ()
     if nargs > 0
-        if isexpr(args[1], :vect, :hcat, :vcat)
-            noproceed = _parse!(options, args[1].args)
+        op = args[1]
+        if op isa Expr && op.head in (:vect, :hcat, :vcat)
+            noproceed = _parse!(options, op.args)
             nargs > 1 && (didargs = args[2:end])
         else
             didargs = args

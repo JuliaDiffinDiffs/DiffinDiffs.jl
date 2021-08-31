@@ -3,12 +3,10 @@ module DiffinDiffsBase
 using Base: @propagate_inbounds
 using CSV
 using CodecZlib: GzipDecompressorStream
-using Combinatorics: combinations
 using DataAPI
 using DataAPI: refarray, refpool, invrefpool
 using Dates: Period, TimeType
 using LinearAlgebra: Diagonal
-using MacroTools: @capture, isexpr, postwalk
 using Missings: allowmissing, disallowmissing
 using PooledArrays: _label
 using PrettyTables: pretty_table
@@ -24,7 +22,7 @@ using Tables
 using Tables: AbstractColumns, istable, columnnames, getcolumn
 
 import Base: ==, +, -, *, isless, show, parent, view, diff
-import Base: eltype, firstindex, lastindex, getindex, iterate, length, sym_in
+import Base: eltype, firstindex, lastindex, getindex, iterate, length
 import Missings: allowmissing, disallowmissing
 import StatsBase: coef, vcov, confint, nobs, dof_residual, responsename, coefnames, weights,
     coeftable

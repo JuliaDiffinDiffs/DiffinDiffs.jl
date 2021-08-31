@@ -89,8 +89,7 @@ end
 
 function _scaledlabel!(labels::AbstractArray, invpool::Dict, xs::AbstractArray, start, step)
     z = zero(valtype(invpool))
-    @inbounds for i in eachindex(labels)
-        x = xs[i]
+    @inbounds for (i, x) in zip(eachindex(labels), xs)
         lbl = get(invpool, x, z)
         if lbl !== z
             labels[i] = lbl
@@ -118,7 +117,8 @@ function scaledlabel(xs::AbstractArray, stepsize,
             R = widen(R)
         end
     end
-    labels = similar(xs, R)
+    # Array types with customized indexing could cause problems
+    labels = similar(Array{R}, axes(xs))
     invpool = Dict{T,R}()
     _scaledlabel!(labels, invpool, xs, start, stepsize)
     return labels, pool, invpool
