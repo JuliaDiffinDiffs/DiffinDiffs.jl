@@ -1,21 +1,10 @@
 using Documenter
-using DocumenterTools: Themes
 using DiffinDiffs
-
-# Create the themes
-for w in ("light", "dark")
-    header = read(joinpath(@__DIR__, "src/assets/diffindiffs-style.scss"), String)
-    theme = read(joinpath(@__DIR__, "src/assets/diffindiffs-$(w)defs.scss"), String)
-    write(joinpath(@__DIR__, "src/assets/diffindiffs-$(w).scss"), header*"\n"*theme)
-end
-# Compile the themes
-Themes.compile(joinpath(@__DIR__, "src/assets/diffindiffs-light.scss"), joinpath(@__DIR__, "src/assets/themes/documenter-light.css"))
-Themes.compile(joinpath(@__DIR__, "src/assets/diffindiffs-dark.scss"), joinpath(@__DIR__, "src/assets/themes/documenter-dark.css"))
 
 makedocs(
     modules = [DiffinDiffsBase, InteractionWeightedDIDs],
     format = Documenter.HTML(
-        assets = ["assets/favicon.ico", asset("https://fonts.googleapis.com/css?family=Montserrat|Source+Code+Pro&display=swap", class=:css)],
+        canonical = "https://JuliaDiffinDiffs.github.io/DiffinDiffs.jl/stable/",
         prettyurls = get(ENV, "CI", nothing) == "true",
         collapselevel = 1
     ),
@@ -34,12 +23,11 @@ makedocs(
         ],
         "About" => [
         ]
-    ]
+    ],
+    workdir = joinpath(@__DIR__, "..")
 )
 
-# Documenter can also automatically deploy documentation to gh-pages.
-# See "Hosting Documentation" and deploydocs() in the Documenter manual
-# for more information.
-#=deploydocs(
-    repo = "<repository url>"
-)=#
+deploydocs(
+    repo = "github.com/JuliaDiffinDiffs/DiffinDiffs.jl.git",
+    devbranch = "master"
+)
