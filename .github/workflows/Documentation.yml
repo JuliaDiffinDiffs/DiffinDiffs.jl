@@ -13,7 +13,7 @@ jobs:
         with:
           version: '1'
       - name: Install dependencies
-        run: julia --project=docs -e "using Pkg; lib = joinpath(@__DIR__, \""lib\""); paths = joinpath.(lib, readdir(lib)); foreach(x->Pkg.develop(PackageSpec(path=x)), paths); Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate()"
+        run: julia --project=docs -e "using Pkg; Pkg.develop(PackageSpec(path=pwd())); lib = joinpath(@__DIR__, \""lib\""); paths = joinpath.(lib, readdir(lib)); foreach(x->Pkg.develop(PackageSpec(path=x)), paths); Pkg.instantiate()"
       - name: Build and deploy
         run: julia --project=docs docs/make.jl
         env:
