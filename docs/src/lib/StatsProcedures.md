@@ -1,0 +1,5 @@
+# StatsProcedures
+
+```@autodocs
+Modules = [StatsProcedures]
+```

@@ -1,0 +1,21 @@
+name: Documentation
+on:
+  push:
+    branches:
+      - master
+    tags: '*'
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: julia-actions/setup-julia@latest
+        with:
+          version: '1'
+      - name: Install dependencies
+        run: julia --project=docs -e "using Pkg; lib = joinpath(@__DIR__, \""lib\""); paths = joinpath.(lib, readdir(lib)); foreach(x->Pkg.develop(PackageSpec(path=x)), paths); Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate()"
+      - name: Build and deploy
+        run: julia --project=docs docs/make.jl
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DOCUMENTER_KEY: ${{ secrets.SSH_KEY }}

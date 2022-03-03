@@ -2,7 +2,10 @@
 DiffinDiffs = "1c15b2bf-cfaa-4a64-9ed6-b84bdd745e5c"
 DiffinDiffsBase = "7fc23ce2-6e83-4e3c-822f-a79085ccb3e8"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+DocumenterCitations = "daee34ce-89f3-4625-b898-19384cb65244"
 InteractionWeightedDIDs = "4fda0319-85a0-4a01-849e-821b918731ee"
+StatsProcedures = "d2f4e7c0-4966-47f3-9552-d63f8a71a436"
+Vcov = "ec2bfdc2-55df-4fc9-b9ae-4958c2cf2486"
 
 [compat]
 Documenter = "0.27"
