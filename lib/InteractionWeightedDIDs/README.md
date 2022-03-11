@@ -2,8 +2,22 @@
 
 *Regression-based multi-period difference-in-differences with heterogenous treatment effects*
 
-[![CI-stable](https://github.com/JuliaDiffinDiffs/InteractionWeightedDIDs.jl/workflows/CI-stable/badge.svg)](https://github.com/JuliaDiffinDiffs/InteractionWeightedDIDs.jl/actions?query=workflow%3ACI-stable)
-[![codecov](https://codecov.io/gh/JuliaDiffinDiffs/InteractionWeightedDIDs.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/JuliaDiffinDiffs/InteractionWeightedDIDs.jl)
+[![CI-stable][CI-stable-img]][CI-stable-url]
+[![codecov][codecov-img]][codecov-url]
+[![version][version-img]][version-url]
+[![PkgEval][pkgeval-img]][pkgeval-url]
+
+[CI-stable-img]: https://github.com/JuliaDiffinDiffs/DiffinDiffs.jl/workflows/CI-stable/badge.svg
+[CI-stable-url]: https://github.com/JuliaDiffinDiffs/DiffinDiffs.jl/actions?query=workflow%3ACI-stable
+
+[codecov-img]: https://codecov.io/gh/JuliaDiffinDiffs/DiffinDiffs.jl/branch/master/graph/badge.svg
+[codecov-url]: https://codecov.io/gh/JuliaDiffinDiffs/DiffinDiffs.jl
+
+[version-img]: https://juliahub.com/docs/InteractionWeightedDIDs/version.svg
+[version-url]: https://juliahub.com/ui/Packages/InteractionWeightedDIDs/Vf93d
+
+[pkgeval-img]: https://juliahub.com/docs/InteractionWeightedDIDs/pkgeval.svg
+[pkgeval-url]: https://juliahub.com/ui/Packages/InteractionWeightedDIDs/Vf93d
 
 This package provides a collection of regression-based estimators
 and auxiliary tools for difference-in-differences (DID)
