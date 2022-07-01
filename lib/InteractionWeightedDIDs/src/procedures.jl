@@ -531,7 +531,7 @@ function estvcov(data, esample::BitVector, vce::CovarianceEstimator, coef::Vecto
     has_intercept = !isempty(xterms) && isintercept(xterms[end])
     F = Fstat(coef, vcov_mat, has_intercept)
     has_intercept = has_intercept || has_fe_intercept
-    df_F = max(1, Vcov.df_FStat(vce_data, concrete_vce, has_intercept))
+    df_F = max(1, Vcov.dof_tstat(vce_data, concrete_vce, has_intercept))
     p = fdistccdf(max(length(coef) - has_intercept, 1), df_F, F)
     return (vcov_mat=vcov_mat::Symmetric{Float64,Array{Float64,2}},
         vce=concrete_vce, dof_resid=dof_resid::Int, F=F::Float64, p=p::Float64)
