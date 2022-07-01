@@ -11,7 +11,8 @@ using Missings: allowmissing, disallowmissing
 using PooledArrays: _label
 using PrettyTables: pretty_table
 using Reexport
-using StatsBase: CoefTable, Weights, stderror, uweights
+using StatsAPI: stderror
+using StatsBase: CoefTable, Weights, uweights
 using StatsFuns: normccdf, norminvcdf, tdistccdf, tdistinvcdf
 @reexport using StatsModels
 using StatsModels: Schema
@@ -24,12 +25,12 @@ using Tables: AbstractColumns, istable, columnnames, getcolumn
 import Base: ==, +, -, *, isless, show, parent, view, diff
 import Base: eltype, firstindex, lastindex, getindex, iterate, length
 import Missings: allowmissing, disallowmissing
-import StatsBase: coef, vcov, confint, nobs, dof_residual, responsename, coefnames, weights,
+import StatsAPI: coef, vcov, confint, nobs, dof_residual, responsename, coefnames, weights,
     coeftable
 import StatsModels: concrete_term, schema, termvars, lag, lead
 import StatsProcedures: required, default, transformed, combinedargs, copyargs, _show_args
 
-# Reexport objects from StatsBase
+# Reexport objects from StatsAPI and StatsBase
 export coef, vcov, stderror, confint, nobs, dof_residual, responsename, coefnames, weights,
     coeftable
 

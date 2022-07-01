@@ -171,7 +171,7 @@ end
     @test cols.wave == hrs.wave
     @test eltype(cols.wave) == Union{Int, Missing}
 
-    df.male .= ifelse.(df.wave.==11, missing, df.male)
+    df[:,:male] .= ifelse.(df.wave.==11, missing, df.male)
     @test_throws MethodError subcolumns(df, :male)
 
     cols = subcolumns(df, :male, df.wave.!=11)

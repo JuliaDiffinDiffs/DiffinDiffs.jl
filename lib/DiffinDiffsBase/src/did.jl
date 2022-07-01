@@ -489,7 +489,7 @@ function coeftable(r::AbstractDIDResult; level::Real=0.95)
         pv = 2 .* tdistccdf.(dofr, abs.(ts))
         tname = "t"
     end
-    cil, ciu = confint(r)
+    cil, ciu = confint(r, level=level)
     cnames = coefnames(r)
     levstr = isinteger(level*100) ? string(Integer(level*100)) : string(level*100)
     return CoefTable(Vector[cf, se, ts, pv, cil, ciu],
