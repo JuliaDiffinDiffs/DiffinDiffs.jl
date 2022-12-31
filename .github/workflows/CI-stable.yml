@@ -63,7 +63,7 @@ jobs:
             ${{ runner.os }}-test-
             ${{ runner.os }}-
       - name: Develop lib packages
-        run: julia --project=. -e "using Pkg; lib = joinpath(@__DIR__, \""lib\""); paths = joinpath.(lib, readdir(lib)); foreach(x->Pkg.develop(PackageSpec(path=x)), paths)"
+        run: julia --project=. -e "using Pkg; paths = joinpath.(joinpath(@__DIR__, \""lib\""), ["DiffinDiffsBase", "InteractionWeightedDIDs"]); foreach(x->Pkg.develop(PackageSpec(path=x)), paths)"
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
         env:
