@@ -22,7 +22,7 @@ import Base: show
 import DiffinDiffsBase: valid_didargs, vce, treatment, nobs, outcomename, weights, treatnames,
     dof_residual, agg, post!
 import FixedEffectModels: has_fe
-import StatsProcedures: required, default, transformed, combinedargs, copyargs, result
+import StatsProcedures: required, default, transformed, combinedargs, copyargs, result, prerequisites
 
 export Vcov,
        fe

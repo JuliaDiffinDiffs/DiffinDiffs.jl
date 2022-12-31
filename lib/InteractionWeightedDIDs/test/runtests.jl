@@ -12,9 +12,10 @@ using InteractionWeightedDIDs: FETerm, _parsefeterm, getfename,
     solveleastsquaresweights
 using LinearAlgebra
 using StatsBase: Weights, uweights
-using StatsProcedures: required, default, transformed, combinedargs, _byid
+using StatsProcedures: required, default, transformed, combinedargs, _byid, pool
 
 import Base: ==
+import StatsProcedures: prerequisites
 
 @fieldequal FixedEffect
 @fieldequal Vcov.ClusterCovariance

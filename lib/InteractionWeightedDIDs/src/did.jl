@@ -66,6 +66,25 @@ function valid_didargs(d::Type{Reg}, ::DynamicTreatment{SharpDesign},
     return name, d, ntargs
 end
 
+prerequisites(::Reg, ::CheckData) = ()
+prerequisites(::Reg, ::GroupTreatintterms) = ()
+prerequisites(::Reg, ::GroupXterms) = ()
+prerequisites(::Reg, ::GroupContrasts) = ()
+prerequisites(::Reg, ::CheckVcov) = (CheckData(),)
+prerequisites(::Reg, ::CheckVars) = (CheckData(), GroupTreatintterms(), GroupXterms())
+prerequisites(::Reg, ::GroupSample) = (CheckVcov(), CheckVars())
+prerequisites(::Reg, ::ParseFEterms) = (GroupXterms(),)
+prerequisites(::Reg, ::GroupFEterms) = (ParseFEterms(),)
+prerequisites(::Reg, ::MakeFEs) = (GroupSample(), GroupFEterms(),)
+prerequisites(::Reg, ::CheckFEs) = (MakeFEs(),)
+prerequisites(::Reg, ::MakeWeights) = (CheckFEs(),)
+prerequisites(::Reg, ::MakeFESolver) = (MakeWeights(),)
+prerequisites(::Reg, ::MakeYXCols) = (MakeFESolver(), GroupContrasts())
+prerequisites(::Reg, ::MakeTreatCols) = (MakeFESolver(),)
+prerequisites(::Reg, ::SolveLeastSquares) = (MakeYXCols(), MakeTreatCols())
+prerequisites(::Reg, ::EstVcov) = (SolveLeastSquares(),)
+prerequisites(::Reg, ::SolveLeastSquaresWeights) = (SolveLeastSquares(),)
+
 """
     RegressionBasedDIDResult{TR,CohortInteracted,Haslsweights} <: DIDResult{TR}
 

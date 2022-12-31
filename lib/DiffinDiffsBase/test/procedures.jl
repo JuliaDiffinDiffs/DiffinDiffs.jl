@@ -54,7 +54,7 @@ end
         @test sprint(show, GroupTreatintterms()) == "GroupTreatintterms"
         @test sprint(show, MIME("text/plain"), GroupTreatintterms()) ==
             "GroupTreatintterms (StatsStep that calls DiffinDiffsBase.grouptreatintterms)"
-        @test _byid(GroupTreatintterms()) == false
+        @test _byid(SharedStatsStep(GroupTreatintterms(),1)) == false
         nt = (treatintterms=TermSet(),)
         @test GroupTreatintterms()() == nt
     end
@@ -70,7 +70,7 @@ end
         @test sprint(show, GroupXterms()) == "GroupXterms"
         @test sprint(show, MIME("text/plain"), GroupXterms()) ==
             "GroupXterms (StatsStep that calls DiffinDiffsBase.groupxterms)"
-        @test _byid(GroupXterms()) == false
+        @test _byid(SharedStatsStep(GroupXterms(), 1)) == false
         nt = (xterms=TermSet(),)
         @test GroupXterms()() == nt
     end
@@ -86,7 +86,7 @@ end
         @test sprint(show, GroupContrasts()) == "GroupContrasts"
         @test sprint(show, MIME("text/plain"), GroupContrasts()) ==
             "GroupContrasts (StatsStep that calls DiffinDiffsBase.groupcontrasts)"
-        @test _byid(GroupContrasts()) == false
+        @test _byid(SharedStatsStep(GroupContrasts(), 1)) == false
         nt = (contrasts=nothing,)
         @test GroupContrasts()() == nt
     end
@@ -165,7 +165,7 @@ end
             tr_rows=(df.wave_hosp.==Date(8)).&(df.wave.!=Date(11)))
 
         allowmissing!(df, :wave)
-        df.wave .= ifelse.((df.wave_hosp.==Date(8)).&(df.wave.∈((Date(7), Date(8)),)),
+        df[:,:wave] .= ifelse.((df.wave_hosp.==Date(8)).&(df.wave.∈((Date(7), Date(8)),)),
             missing, df.wave)
         nt = merge(nt, (esample=trues(N), pr=nevertreated(Date(11))))
         ret = checkvars!(nt...)
@@ -258,7 +258,7 @@ end
         @test sprint(show, GroupSample()) == "GroupSample"
         @test sprint(show, MIME("text/plain"), GroupSample()) ==
             "GroupSample (StatsStep that calls DiffinDiffsBase.groupsample)"
-        @test _byid(GroupSample()) == false
+        @test _byid(SharedStatsStep(GroupSample(), 1)) == false
         nt = (esample=trues(3),)
         @test GroupSample()(nt) == nt
     end

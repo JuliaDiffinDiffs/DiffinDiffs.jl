@@ -219,8 +219,31 @@ end
     @test_throws ArgumentError agg(r, subset=:rel=>x->x>10)
 end
 
+const TestDID = DiffinDiffsEstimator{:TestDID,
+    Tuple{CheckData, GroupTreatintterms, GroupXterms, GroupContrasts,
+    CheckVcov, CheckVars, GroupSample,
+    ParseFEterms, GroupFEterms, MakeFEs, CheckFEs, MakeWeights}}
+
+prerequisites(::TestDID, ::CheckData) = ()
+prerequisites(::TestDID, ::GroupTreatintterms) = ()
+prerequisites(::TestDID, ::GroupXterms) = ()
+prerequisites(::TestDID, ::GroupContrasts) = ()
+prerequisites(::TestDID, ::CheckVcov) = (CheckData(),)
+prerequisites(::TestDID, ::CheckVars) = (CheckData(), GroupTreatintterms(), GroupXterms())
+prerequisites(::TestDID, ::GroupSample) = (CheckVcov(), CheckVars())
+prerequisites(::TestDID, ::ParseFEterms) = (GroupXterms(),)
+prerequisites(::TestDID, ::GroupFEterms) = (ParseFEterms(),)
+prerequisites(::TestDID, ::MakeFEs) = (GroupFEterms(),)
+prerequisites(::TestDID, ::CheckFEs) = (MakeFEs(),)
+prerequisites(::TestDID, ::MakeWeights) = (CheckFEs(),)
+
 @testset "@specset" begin
     hrs = exampledata("hrs")
+    ps = AbstractStatsProcedure[Reg(), TestDID()]
+    p1 = pool(ps)
+    # Order of the steps needs to be checked manually
+    @test length(p1) == length(Reg())
+
     # The first two specs are identical hence no repetition of steps should occur
     # The third spec should share all the steps until SolveLeastSquares
     # The fourth and fifth specs should not add tasks for MakeFEs and MakeYXCols
