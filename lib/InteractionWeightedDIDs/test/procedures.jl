@@ -47,7 +47,7 @@ end
 @testset "GroupFEterms" begin
     nt = (feterms=Set(([:hhidpn]=>[:wave],)),)
     @test groupfeterms(nt...) === nt
-    _byid(GroupFEterms()) == false
+    @test _byid(SharedStatsStep(GroupFEterms(), 1)) == false
     @test GroupFEterms()(nt) === nt
 end
 
