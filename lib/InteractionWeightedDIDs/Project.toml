@@ -1,7 +1,7 @@
 name = "InteractionWeightedDIDs"
 uuid = "4fda0319-85a0-4a01-849e-821b918731ee"
 authors = ["Junyuan Chen <norman.chen.git@gmail.com>"]
-version = "0.3.0"
+version = "0.3.1"
 
 [deps]
 DataAPI = "9a962f9c-6df0-11e9-0e5d-c546b8b5ee8a"
@@ -19,7 +19,7 @@ Vcov = "ec2bfdc2-55df-4fc9-b9ae-4958c2cf2486"
 [compat]
 DataAPI = "1.5"
 DataFrames = "1"
-DiffinDiffsBase = "0.4"
+DiffinDiffsBase = "0.4.2"
 FixedEffectModels = "1.6"
 FixedEffects = "2"
 Reexport = "0.2, 1"
