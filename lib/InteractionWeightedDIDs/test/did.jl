@@ -262,7 +262,6 @@ prerequisites(::TestDID, ::MakeWeights) = (CheckFEs(),)
         @did(Reg, dynamic(:wave, -1), nevertreated(11),
             xterms=(fe(:wave)+fe(:hhidpn)))
     end
-    # Results might differ due to yxterms that include terms from other specs
     @test r[2][4] == didspec(Reg, dynamic(:wave, -1), notyettreated(11), data=hrs,
         yterm=term(:oop_spend), treatname=:wave_hosp, treatintterms=(),
         xterms=TermSet(term(:male), fe(:wave), fe(:hhidpn)))()

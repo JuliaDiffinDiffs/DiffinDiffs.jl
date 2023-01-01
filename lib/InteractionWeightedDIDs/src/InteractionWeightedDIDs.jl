@@ -19,9 +19,10 @@ using DiffinDiffsBase: ValidTimeType, termvars, isintercept, parse_intercept!,
 using DiffinDiffsBase.StatsProcedures: _count!
 
 import Base: show
-import DiffinDiffsBase: valid_didargs, vce, treatment, nobs, outcomename, weights, treatnames,
-    dof_residual, agg, post!
-import DiffinDiffsBase.StatsProcedures: required, default, transformed, combinedargs, copyargs, result, prerequisites
+import DiffinDiffsBase: valid_didargs, vce, treatment, nobs, outcomename, weights,
+    treatnames, dof_residual, agg, post!
+import DiffinDiffsBase.StatsProcedures: required, default, transformed, combinedargs,
+    copyargs, result, prerequisites
 import FixedEffectModels: has_fe
 
 export Vcov,
