@@ -1,7 +1,7 @@
 <p align="center">
   <img src="docs/src/assets/banner.svg" height="200"><br><br>
   <a href="https://github.com/JuliaDiffinDiffs/DiffinDiffs.jl/actions?query=workflow%3ACI-stable">
-    <img alt="CI-stable" src="https://img.shields.io/github/workflow/status/JuliaDiffinDiffs/DiffinDiffs.jl/CI-stable?label=CI-stable&logo=github&style=flat-square">
+    <img alt="CI-stable" src="https://img.shields.io/github/actions/workflow/status/JuliaDiffinDiffs/DiffinDiffs.jl/.github/workflows/CI-stable.yml?branch=master&label=CI-stable&logo=github&style=flat-square">
   </a>
   <a href="https://codecov.io/gh/JuliaDiffinDiffs/DiffinDiffs.jl">
     <img alt="codecov" src="https://img.shields.io/codecov/c/github/JuliaDiffinDiffs/DiffinDiffs.jl?label=codecov&logo=codecov&style=flat-square">
@@ -39,8 +39,8 @@ This facilitates decentralized code development under a unified framework.
 
 | Package | Description | Version | Status |
 |:--------|:------------|:-------|:---|
-[DiffinDiffsBase](https://github.com/JuliaDiffinDiffs/DiffinDiffs.jl/tree/master/lib/DiffinDiffsBase) | Base package for DiffinDiffs.jl | [![version](https://juliahub.com/docs/DiffinDiffsBase/version.svg)](https://juliahub.com/ui/Packages/DiffinDiffsBase/AGMId) | [![pkgeval](https://juliahub.com/docs/DiffinDiffsBase/pkgeval.svg)](https://juliahub.com/ui/Packages/DiffinDiffsBase/AGMId) |
-[InteractionWeightedDIDs](https://github.com/JuliaDiffinDiffs/DiffinDiffs.jl/tree/master/lib/InteractionWeightedDIDs) | Regression-based multi-period DID | [![version](https://juliahub.com/docs/InteractionWeightedDIDs/version.svg)](https://juliahub.com/ui/Packages/InteractionWeightedDIDs/Vf93d) | [![pkgeval](https://juliahub.com/docs/InteractionWeightedDIDs/pkgeval.svg)](https://juliahub.com/ui/Packages/InteractionWeightedDIDs/Vf93d) |
+[DiffinDiffsBase](https://github.com/JuliaDiffinDiffs/DiffinDiffs.jl/tree/master/lib/DiffinDiffsBase) | Base package for DiffinDiffs.jl | [![version](https://juliahub.com/docs/DiffinDiffsBase/version.svg)](https://juliahub.com/ui/Packages/DiffinDiffsBase/AGMId) | [![pkgeval](https://juliaci.github.io/NanosoldierReports/pkgeval_badges/D/DiffinDiffsBase.svg)](https://juliaci.github.io/NanosoldierReports/pkgeval_badges/D/DiffinDiffsBase.html) |
+[InteractionWeightedDIDs](https://github.com/JuliaDiffinDiffs/DiffinDiffs.jl/tree/master/lib/InteractionWeightedDIDs) | Regression-based multi-period DID | [![version](https://juliahub.com/docs/InteractionWeightedDIDs/version.svg)](https://juliahub.com/ui/Packages/InteractionWeightedDIDs/Vf93d) | [![pkgeval](https://juliaci.github.io/NanosoldierReports/pkgeval_badges/I/InteractionWeightedDIDs.svg)](https://juliaci.github.io/NanosoldierReports/pkgeval_badges/I/InteractionWeightedDIDs.html) |
 
 More components will be included in the future as development moves forward.
 
